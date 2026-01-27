@@ -52,26 +52,82 @@ bun run dev
 ```
 </details>
 
-### Local Development
+## Deploy
+
+Nero can run anywhere Docker runs. The service just needs `OPENROUTER_API_KEY` and optionally `DATABASE_URL` for persistence.
+
+<details>
+<summary>Standalone Docker</summary>
 
 ```bash
-# Install dependencies
-bun install
-
-# Set up environment
-cp .env.example .env
-# Edit .env with your OPENROUTER_API_KEY
-
-# Optional: Start PostgreSQL for persistence
-docker-compose up db -d
-bun run db:migrate
-
-# Start the service
-bun run dev:service
-
-# In another terminal, start the CLI
-bun run dev
+docker run -d \
+  --name nero \
+  -p 4848:4848 \
+  -e OPENROUTER_API_KEY=your_key \
+  -e DATABASE_URL=postgresql://user:pass@host:5432/nero \
+  ghcr.io/pompeii-labs/nero-oss:latest
 ```
+
+Without `DATABASE_URL`, Nero runs in-memory (no persistence across restarts).
+</details>
+
+<details>
+<summary>DigitalOcean App Platform</summary>
+
+1. Create a new App from GitHub repo or use the image `ghcr.io/pompeii-labs/nero-oss:latest`
+2. Set environment variables:
+   - `OPENROUTER_API_KEY` - your OpenRouter key
+   - `DATABASE_URL` - use a DO Managed Database or external Postgres
+3. Set HTTP port to `4848`
+4. Deploy
+
+Connect your local CLI:
+```bash
+export NERO_SERVICE_URL=https://your-app.ondigitalocean.app
+nero
+```
+</details>
+
+<details>
+<summary>Railway</summary>
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/nero)
+
+Or manually:
+1. New Project > Deploy from GitHub repo
+2. Add a PostgreSQL database
+3. Set `OPENROUTER_API_KEY` in variables
+4. Railway auto-detects the Dockerfile
+</details>
+
+<details>
+<summary>Render</summary>
+
+1. New Web Service > Connect your repo
+2. Environment: Docker
+3. Add environment variables:
+   - `OPENROUTER_API_KEY`
+   - `DATABASE_URL` (create a Render PostgreSQL or use external)
+4. Deploy
+</details>
+
+<details>
+<summary>Supabase (Database Only)</summary>
+
+Use Supabase as your PostgreSQL provider with any hosting option:
+
+1. Create a Supabase project
+2. Go to Settings > Database > Connection string
+3. Copy the URI and use as `DATABASE_URL`:
+
+```bash
+docker run -d \
+  -p 4848:4848 \
+  -e OPENROUTER_API_KEY=your_key \
+  -e DATABASE_URL="postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres" \
+  ghcr.io/pompeii-labs/nero-oss:latest
+```
+</details>
 
 ## Configuration
 
@@ -131,6 +187,7 @@ Popular MCP servers:
 |----------|----------|-------------|
 | `OPENROUTER_API_KEY` | Yes | OpenRouter API key |
 | `DATABASE_URL` | No | PostgreSQL connection string |
+| `NERO_SERVICE_URL` | No | Service URL for CLI (default: `http://localhost:4848`) |
 | `ELEVENLABS_API_KEY` | No | For voice TTS |
 | `NERO_LICENSE_KEY` | No | For voice/SMS via Pompeii |
 
