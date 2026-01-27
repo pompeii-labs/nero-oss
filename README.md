@@ -2,23 +2,55 @@
 
 Open source AI companion with terminal, voice, and SMS interfaces.
 
-## Quick Start
-
-### Using Docker (recommended)
+## Install
 
 ```bash
-# Clone and configure
+curl -fsSL https://raw.githubusercontent.com/pompeii-labs/nero-oss/main/install.sh | bash
+```
+
+This installs the Nero CLI and starts the service in Docker. Requires Docker and will install [bun](https://bun.sh) if needed.
+
+Then just run:
+```bash
+nero
+```
+
+## Manual Setup
+
+<details>
+<summary>Docker Compose</summary>
+
+```bash
 git clone https://github.com/pompeii-labs/nero-oss.git
 cd nero-oss
 cp .env.example .env
 # Edit .env with your OPENROUTER_API_KEY
 
-# Start with Docker Compose
 docker-compose up -d
-
-# Run the CLI
-docker exec -it nero nero
+bun install -g github:pompeii-labs/nero-oss
+nero
 ```
+</details>
+
+<details>
+<summary>Local Development</summary>
+
+```bash
+bun install
+cp .env.example .env
+# Edit .env with your OPENROUTER_API_KEY
+
+# Optional: Start PostgreSQL
+docker-compose up db -d
+bun run db:migrate
+
+# Terminal 1: Service
+bun run dev:service
+
+# Terminal 2: CLI
+bun run dev
+```
+</details>
 
 ### Local Development
 
