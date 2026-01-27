@@ -1,0 +1,36 @@
+services:
+  nero:
+    image: ghcr.io/pompeii-labs/nero-oss:latest
+    container_name: nero
+    restart: unless-stopped
+    ports:
+      - "4848:4848"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - DATABASE_URL=postgresql://nero:nero@db:5432/nero
+    volumes:
+      - ~/.nero/config.json:/root/.nero/config.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+
+  db:
+    image: postgres:16-alpine
+    container_name: nero-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=nero
+      - POSTGRES_PASSWORD=nero
+      - POSTGRES_DB=nero
+    volumes:
+      - nero-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nero"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  nero-db:

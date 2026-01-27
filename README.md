@@ -4,14 +4,20 @@ Open source AI companion with terminal, voice, and SMS interfaces.
 
 ## Install
 
+**Docker Compose** (recommended - includes Postgres):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pompeii-labs/nero-oss/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/pompeii-labs/nero-oss/main/deploy/compose.sh | bash
 ```
 
-This installs the Nero CLI and starts the service in Docker. Requires Docker and will install [bun](https://bun.sh) if needed.
-
-Then just run:
+**Standalone Docker** (no database, or bring your own):
 ```bash
+curl -fsSL https://raw.githubusercontent.com/pompeii-labs/nero-oss/main/deploy/docker.sh | bash
+```
+
+Then install the CLI:
+```bash
+curl -fsSL https://bun.sh/install | bash
+bun install -g github:pompeii-labs/nero-oss
 nero
 ```
 
