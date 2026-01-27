@@ -40,6 +40,7 @@
     "format:check": "prettier --check \"**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "release": "./scripts/release.sh",
     "prepare": "husky"
   },
   "author": "Pompeii Labs, Inc.",
