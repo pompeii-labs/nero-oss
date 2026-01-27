@@ -2,6 +2,8 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import dotenv from 'dotenv';
+import { join } from 'path';
+import { homedir } from 'os';
 import { startRepl } from './cli/repl.js';
 import { initDb, migrateDb } from './db/index.js';
 import { loadConfig, getConfigPath, saveConfig, updateMcpServerOAuth } from './config.js';
@@ -431,6 +433,309 @@ mcp
         delete config.mcpServers[name].oauth;
         await saveConfig(config);
         console.log(chalk.green(`Logged out of ${name}`));
+    });
+
+const tunnel = program
+    .command('tunnel')
+    .description('Manage tunnel to expose Nero to the internet');
+
+const TUNNEL_STATE_FILE = join(homedir(), '.nero', 'tunnel.json');
+
+interface TunnelState {
+    pid: number;
+    url: string;
+    tool: 'cloudflared' | 'ngrok';
+    port: string;
+    startedAt: string;
+}
+
+async function saveTunnelState(state: TunnelState): Promise<void> {
+    const { mkdir, writeFile } = await import('fs/promises');
+    await mkdir(join(homedir(), '.nero'), { recursive: true });
+    await writeFile(TUNNEL_STATE_FILE, JSON.stringify(state, null, 2));
+}
+
+async function loadTunnelState(): Promise<TunnelState | null> {
+    const { readFile } = await import('fs/promises');
+    try {
+        const data = await readFile(TUNNEL_STATE_FILE, 'utf-8');
+        return JSON.parse(data);
+    } catch {
+        return null;
+    }
+}
+
+async function clearTunnelState(): Promise<void> {
+    const { unlink } = await import('fs/promises');
+    try {
+        await unlink(TUNNEL_STATE_FILE);
+    } catch {}
+}
+
+function isProcessRunning(pid: number): boolean {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+tunnel
+    .command('start', { isDefault: true })
+    .description('Start a tunnel')
+    .option('-n, --ngrok', 'Use ngrok (requires account)')
+    .option('-c, --cloudflared', 'Use Cloudflare Tunnel (free, no account)')
+    .option('-p, --port <port>', 'Local port to tunnel', '4848')
+    .option('-d, --daemon', 'Run in background')
+    .action(async (options) => {
+        const port = options.port || '4848';
+        const useNgrok = options.ngrok;
+        const useCloudflared = options.cloudflared;
+        const daemon = options.daemon;
+
+        const existingState = await loadTunnelState();
+        if (existingState && isProcessRunning(existingState.pid)) {
+            console.log(chalk.yellow('Tunnel already running.'));
+            console.log(chalk.dim(`  URL: ${existingState.url}`));
+            console.log(chalk.dim(`  PID: ${existingState.pid}`));
+            console.log(chalk.dim('\nRun `nero tunnel stop` to stop it.'));
+            process.exit(0);
+        }
+
+        const { spawn, execSync } = await import('child_process');
+
+        const hasCommand = (cmd: string): boolean => {
+            try {
+                execSync(`which ${cmd}`, { stdio: 'ignore' });
+                return true;
+            } catch {
+                return false;
+            }
+        };
+
+        let tool: 'cloudflared' | 'ngrok';
+
+        if (useNgrok) {
+            if (!hasCommand('ngrok')) {
+                console.error(chalk.red('ngrok not found.'));
+                console.log(chalk.dim('\nInstall: https://ngrok.com/download'));
+                console.log(chalk.dim('  brew install ngrok  (macOS)'));
+                process.exit(1);
+            }
+            tool = 'ngrok';
+        } else if (useCloudflared) {
+            if (!hasCommand('cloudflared')) {
+                console.error(chalk.red('cloudflared not found.'));
+                console.log(chalk.dim('\nInstall: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/'));
+                console.log(chalk.dim('  brew install cloudflared  (macOS)'));
+                process.exit(1);
+            }
+            tool = 'cloudflared';
+        } else {
+            if (hasCommand('cloudflared')) {
+                tool = 'cloudflared';
+            } else if (hasCommand('ngrok')) {
+                tool = 'ngrok';
+            } else {
+                console.error(chalk.red('No tunnel tool found.'));
+                console.log(chalk.dim('\nInstall one of:'));
+                console.log(chalk.dim('  brew install cloudflared  (recommended, free)'));
+                console.log(chalk.dim('  brew install ngrok'));
+                process.exit(1);
+            }
+        }
+
+        const { mkdir, readFile, writeFile } = await import('fs/promises');
+        const { openSync } = await import('fs');
+
+        console.log(chalk.dim(`Starting ${tool} tunnel on port ${port}...`));
+
+        const TUNNEL_LOG_FILE = join(homedir(), '.nero', 'tunnel.log');
+        await mkdir(join(homedir(), '.nero'), { recursive: true });
+
+        if (daemon) {
+            await writeFile(TUNNEL_LOG_FILE, '');
+
+            const logFd = openSync(TUNNEL_LOG_FILE, 'a');
+
+            const proc = spawn(
+                tool === 'cloudflared'
+                    ? 'cloudflared'
+                    : 'ngrok',
+                tool === 'cloudflared'
+                    ? ['tunnel', '--url', `http://localhost:${port}`]
+                    : ['http', port],
+                {
+                    stdio: ['ignore', logFd, logFd],
+                    detached: true,
+                }
+            );
+
+            proc.unref();
+
+            const pollForUrl = async (): Promise<string | null> => {
+                const maxAttempts = 30;
+                for (let i = 0; i < maxAttempts; i++) {
+                    await new Promise(r => setTimeout(r, 500));
+
+                    if (tool === 'cloudflared') {
+                        try {
+                            const log = await readFile(TUNNEL_LOG_FILE, 'utf-8');
+                            const match = log.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+                            if (match) return match[0];
+                        } catch {}
+                    } else {
+                        try {
+                            const response = await fetch('http://localhost:4040/api/tunnels');
+                            const data = await response.json() as { tunnels: Array<{ public_url: string }> };
+                            const tunnelInfo = data.tunnels.find((t: { public_url: string }) => t.public_url.startsWith('https'));
+                            if (tunnelInfo) return tunnelInfo.public_url;
+                        } catch {}
+                    }
+                }
+                return null;
+            };
+
+            const url = await pollForUrl();
+
+            if (!url) {
+                console.error(chalk.red('Failed to get tunnel URL. Check ~/.nero/tunnel.log'));
+                process.exit(1);
+            }
+
+            await saveTunnelState({
+                pid: proc.pid!,
+                url,
+                tool,
+                port,
+                startedAt: new Date().toISOString(),
+            });
+
+            console.log(chalk.bold.green(`\n  Tunnel URL: ${url}`));
+            console.log(chalk.dim(`  Running in background (PID: ${proc.pid})`));
+            console.log(chalk.dim('  Run `nero tunnel stop` to stop.\n'));
+            process.exit(0);
+
+        } else {
+            if (tool === 'cloudflared') {
+                const proc = spawn('cloudflared', ['tunnel', '--url', `http://localhost:${port}`], {
+                    stdio: ['ignore', 'pipe', 'pipe'],
+                });
+
+                let urlPrinted = false;
+
+                const handleOutput = (data: Buffer) => {
+                    const output = data.toString();
+                    const match = output.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+                    if (match && !urlPrinted) {
+                        urlPrinted = true;
+                        console.log(chalk.bold.green(`\n  Tunnel URL: ${match[0]}`));
+                        console.log(chalk.dim('  Press Ctrl+C to stop.\n'));
+                    }
+                };
+
+                proc.stdout.on('data', handleOutput);
+                proc.stderr.on('data', handleOutput);
+
+                proc.on('close', (code) => {
+                    if (code !== 0 && code !== null) {
+                        console.error(chalk.red(`cloudflared exited with code ${code}`));
+                    }
+                    process.exit(code || 0);
+                });
+
+                process.on('SIGINT', () => {
+                    proc.kill('SIGINT');
+                });
+
+            } else {
+                const proc = spawn('ngrok', ['http', port], {
+                    stdio: ['ignore', 'pipe', 'pipe'],
+                });
+
+                setTimeout(async () => {
+                    try {
+                        const response = await fetch('http://localhost:4040/api/tunnels');
+                        const data = await response.json() as { tunnels: Array<{ public_url: string }> };
+                        const tunnelInfo = data.tunnels.find((t: { public_url: string }) => t.public_url.startsWith('https'));
+                        if (tunnelInfo) {
+                            console.log(chalk.bold.green(`\n  Tunnel URL: ${tunnelInfo.public_url}`));
+                            console.log(chalk.dim('  Press Ctrl+C to stop.\n'));
+                        }
+                    } catch {
+                        console.log(chalk.yellow('Could not fetch ngrok URL. Check http://localhost:4040'));
+                    }
+                }, 2000);
+
+                proc.on('close', (code) => {
+                    if (code !== 0 && code !== null) {
+                        console.error(chalk.red(`ngrok exited with code ${code}`));
+                    }
+                    process.exit(code || 0);
+                });
+
+                process.on('SIGINT', () => {
+                    proc.kill('SIGINT');
+                });
+            }
+        }
+    });
+
+tunnel
+    .command('stop')
+    .description('Stop the background tunnel')
+    .action(async () => {
+        const state = await loadTunnelState();
+
+        if (!state) {
+            console.log(chalk.yellow('No tunnel running.'));
+            process.exit(0);
+        }
+
+        if (!isProcessRunning(state.pid)) {
+            console.log(chalk.yellow('Tunnel process not found (may have crashed).'));
+            await clearTunnelState();
+            process.exit(0);
+        }
+
+        try {
+            process.kill(state.pid, 'SIGTERM');
+            await clearTunnelState();
+            console.log(chalk.green(`Tunnel stopped (PID: ${state.pid})`));
+        } catch (error) {
+            console.error(chalk.red(`Failed to stop tunnel: ${(error as Error).message}`));
+            process.exit(1);
+        }
+    });
+
+tunnel
+    .command('status')
+    .description('Show tunnel status')
+    .action(async () => {
+        const state = await loadTunnelState();
+
+        if (!state) {
+            console.log(chalk.yellow('No tunnel configured.'));
+            console.log(chalk.dim('\nStart one with: nero tunnel -d'));
+            process.exit(0);
+        }
+
+        const running = isProcessRunning(state.pid);
+
+        console.log(chalk.bold('\nTunnel Status:\n'));
+        console.log(`  Status: ${running ? chalk.green('running') : chalk.red('stopped')}`);
+        console.log(`  URL: ${chalk.cyan(state.url)}`);
+        console.log(`  Tool: ${state.tool}`);
+        console.log(`  Port: ${state.port}`);
+        console.log(`  PID: ${state.pid}`);
+        console.log(`  Started: ${new Date(state.startedAt).toLocaleString()}`);
+        console.log();
+
+        if (!running) {
+            await clearTunnelState();
+            console.log(chalk.dim('Tunnel state cleared. Start a new one with: nero tunnel -d'));
+        }
     });
 
 mcp
