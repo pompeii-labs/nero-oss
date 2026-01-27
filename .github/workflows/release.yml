@@ -10,12 +10,8 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push:
+  build-binaries:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,7 +24,41 @@ jobs:
             echo "Error: Tag v$TAG_VERSION doesn't match package.json version $PKG_VERSION"
             exit 1
           fi
-          echo "Version verified: $PKG_VERSION"
+          echo "VERSION=$PKG_VERSION" >> $GITHUB_ENV
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build binaries
+        run: |
+          mkdir -p dist/binaries
+          bun build --compile --target=bun-linux-x64 src/index.ts --outfile dist/binaries/nero-linux-x64
+          bun build --compile --target=bun-linux-arm64 src/index.ts --outfile dist/binaries/nero-linux-arm64
+          bun build --compile --target=bun-darwin-x64 src/index.ts --outfile dist/binaries/nero-darwin-x64
+          bun build --compile --target=bun-darwin-arm64 src/index.ts --outfile dist/binaries/nero-darwin-arm64
+
+      - name: Create checksums
+        run: |
+          cd dist/binaries
+          sha256sum nero-* > checksums.txt
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: dist/binaries/
+
+  build-docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -60,3 +90,26 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  create-release:
+    needs: [build-binaries, build-docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: binaries/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            binaries/nero-linux-x64
+            binaries/nero-linux-arm64
+            binaries/nero-darwin-x64
+            binaries/nero-darwin-arm64
+            binaries/checksums.txt
+          generate_release_notes: true

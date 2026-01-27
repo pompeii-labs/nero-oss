@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+REPO="pompeii-labs/nero-oss"
+
 echo "Installing Nero (Docker Compose)..."
 
 # Check for Docker
@@ -28,7 +30,7 @@ fi
 echo "OPENROUTER_API_KEY=$OPENROUTER_API_KEY" > ~/.nero/.env
 
 # Download docker-compose.yml
-curl -fsSL https://raw.githubusercontent.com/pompeii-labs/nero-oss/main/deploy/docker-compose.yml -o ~/.nero/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/$REPO/main/deploy/docker-compose.yml -o ~/.nero/docker-compose.yml
 
 # Start services
 cd ~/.nero
@@ -38,49 +40,32 @@ else
     docker-compose up -d
 fi
 
-# Install CLI
+# Install CLI binary
 echo "Installing CLI..."
 
-# Install bun if missing
-if ! command -v bun &> /dev/null; then
-    # Install unzip if needed
-    if ! command -v unzip &> /dev/null; then
-        echo "Installing unzip..."
-        if command -v apt-get &> /dev/null; then
-            sudo apt-get install -y unzip 2>/dev/null || sudo apt-get update && sudo apt-get install -y unzip
-        elif command -v yum &> /dev/null; then
-            sudo yum install -y unzip
-        elif command -v apk &> /dev/null; then
-            sudo apk add unzip
-        fi
-    fi
+# Detect platform
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
 
-    curl -fsSL https://bun.sh/install | bash
-    export BUN_INSTALL="$HOME/.bun"
-    export PATH="$BUN_INSTALL/bin:$PATH"
-fi
+case "$ARCH" in
+    x86_64) ARCH="x64" ;;
+    aarch64|arm64) ARCH="arm64" ;;
+    *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+esac
 
-# Ensure bun is in PATH for this session
-export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
+BINARY="nero-${OS}-${ARCH}"
+INSTALL_DIR="/usr/local/bin"
 
-bun install -g github:pompeii-labs/nero-oss
-
-# Add to shell profile if not already there
-SHELL_PROFILE="$HOME/.bashrc"
-[ -f "$HOME/.zshrc" ] && SHELL_PROFILE="$HOME/.zshrc"
-
-if ! grep -q "BUN_INSTALL" "$SHELL_PROFILE" 2>/dev/null; then
-    echo '' >> "$SHELL_PROFILE"
-    echo '# Bun' >> "$SHELL_PROFILE"
-    echo 'export BUN_INSTALL="$HOME/.bun"' >> "$SHELL_PROFILE"
-    echo 'export PATH="$BUN_INSTALL/bin:$PATH"' >> "$SHELL_PROFILE"
-fi
+# Download latest binary
+echo "Downloading $BINARY..."
+LATEST=$(curl -fsSL https://api.github.com/repos/$REPO/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+curl -fsSL "https://github.com/$REPO/releases/download/$LATEST/$BINARY" -o /tmp/nero
+chmod +x /tmp/nero
+sudo mv /tmp/nero $INSTALL_DIR/nero
 
 echo ""
 echo "Nero installed successfully!"
 echo ""
-echo "Run 'source ~/.bashrc' (or restart your terminal) then:"
-echo "  nero"
+echo "Run: nero"
 echo ""
 echo "Config: ~/.nero/config.json"
