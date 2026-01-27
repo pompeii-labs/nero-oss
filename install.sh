@@ -15,6 +15,21 @@ fi
 
 # Check for bun, install if missing
 if ! command -v bun &> /dev/null; then
+    # Bun requires unzip
+    if ! command -v unzip &> /dev/null; then
+        echo "Installing unzip (required for bun)..."
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y unzip
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y unzip
+        elif command -v apk &> /dev/null; then
+            sudo apk add unzip
+        else
+            echo "Error: Please install unzip manually"
+            exit 1
+        fi
+    fi
+
     echo "Installing bun..."
     curl -fsSL https://bun.sh/install | bash
     export BUN_INSTALL="$HOME/.bun"
