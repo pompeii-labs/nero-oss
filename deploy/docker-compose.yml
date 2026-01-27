@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   nero:
     image: ghcr.io/pompeii-labs/nero-oss:latest
@@ -9,10 +11,9 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - DATABASE_URL=postgresql://nero:nero@db:5432/nero
     volumes:
-      - ~/.nero/config.json:/root/.nero/config.json:ro
+      - ${HOME}/.nero/config.json:/root/.nero/config.json:ro
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     stdin_open: true
     tty: true
 
@@ -26,11 +27,6 @@ services:
       - POSTGRES_DB=nero
     volumes:
       - nero-db:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nero"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
 volumes:
   nero-db:

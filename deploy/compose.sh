@@ -38,11 +38,49 @@ else
     docker-compose up -d
 fi
 
+# Install CLI
+echo "Installing CLI..."
+
+# Install bun if missing
+if ! command -v bun &> /dev/null; then
+    # Install unzip if needed
+    if ! command -v unzip &> /dev/null; then
+        echo "Installing unzip..."
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get install -y unzip 2>/dev/null || sudo apt-get update && sudo apt-get install -y unzip
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y unzip
+        elif command -v apk &> /dev/null; then
+            sudo apk add unzip
+        fi
+    fi
+
+    curl -fsSL https://bun.sh/install | bash
+    export BUN_INSTALL="$HOME/.bun"
+    export PATH="$BUN_INSTALL/bin:$PATH"
+fi
+
+# Ensure bun is in PATH for this session
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+bun install -g github:pompeii-labs/nero-oss
+
+# Add to shell profile if not already there
+SHELL_PROFILE="$HOME/.bashrc"
+[ -f "$HOME/.zshrc" ] && SHELL_PROFILE="$HOME/.zshrc"
+
+if ! grep -q "BUN_INSTALL" "$SHELL_PROFILE" 2>/dev/null; then
+    echo '' >> "$SHELL_PROFILE"
+    echo '# Bun' >> "$SHELL_PROFILE"
+    echo 'export BUN_INSTALL="$HOME/.bun"' >> "$SHELL_PROFILE"
+    echo 'export PATH="$BUN_INSTALL/bin:$PATH"' >> "$SHELL_PROFILE"
+fi
+
 echo ""
-echo "Nero is running at http://localhost:4848"
-echo "Config: ~/.nero/config.json"
+echo "Nero installed successfully!"
 echo ""
-echo "To use the CLI, install bun and run:"
-echo "  curl -fsSL https://bun.sh/install | bash"
-echo "  bun install -g github:pompeii-labs/nero-oss"
+echo "Run 'source ~/.bashrc' (or restart your terminal) then:"
 echo "  nero"
+echo ""
+echo "Config: ~/.nero/config.json"
