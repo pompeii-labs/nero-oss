@@ -1,0 +1,42 @@
+services:
+  nero:
+    build: .
+    container_name: nero
+    stdin_open: true
+    tty: true
+    ports:
+      - "4848:4848"
+    environment:
+      - DATABASE_URL=postgresql://nero:nero@db:5432/nero
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - NERO_LICENSE_KEY=${NERO_LICENSE_KEY}
+      - HOST_HOME=${HOME}
+    volumes:
+      - nero-data:/app/.nero
+      - ${HOME}:/host/home:rw
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=nero
+      - POSTGRES_PASSWORD=nero
+      - POSTGRES_DB=nero
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nero"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  nero-data:
+  postgres-data:

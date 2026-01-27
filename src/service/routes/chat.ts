@@ -1,0 +1,186 @@
+import { Router, Request, Response } from 'express';
+import path from 'path';
+import crypto from 'crypto';
+import { Nero, ToolActivity } from '../../agent/nero.js';
+import { Logger } from '../../util/logger.js';
+import { db, isDbConnected } from '../../db/index.js';
+import { hostToContainer } from '../../util/paths.js';
+import { isToolAllowed } from '../../config.js';
+
+interface ChatRequest {
+    message: string;
+    medium?: 'cli' | 'api' | 'voice' | 'sms';
+    cwd?: string;
+}
+
+interface PendingPermission {
+    resolve: (approved: boolean) => void;
+    timeout: NodeJS.Timeout;
+}
+
+const pendingPermissions = new Map<string, PendingPermission>();
+
+async function registerWorkspace(cwdPath: string, detectedFrom: string): Promise<void> {
+    if (!isDbConnected()) return;
+
+    const existing = await db.query('SELECT id FROM workspaces WHERE path = $1', [cwdPath]);
+    if (existing.rows.length > 0) {
+        await db.query('UPDATE workspaces SET last_accessed = NOW() WHERE path = $1', [cwdPath]);
+        return;
+    }
+
+    const name = path.basename(cwdPath);
+    await db.query(
+        'INSERT INTO workspaces (name, path, detected_from) VALUES ($1, $2, $3)',
+        [name, cwdPath, detectedFrom]
+    );
+}
+
+export function createChatRouter(agent: Nero) {
+    const router = Router();
+    const logger = new Logger('Chat');
+
+    router.post('/permission/:id', (req: Request, res: Response) => {
+        const id = req.params.id as string;
+        const { approved } = req.body as { approved: boolean };
+
+        const pending = pendingPermissions.get(id);
+        if (!pending) {
+            res.status(404).json({ error: 'Permission request not found or expired' });
+            return;
+        }
+
+        clearTimeout(pending.timeout);
+        pendingPermissions.delete(id);
+        pending.resolve(approved);
+
+        logger.debug(`Permission ${id} ${approved ? 'approved' : 'denied'}`);
+        res.json({ success: true });
+    });
+
+    router.post('/chat', async (req: Request, res: Response) => {
+        const { message, medium = 'api', cwd } = req.body as ChatRequest;
+
+        if (!message) {
+            res.status(400).json({ error: 'Message is required' });
+            return;
+        }
+
+        logger.info(`Received message via ${medium}${cwd ? ` from ${cwd}` : ''}`);
+
+        if (cwd) {
+            try {
+                await registerWorkspace(cwd, medium);
+            } catch (err) {
+                logger.warn(`Failed to register workspace: ${(err as Error).message}`);
+            }
+            const containerCwd = hostToContainer(cwd);
+            agent.setCwd(containerCwd);
+        }
+
+        let sseStarted = false;
+        let heartbeat: NodeJS.Timeout | null = null;
+
+        const startSSEHeartbeat = () => {
+            heartbeat = setInterval(() => {
+                if (res.closed || res.writableEnded) {
+                    if (heartbeat) clearInterval(heartbeat);
+                    return;
+                }
+                try {
+                    res.write('data: {}\n\n');
+                } catch {
+                    if (heartbeat) clearInterval(heartbeat);
+                }
+            }, 20_000);
+        };
+
+        const sendSSE = (msg: Record<string, unknown>) => {
+            if (res.closed || res.writableEnded) return;
+
+            if (!sseStarted) {
+                res.setHeader('Content-Type', 'text/event-stream');
+                res.setHeader('Cache-Control', 'no-cache');
+                res.setHeader('Connection', 'keep-alive');
+                sseStarted = true;
+                startSSEHeartbeat();
+            }
+
+            try {
+                res.write(`data: ${JSON.stringify(msg)}\n\n`);
+            } catch {}
+        };
+
+        agent.setActivityCallback((activity) => {
+            sendSSE({ type: 'activity', data: activity });
+        });
+
+        agent.setPermissionCallback(async (activity: ToolActivity) => {
+            if (isToolAllowed(activity.tool)) {
+                return true;
+            }
+
+            const id = crypto.randomUUID();
+            sendSSE({ type: 'permission', id, data: activity });
+
+            return new Promise<boolean>((resolve) => {
+                const timeout = setTimeout(() => {
+                    pendingPermissions.delete(id);
+                    logger.warn(`Permission ${id} timed out`);
+                    resolve(false);
+                }, 120000);
+
+                pendingPermissions.set(id, { resolve, timeout });
+            });
+        });
+
+        try {
+            const response = await agent.chat(message, (chunk) => {
+                sendSSE({ type: 'chunk', data: chunk });
+            });
+
+            sendSSE({ type: 'done', data: { content: response.content } });
+
+            if (!res.closed && !res.writableEnded) {
+                if (sseStarted) {
+                    res.end();
+                } else {
+                    res.status(200).json({ content: response.content });
+                }
+            }
+
+            logger.info(`Response complete`);
+        } catch (error) {
+            const err = error as Error;
+            logger.error(`Chat error: ${err.message}`);
+
+            if (sseStarted) {
+                try {
+                    res.write(`data: ${JSON.stringify({ type: 'error', data: err.message })}\n\n`);
+                    res.end();
+                } catch {}
+            } else if (!res.headersSent) {
+                res.status(500).json({ error: err.message });
+            }
+        } finally {
+            if (heartbeat) clearInterval(heartbeat);
+            agent.setActivityCallback(() => {});
+            agent.setPermissionCallback(async () => true);
+        }
+    });
+
+    router.post('/compact', async (req: Request, res: Response) => {
+        try {
+            logger.info('Starting compaction');
+            const summary = await agent.performCompaction();
+            logger.success('Compaction complete');
+            res.json({ success: true, summary });
+        } catch (error) {
+            const err = error as Error;
+            logger.error(`Compaction failed: ${err.message}`);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    return router;
+}
