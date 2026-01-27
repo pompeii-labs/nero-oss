@@ -10,8 +10,10 @@ services:
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - DATABASE_URL=postgresql://nero:nero@db:5432/nero
+      - HOST_HOME=${HOME}
     volumes:
       - ${HOME}/.nero/config.json:/root/.nero/config.json:ro
+      - ${HOME}:/host/home:rw
     depends_on:
       - db
     stdin_open: true

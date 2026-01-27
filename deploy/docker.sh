@@ -39,7 +39,9 @@ docker run -d \
     -p 4848:4848 \
     -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
     -e DATABASE_URL="$DATABASE_URL" \
+    -e HOST_HOME="$HOME" \
     -v ~/.nero/config.json:/root/.nero/config.json:ro \
+    -v "$HOME":/host/home:rw \
     ghcr.io/$REPO:latest
 
 # Install CLI binary
