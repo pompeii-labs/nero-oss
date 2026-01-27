@@ -125,17 +125,16 @@ export class NeroService {
     }
 
     private async startLicensePoll(): Promise<void> {
-        const pollInterval = 60000;
+        const pollInterval = 300000;
+        const apiUrl = process.env.POMPEII_API_URL || 'https://api.magmadeploy.com';
 
         const poll = async () => {
             try {
-                const response = await fetch('https://api.pompeiilabs.com/nero/ping', {
+                const response = await fetch(`${apiUrl}/v1/license/ping`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${this.config.licenseKey}`,
+                        'x-license-key': this.config.licenseKey!,
                     },
-                    body: JSON.stringify({ port: this.port }),
                 });
 
                 if (!response.ok) {

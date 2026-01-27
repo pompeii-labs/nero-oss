@@ -93,6 +93,7 @@ export async function loadConfig(forceReload = false): Promise<NeroConfig> {
                 const merged: NeroConfig = {
                     ...defaultConfig,
                     ...userConfig,
+                    licenseKey: process.env.NERO_LICENSE_KEY || userConfig.licenseKey || null,
                     settings: { ...defaultSettings, ...userConfig.settings },
                 };
                 cachedConfig = merged;
@@ -104,7 +105,10 @@ export async function loadConfig(forceReload = false): Promise<NeroConfig> {
         }
     }
 
-    cachedConfig = defaultConfig;
+    cachedConfig = {
+        ...defaultConfig,
+        licenseKey: process.env.NERO_LICENSE_KEY || null,
+    };
     return cachedConfig;
 }
 
