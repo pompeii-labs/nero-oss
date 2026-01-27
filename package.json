@@ -39,7 +39,8 @@
     "format": "prettier --write \"**/*.ts\"",
     "format:check": "prettier --check \"**/*.ts\"",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "prepare": "husky"
   },
   "author": "Pompeii Labs, Inc.",
   "license": "MIT",
@@ -70,6 +71,8 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.3.1",
+    "@commitlint/config-conventional": "^20.3.1",
     "@types/bun": "^1.3.6",
     "@types/cors": "^2.8.17",
     "@types/diff": "^8.0.0",
@@ -82,6 +85,7 @@
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",
+    "husky": "^9.1.7",
     "prettier": "^3.2.5",
     "typescript": "^5.7.2"
   }
