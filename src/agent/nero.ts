@@ -334,10 +334,45 @@ Be thorough - this summary will be the primary context for future conversations.
 
         const contextPrompt = `## Current Context\n${toon(context)}`;
 
-        return [
+        const messages: { role: 'system'; content: string }[] = [
             { role: 'system', content: this.systemPrompt },
             { role: 'system', content: contextPrompt },
         ];
+
+        if (this.currentMedium === 'voice') {
+            messages.push({
+                role: 'system',
+                content: `## Voice Mode - CRITICAL FORMATTING RULES
+You are on a PHONE CALL. Your response will be read aloud by text-to-speech.
+
+NEVER use:
+- Asterisks (*) for bold or emphasis - the TTS will say "asterisk"
+- Markdown formatting of any kind (no **, no *, no #, no -, no bullets)
+- URLs or links - describe the source instead ("on their website")
+- Special characters that don't speak naturally
+
+ALWAYS:
+- Write in plain conversational English only
+- Spell out symbols: @ as "at", & as "and", $ as "dollars", % as "percent"
+- Keep responses concise - long responses are hard to follow verbally
+- Use short sentences and natural speech patterns
+
+This is non-negotiable. Plain text only.`,
+            });
+        }
+
+        if (this.currentMedium === 'sms') {
+            messages.push({
+                role: 'system',
+                content: `## SMS Mode Instructions
+You are responding via text message. Keep responses brief and mobile-friendly.
+- Be concise - SMS has character limits and people read on small screens
+- Skip markdown formatting
+- Get to the point quickly`,
+            });
+        }
+
+        return messages;
     }
 
     async chat(message: string, onChunk?: (chunk: string) => void): Promise<ChatResponse> {
@@ -513,7 +548,7 @@ Be thorough - this summary will be the primary context for future conversations.
         this.onPermissionRequest = cb;
     }
 
-    setActivityCallback(cb: ActivityCallback): void {
+    setActivityCallback(cb?: ActivityCallback): void {
         this.onActivity = cb;
     }
 

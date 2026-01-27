@@ -8,6 +8,7 @@ import { ToolActivity, LoadedMessage } from '../agent/nero.js';
 import { NeroClient } from '../client/index.js';
 import { NeroProxy } from '../client/proxy.js';
 import { Logger } from '../util/logger.js';
+import { VERSION } from '../util/version.js';
 import { commands, getCommandSuggestions, executeCommand, CommandContext } from './commands.js';
 import { NERO_BLUE, GLITCH_CHARS } from './theme.js';
 import { generateDiff, formatDiffStats, DiffResult } from '../util/diff.js';
@@ -509,7 +510,7 @@ function WelcomeBanner({ model }: { model: string }) {
  ╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝ ╚═════╝`}
             </Text>
             <Text> </Text>
-            <Text dimColor>  Your AI companion | {model}</Text>
+            <Text dimColor>  v{VERSION} | {model}</Text>
             <Text dimColor>  Type a message to get started, or /help for commands</Text>
         </Box>
     );

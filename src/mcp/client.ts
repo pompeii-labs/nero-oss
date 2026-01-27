@@ -7,6 +7,7 @@ import chalk from 'chalk';
 import type { McpServerConfig } from '../config.js';
 import { updateMcpServerOAuth } from '../config.js';
 import { isTokenExpired, refreshAccessToken, discoverOAuthMetadata } from './oauth.js';
+import { VERSION } from '../util/version.js';
 
 interface McpTool {
     name: string;
@@ -58,7 +59,7 @@ export class McpClient {
     private async connectServer(name: string, config: McpServerConfig): Promise<void> {
         const client = new Client({
             name: `nero-${name}`,
-            version: '0.1.0',
+            version: VERSION,
         }, {
             capabilities: {},
         });

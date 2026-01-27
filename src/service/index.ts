@@ -2,6 +2,7 @@ import express, { Express, Request, Response } from 'express';
 import { createServer, Server as HTTPServer } from 'http';
 import cors from 'cors';
 import { Logger } from '../util/logger.js';
+import { VERSION } from '../util/version.js';
 import { Nero } from '../agent/nero.js';
 import { NeroConfig } from '../config.js';
 import { createHealthRouter } from './routes/health.js';
@@ -17,6 +18,7 @@ export class NeroService {
     private agent: Nero;
     private config: NeroConfig;
     private wsManager: VoiceWebSocketManager | null = null;
+    private licensePollInterval: NodeJS.Timeout | null = null;
     private readonly port: number;
     private readonly host: string;
 
@@ -56,7 +58,7 @@ export class NeroService {
         this.app.get('/', (req: Request, res: Response) => {
             res.json({
                 name: 'OpenNero',
-                version: '0.1.0',
+                version: VERSION,
                 status: 'running',
                 features: {
                     voice: this.config.voice?.enabled || false,
@@ -70,7 +72,7 @@ export class NeroService {
 
         if (this.config.sms?.enabled) {
             this.app.post('/webhook/sms', async (req, res) => {
-                await handleSms(req, res, this.config);
+                await handleSms(req, res, this.agent);
             });
             this.logger.info('[SMS] Webhook enabled at /webhook/sms');
         }
@@ -79,7 +81,7 @@ export class NeroService {
             this.app.post('/webhook/voice', async (req, res) => {
                 await handleIncomingCall(req, res, this.config);
             });
-            this.wsManager = new VoiceWebSocketManager(this.httpServer, this.config);
+            this.wsManager = new VoiceWebSocketManager(this.httpServer, this.config, this.agent);
             this.logger.info('[Voice] Webhook enabled at /webhook/voice');
         }
     }
@@ -87,6 +89,11 @@ export class NeroService {
     private setupShutdown(): void {
         const shutdown = async (signal: string) => {
             this.logger.info(`Received ${signal}, shutting down...`);
+
+            if (this.licensePollInterval) {
+                clearInterval(this.licensePollInterval);
+                this.licensePollInterval = null;
+            }
 
             if (this.wsManager) {
                 await this.wsManager.shutdown();
@@ -113,7 +120,7 @@ export class NeroService {
         await this.agent.setup();
 
         this.httpServer.listen(this.port, this.host, () => {
-            this.logger.success(`HTTP server running on http://${this.host}:${this.port}`);
+            this.logger.success(`Nero v${VERSION} running on http://${this.host}:${this.port}`);
 
             if (this.config.licenseKey) {
                 this.logger.info('[License] Key configured for webhook routing');
@@ -147,7 +154,7 @@ export class NeroService {
         };
 
         await poll();
-        setInterval(poll, pollInterval);
+        this.licensePollInterval = setInterval(poll, pollInterval);
     }
 
     getAgent(): Nero {

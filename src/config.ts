@@ -51,11 +51,11 @@ const defaultConfig: NeroConfig = {
     mcpServers: {},
     licenseKey: null,
     voice: {
-        enabled: false,
+        enabled: true,
         elevenlabsVoiceId: 'cjVigY5qzO86Huf0OWal',
     },
     sms: {
-        enabled: false,
+        enabled: true,
     },
     settings: defaultSettings,
 };

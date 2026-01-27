@@ -16,6 +16,7 @@ import {
     type StoredOAuthData,
 } from './mcp/oauth.js';
 import { createServer } from 'http';
+import { VERSION } from './util/version.js';
 
 dotenv.config();
 
@@ -24,7 +25,7 @@ const program = new Command();
 program
     .name('nero')
     .description('Open source AI companion')
-    .version('0.1.0');
+    .version(VERSION);
 
 program
     .command('chat', { isDefault: true })

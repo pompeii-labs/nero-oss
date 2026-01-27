@@ -14,7 +14,6 @@ import { NeroConfig } from '../config.js';
 interface Connection {
     id: string;
     ws: WebSocket;
-    nero: Nero;
     flow?: MagmaFlow;
     active: boolean;
     streamSid?: string;
@@ -24,12 +23,14 @@ export class VoiceWebSocketManager {
     private wss: WebSocketServer;
     private connections: Map<string, Connection> = new Map();
     private config: NeroConfig;
+    private agent: Nero;
     private readonly MAX_CONNECTIONS = 100;
     private readonly HEARTBEAT_INTERVAL = 30_000;
     private heartbeatTimer?: NodeJS.Timeout;
 
-    constructor(server: HttpServer, config: NeroConfig) {
+    constructor(server: HttpServer, config: NeroConfig, agent: Nero) {
         this.config = config;
+        this.agent = agent;
         this.wss = new WebSocketServer({ noServer: true });
 
         server.on('upgrade', (request, socket, head) => {
@@ -75,9 +76,6 @@ export class VoiceWebSocketManager {
         let streamSid: string | undefined;
         let flow: MagmaFlow | undefined;
         let currentBuffer = '';
-
-        const nero = new Nero(this.config);
-        await nero.setup();
 
         const setupFlow = () => {
             const voiceId = this.config.voice?.elevenlabsVoiceId || 'cjVigY5qzO86Huf0OWal';
@@ -132,10 +130,24 @@ export class VoiceWebSocketManager {
                     }
 
                     currentBuffer = output.text;
+                    this.agent.setMedium('voice');
 
-                    const response = await nero.chat(currentBuffer, (chunk) => {
+                    let toolMessageSent = false;
+                    this.agent.setActivityCallback((activity) => {
+                        if (activity.status === 'running' && !toolMessageSent) {
+                            toolMessageSent = true;
+                            console.log(chalk.dim(`[voice] Tool running: ${activity.tool}`));
+                            flow?.inputText("Hold on, let me check that.");
+                            flow?.inputText(null as unknown as string);
+                        }
+                    });
+
+                    const response = await this.agent.chat(currentBuffer, (chunk) => {
                         flow?.inputText(chunk);
                     });
+                    flow?.inputText(null as unknown as string);
+
+                    this.agent.setActivityCallback(undefined);
 
                     console.log(chalk.magenta(`[voice] Nero: ${response.content.slice(0, 50)}...`));
                 },
@@ -198,7 +210,6 @@ export class VoiceWebSocketManager {
             const conn = this.connections.get(connectionId);
             if (conn) {
                 conn.flow?.kill();
-                await conn.nero.cleanup();
             }
             this.connections.delete(connectionId);
         });
@@ -215,7 +226,6 @@ export class VoiceWebSocketManager {
         this.connections.set(connectionId, {
             id: connectionId,
             ws,
-            nero,
             flow,
             active: true,
             streamSid,
@@ -234,7 +244,6 @@ export class VoiceWebSocketManager {
         for (const [id, conn] of this.connections) {
             try {
                 conn.flow?.kill();
-                await conn.nero.cleanup();
                 conn.ws.close(1001, 'Server shutting down');
             } catch (error) {
                 const err = error as Error;
