@@ -32,12 +32,19 @@ if [ -z "$DATABASE_URL" ]; then
     echo "DATABASE_URL not set - running without persistence."
 fi
 
+# Pull latest image
+echo "Pulling latest image..."
+docker pull ghcr.io/$REPO:latest
+
 # Run container
 docker run -d \
     --name nero \
     --restart unless-stopped \
     -p 4848:4848 \
     -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
+    -e DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY" \
+    -e ELEVENLABS_API_KEY="$ELEVENLABS_API_KEY" \
+    -e NERO_LICENSE_KEY="$NERO_LICENSE_KEY" \
     -e DATABASE_URL="$DATABASE_URL" \
     -e HOST_HOME="$HOME" \
     -v ~/.nero/config.json:/root/.nero/config.json:ro \

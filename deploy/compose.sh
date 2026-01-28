@@ -35,8 +35,10 @@ curl -fsSL https://raw.githubusercontent.com/$REPO/main/deploy/docker-compose.ym
 # Start services
 cd ~/.nero
 if docker compose version &> /dev/null; then
+    docker compose pull
     docker compose up -d
 else
+    docker-compose pull
     docker-compose up -d
 fi
 

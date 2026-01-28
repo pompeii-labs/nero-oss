@@ -31,7 +31,8 @@ export async function handleSlack(req: Request, res: Response, agent: Nero): Pro
         agent.setMedium('slack');
         const response = await agent.chat(text);
 
-        await sendSlackMessage(botToken, channel, response.content);
+        const responseText = response.content || "I couldn't generate a response. Try again.";
+        await sendSlackMessage(botToken, channel, responseText);
 
         console.log(chalk.dim(`[slack] Sent response to ${channel}`));
     } catch (error) {

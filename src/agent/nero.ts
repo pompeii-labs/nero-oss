@@ -41,7 +41,7 @@ export interface LoadedMessage {
 }
 
 export class Nero extends MagmaAgent {
-    private config: NeroConfig;
+    config: NeroConfig;
     private mcpClient: McpClient;
     private openaiClient: OpenAI;
     private systemPrompt: string = '';
@@ -936,6 +936,129 @@ You are responding via Slack DM. Use Slack-friendly formatting:
             activity.error = (error as Error).message;
             this.emitActivity(activity);
             return `Search error: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description: 'Send a Slack message to the user. Only available if Slack is connected.',
+        enabled: (agent) => !!(agent as Nero).config.licenseKey,
+    })
+    @toolparam({ key: 'message', type: 'string', required: true, description: 'The message to send' })
+    async sendSlackMessage(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { message } = call.fn_args;
+
+        const activity: ToolActivity = { tool: 'slack_message', args: { message: message.slice(0, 50) + '...' }, status: 'running' };
+        this.emitActivity(activity);
+
+        try {
+            const apiUrl = process.env.POMPEII_API_URL || 'https://api.magmadeploy.com';
+            const response = await fetch(`${apiUrl}/v1/nero/send-slack`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-license-key': this.config.licenseKey,
+                },
+                body: JSON.stringify({ message }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: response.statusText }));
+                throw new Error(error.message || `HTTP ${response.status}`);
+            }
+
+            activity.status = 'complete';
+            activity.result = 'Slack message sent';
+            this.emitActivity(activity);
+            return 'Message sent to user via Slack.';
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Failed to send Slack message: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description: 'Send an SMS text message to the user. Only available if SMS is configured.',
+        enabled: (agent) => {
+            const nero = agent as Nero;
+            return !!(nero.config.licenseKey && nero.config.sms?.enabled);
+        },
+    })
+    @toolparam({ key: 'message', type: 'string', required: true, description: 'The message to send' })
+    async sendSmsToUser(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { message } = call.fn_args;
+
+        const activity: ToolActivity = { tool: 'sms_message', args: { message: message.slice(0, 50) + '...' }, status: 'running' };
+        this.emitActivity(activity);
+
+        try {
+            const apiUrl = process.env.POMPEII_API_URL || 'https://api.magmadeploy.com';
+            const response = await fetch(`${apiUrl}/v1/nero/send-sms`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-license-key': this.config.licenseKey,
+                },
+                body: JSON.stringify({ message }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: response.statusText }));
+                throw new Error(error.message || `HTTP ${response.status}`);
+            }
+
+            activity.status = 'complete';
+            activity.result = 'SMS sent';
+            this.emitActivity(activity);
+            return 'SMS sent to user.';
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Failed to send SMS: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description: 'Initiate a voice call to the user. Only available if voice is configured.',
+        enabled: (agent) => {
+            const nero = agent as Nero;
+            return !!(nero.config.licenseKey && nero.config.voice?.enabled);
+        },
+    })
+    @toolparam({ key: 'reason', type: 'string', required: false, description: 'Optional reason for the call (will be spoken when user answers)' })
+    async callUser(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { reason } = call.fn_args;
+
+        const activity: ToolActivity = { tool: 'voice_call', args: { reason }, status: 'running' };
+        this.emitActivity(activity);
+
+        try {
+            const apiUrl = process.env.POMPEII_API_URL || 'https://api.magmadeploy.com';
+            const response = await fetch(`${apiUrl}/v1/nero/call-user`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-license-key': this.config.licenseKey,
+                },
+                body: JSON.stringify({ reason }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: response.statusText }));
+                throw new Error(error.message || `HTTP ${response.status}`);
+            }
+
+            activity.status = 'complete';
+            activity.result = 'Call initiated';
+            this.emitActivity(activity);
+            return 'Voice call initiated to user.';
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Failed to initiate call: ${activity.error}`;
         }
     }
 

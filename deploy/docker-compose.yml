@@ -9,6 +9,9 @@ services:
       - "4848:4848"
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - NERO_LICENSE_KEY=${NERO_LICENSE_KEY}
       - DATABASE_URL=postgresql://nero:nero@db:5432/nero
       - HOST_HOME=${HOME}
     volumes:

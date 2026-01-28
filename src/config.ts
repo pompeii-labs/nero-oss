@@ -41,7 +41,7 @@ export interface NeroConfig {
 
 const defaultSettings: NeroSettings = {
     streaming: true,
-    model: 'anthropic/claude-sonnet-4',
+    model: 'anthropic/claude-sonnet-4.5',
     theme: 'dark',
     verbose: false,
     historyLimit: 20,
