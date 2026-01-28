@@ -21,7 +21,7 @@ targets=(
 
 for target in "${targets[@]}"; do
     echo "Building for $target..."
-    bun build --compile --target=bun-$target --define "NERO_VERSION='\"$VERSION\"'" src/index.ts --outfile "$OUT_DIR/nero-$target"
+    bun build --compile --target=bun-$target --define "NERO_VERSION='$VERSION'" src/index.ts --outfile "$OUT_DIR/nero-$target"
 done
 
 # Create checksums
