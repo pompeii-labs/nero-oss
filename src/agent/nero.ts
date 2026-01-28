@@ -495,7 +495,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
 
 
     private currentMedium: 'cli' | 'voice' | 'sms' | 'slack' | 'api' = 'cli';
-    private currentCwd: string = process.cwd();
+    private currentCwd: string = process.env.HOST_HOME ? '/host/home' : process.cwd();
 
     setMedium(medium: 'cli' | 'voice' | 'sms' | 'slack' | 'api'): void {
         this.currentMedium = medium;

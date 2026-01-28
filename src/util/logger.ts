@@ -71,7 +71,7 @@ export class Logger {
 
         if (activity.status === 'running') {
             console.log(
-                `[${chalk.hex(NERO_BLUE).bold('Nero')}][${chalk.yellow('CALL')}] ${toolName}${argPreview ? chalk.dim(` ${argPreview}`) : ''}`,
+                `[${chalk.hex(NERO_BLUE).bold('Nero')}][${chalk.white('TOOL')}] ${toolName}${argPreview ? chalk.dim(` ${argPreview}`) : ''}`,
             );
         } else if (activity.status === 'complete') {
             const resultPreview = activity.result
