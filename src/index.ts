@@ -17,6 +17,7 @@ import {
 } from './mcp/oauth.js';
 import { createServer } from 'http';
 import { VERSION } from './util/version.js';
+import semver from 'semver';
 
 dotenv.config();
 
@@ -925,12 +926,12 @@ program
         try {
             const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
             const data = await response.json();
-            const latest = data.tag_name;
+            const latest = data.tag_name?.replace(/^v/, '');
 
             console.log(`Current: ${chalk.cyan(VERSION)}`);
             console.log(`Latest:  ${chalk.cyan(latest)}`);
 
-            if (VERSION === latest || `v${VERSION}` === latest) {
+            if (!semver.gt(latest, VERSION)) {
                 console.log(chalk.green('\nYou are on the latest version!'));
                 process.exit(0);
             }

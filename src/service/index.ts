@@ -1,6 +1,7 @@
 import express, { Express, Request, Response } from 'express';
 import { createServer, Server as HTTPServer } from 'http';
 import cors from 'cors';
+import semver from 'semver';
 import { Logger } from '../util/logger.js';
 import { VERSION } from '../util/version.js';
 import { Nero } from '../agent/nero.js';
@@ -150,7 +151,7 @@ export class NeroService {
             const data = await response.json();
             const latest = data.tag_name?.replace(/^v/, '');
 
-            if (latest && latest !== VERSION) {
+            if (latest && semver.gt(latest, VERSION)) {
                 this.logger.warn(`[Update] New version available: v${latest} (current: v${VERSION})`);
                 this.logger.warn(`[Update] Run 'nero update' to upgrade`);
             }
