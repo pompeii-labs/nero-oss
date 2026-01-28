@@ -7,6 +7,8 @@ import {
     getConfigPath,
     saveConfig,
     updateMcpServerOAuth,
+    getAllowedTools,
+    removeAllowedTool,
 } from '../config.js';
 import type { NeroProxy } from '../client/proxy.js';
 import {
@@ -565,6 +567,34 @@ export const commands: SlashCommand[] = [
                 const err = error as Error;
                 return { error: `Failed to fetch usage: ${err.message}` };
             }
+        },
+    },
+    {
+        name: 'revoke',
+        aliases: [],
+        description: 'Revoke always-allowed tool permissions',
+        execute: async (args, ctx) => {
+            const allowed = getAllowedTools();
+
+            if (args.length === 0) {
+                if (allowed.length === 0) {
+                    return { message: chalk.dim('No tools are always-allowed.') };
+                }
+                let output = chalk.bold('Always-allowed tools:\n\n');
+                allowed.forEach((tool) => {
+                    output += `  ${chalk.cyan(tool)}\n`;
+                });
+                output += chalk.dim('\nUse /revoke <tool> to remove.');
+                return { message: output };
+            }
+
+            const tool = args[0];
+            if (!allowed.includes(tool)) {
+                return { error: `Tool "${tool}" is not in the always-allowed list.` };
+            }
+
+            await removeAllowedTool(tool);
+            return { message: chalk.green(`Revoked always-allow for "${tool}".`) };
         },
     },
 ];
