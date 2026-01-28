@@ -407,6 +407,53 @@ export const commands: SlashCommand[] = [
         },
     },
     {
+        name: 'install-slack',
+        aliases: ['slack'],
+        description: 'Connect Nero to Slack for DM conversations',
+        execute: async (_, ctx) => {
+            if (!ctx.config.licenseKey) {
+                return {
+                    error: 'License key required for Slack integration.\n' +
+                           chalk.dim('Get one at https://nero.pompeiilabs.com'),
+                };
+            }
+
+            ctx.setLoading('Getting Slack install URL');
+
+            try {
+                const apiUrl = process.env.POMPEII_API_URL || 'https://api.magmadeploy.com';
+                const response = await fetch(`${apiUrl}/v1/nero/slack/install`, {
+                    headers: {
+                        'x-license-key': ctx.config.licenseKey,
+                    },
+                });
+
+                if (!response.ok) {
+                    ctx.setLoading(null);
+                    const data = await response.json().catch(() => ({}));
+                    return { error: data.error || `Failed to get install URL: ${response.status}` };
+                }
+
+                const { url } = await response.json();
+                ctx.setLoading(null);
+
+                ctx.log(chalk.blue('\nOpening browser to connect Slack...'));
+                ctx.log(chalk.dim(`If the browser doesn't open, visit:\n${url}\n`));
+
+                openBrowser(url);
+
+                return {
+                    message: chalk.green('Complete the authorization in your browser.\n') +
+                             chalk.dim('Once done, you can DM Nero directly in Slack!'),
+                };
+            } catch (error) {
+                ctx.setLoading(null);
+                const err = error as Error;
+                return { error: `Failed to start Slack install: ${err.message}` };
+            }
+        },
+    },
+    {
         name: 'usage',
         aliases: ['credits', 'balance'],
         description: 'Show OpenRouter API usage and credits',

@@ -372,6 +372,20 @@ You are responding via text message. Keep responses brief and mobile-friendly.
             });
         }
 
+        if (this.currentMedium === 'slack') {
+            messages.push({
+                role: 'system',
+                content: `## Slack Mode Instructions
+You are responding via Slack DM. Use Slack-friendly formatting:
+- Use *bold* with single asterisks (not double)
+- Use _italic_ with underscores
+- Use \`code\` with backticks
+- Use > for blockquotes
+- Keep responses conversational but can be longer than SMS
+- Emoji are fine to use sparingly`,
+            });
+        }
+
         return messages;
     }
 
@@ -479,10 +493,10 @@ You are responding via text message. Keep responses brief and mobile-friendly.
     }
 
 
-    private currentMedium: 'cli' | 'voice' | 'sms' | 'api' = 'cli';
+    private currentMedium: 'cli' | 'voice' | 'sms' | 'slack' | 'api' = 'cli';
     private currentCwd: string = process.cwd();
 
-    setMedium(medium: 'cli' | 'voice' | 'sms' | 'api'): void {
+    setMedium(medium: 'cli' | 'voice' | 'sms' | 'slack' | 'api'): void {
         this.currentMedium = medium;
     }
 

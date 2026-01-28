@@ -8,6 +8,7 @@ import { NeroConfig } from '../config.js';
 import { createHealthRouter } from './routes/health.js';
 import { createChatRouter } from './routes/chat.js';
 import { handleSms } from '../sms/handler.js';
+import { handleSlack } from '../slack/handler.js';
 import { handleIncomingCall } from '../voice/twilio.js';
 import { VoiceWebSocketManager } from '../voice/websocket.js';
 
@@ -84,6 +85,11 @@ export class NeroService {
             this.wsManager = new VoiceWebSocketManager(this.httpServer, this.config, this.agent);
             this.logger.info('[Voice] Webhook enabled at /webhook/voice');
         }
+
+        this.app.post('/webhook/slack', async (req, res) => {
+            await handleSlack(req, res, this.agent);
+        });
+        this.logger.info('[Slack] Webhook enabled at /webhook/slack');
     }
 
     private setupShutdown(): void {
