@@ -19,15 +19,17 @@ if [ ! -f ~/.nero/config.json ]; then
     echo '{"mcpServers":{}}' > ~/.nero/config.json
 fi
 
-# Get API key
-if [ -z "$OPENROUTER_API_KEY" ]; then
-    echo ""
-    echo "Get an API key at: https://openrouter.ai/keys"
-    read -p "Enter your OpenRouter API key: " OPENROUTER_API_KEY
+# Create .env template if missing
+if [ ! -f ~/.nero/.env ]; then
+    cat > ~/.nero/.env << 'EOF'
+OPENROUTER_API_KEY=
+TAVILY_API_KEY=
+DEEPGRAM_API_KEY=
+ELEVENLABS_API_KEY=
+NERO_LICENSE_KEY=
+EOF
+    echo "Created ~/.nero/.env - add your API keys there"
 fi
-
-# Create .env
-echo "OPENROUTER_API_KEY=$OPENROUTER_API_KEY" > ~/.nero/.env
 
 # Download docker-compose.yml
 curl -fsSL https://raw.githubusercontent.com/$REPO/main/deploy/docker-compose.yml -o ~/.nero/docker-compose.yml

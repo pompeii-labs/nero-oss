@@ -41,6 +41,7 @@ elif docker ps -a --format '{{.Names}}' | grep -q '^nero$'; then
         --restart unless-stopped \
         -p 4848:4848 \
         -e OPENROUTER_API_KEY="${OPENROUTER_API_KEY}" \
+        -e TAVILY_API_KEY="${TAVILY_API_KEY}" \
         -e DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY}" \
         -e ELEVENLABS_API_KEY="${ELEVENLABS_API_KEY}" \
         -e NERO_LICENSE_KEY="${NERO_LICENSE_KEY}" \

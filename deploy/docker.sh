@@ -19,17 +19,14 @@ if [ ! -f ~/.nero/config.json ]; then
     echo '{"mcpServers":{}}' > ~/.nero/config.json
 fi
 
-# Get API key
+# Check required env var
 if [ -z "$OPENROUTER_API_KEY" ]; then
     echo ""
+    echo "Error: OPENROUTER_API_KEY is required"
     echo "Get an API key at: https://openrouter.ai/keys"
-    read -p "Enter your OpenRouter API key: " OPENROUTER_API_KEY
-fi
-
-# Optional DATABASE_URL
-if [ -z "$DATABASE_URL" ]; then
     echo ""
-    echo "DATABASE_URL not set - running without persistence."
+    echo "Run with: OPENROUTER_API_KEY=your_key bash docker.sh"
+    exit 1
 fi
 
 # Pull latest image
@@ -42,6 +39,7 @@ docker run -d \
     --restart unless-stopped \
     -p 4848:4848 \
     -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
+    -e TAVILY_API_KEY="$TAVILY_API_KEY" \
     -e DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY" \
     -e ELEVENLABS_API_KEY="$ELEVENLABS_API_KEY" \
     -e NERO_LICENSE_KEY="$NERO_LICENSE_KEY" \
