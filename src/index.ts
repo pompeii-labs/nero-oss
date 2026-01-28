@@ -911,6 +911,91 @@ mcp
         }
     });
 
+program
+    .command('update')
+    .description('Update Nero to the latest version')
+    .option('--check', 'Check for updates without installing')
+    .action(async (options) => {
+        const { execSync, spawn } = await import('child_process');
+
+        const REPO = 'pompeii-labs/nero-oss';
+
+        console.log(chalk.dim('Checking for updates...'));
+
+        try {
+            const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
+            const data = await response.json();
+            const latest = data.tag_name;
+
+            console.log(`Current: ${chalk.cyan(VERSION)}`);
+            console.log(`Latest:  ${chalk.cyan(latest)}`);
+
+            if (VERSION === latest || `v${VERSION}` === latest) {
+                console.log(chalk.green('\nYou are on the latest version!'));
+                process.exit(0);
+            }
+
+            if (options.check) {
+                console.log(chalk.yellow(`\nUpdate available! Run ${chalk.cyan('nero update')} to install.`));
+                process.exit(0);
+            }
+
+            console.log(chalk.dim('\nUpdating...'));
+
+            const isDockerCompose = await import('fs').then(fs =>
+                fs.existsSync(join(homedir(), '.nero', 'docker-compose.yml'))
+            );
+
+            if (isDockerCompose) {
+                console.log(chalk.dim('Detected Docker Compose installation'));
+                const neroDir = join(homedir(), '.nero');
+
+                const hasComposeV2 = (() => {
+                    try {
+                        execSync('docker compose version', { stdio: 'ignore' });
+                        return true;
+                    } catch {
+                        return false;
+                    }
+                })();
+
+                const compose = hasComposeV2 ? 'docker compose' : 'docker-compose';
+
+                console.log(chalk.dim('Pulling latest image...'));
+                execSync(`${compose} pull`, { cwd: neroDir, stdio: 'inherit' });
+
+                console.log(chalk.dim('Restarting containers...'));
+                execSync(`${compose} down`, { cwd: neroDir, stdio: 'inherit' });
+                execSync(`${compose} up -d`, { cwd: neroDir, stdio: 'inherit' });
+
+                console.log(chalk.green('\nDocker containers updated!'));
+            }
+
+            console.log(chalk.dim('\nUpdating CLI binary...'));
+
+            const os = (await import('os')).default;
+            const platform = os.platform();
+            const arch = os.arch();
+
+            const osName = platform === 'darwin' ? 'darwin' : 'linux';
+            const archName = arch === 'arm64' ? 'arm64' : 'x64';
+            const binary = `nero-${osName}-${archName}`;
+
+            const binaryUrl = `https://github.com/${REPO}/releases/download/${latest}/${binary}`;
+
+            console.log(chalk.dim(`Downloading ${binary}...`));
+            execSync(`curl -fsSL "${binaryUrl}" -o /tmp/nero && chmod +x /tmp/nero && sudo mv /tmp/nero /usr/local/bin/nero`, {
+                stdio: 'inherit',
+            });
+
+            console.log(chalk.green(`\nNero updated to ${latest}!`));
+        } catch (error) {
+            const err = error as Error;
+            console.error(chalk.red(`Update failed: ${err.message}`));
+            process.exit(1);
+        }
+    });
+
 async function main() {
     try {
         await program.parseAsync(process.argv);

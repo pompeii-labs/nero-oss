@@ -134,7 +134,28 @@ export class NeroService {
             } else {
                 this.logger.info('[License] No key - webhooks require manual setup');
             }
+
+            this.checkForUpdates();
         });
+    }
+
+    private async checkForUpdates(): Promise<void> {
+        try {
+            const response = await fetch('https://api.github.com/repos/pompeii-labs/nero-oss/releases/latest', {
+                headers: { 'User-Agent': 'Nero' },
+            });
+
+            if (!response.ok) return;
+
+            const data = await response.json();
+            const latest = data.tag_name?.replace(/^v/, '');
+
+            if (latest && latest !== VERSION) {
+                this.logger.warn(`[Update] New version available: v${latest} (current: v${VERSION})`);
+                this.logger.warn(`[Update] Run 'nero update' to upgrade`);
+            }
+        } catch {
+        }
     }
 
     private async startLicensePoll(): Promise<void> {
