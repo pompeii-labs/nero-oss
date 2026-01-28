@@ -14,6 +14,7 @@ import { NeroConfig } from '../config.js';
 import { McpClient } from '../mcp/client.js';
 import { db, isDbConnected } from '../db/index.js';
 import { generateDiff } from '../util/diff.js';
+import { hostToContainer, containerToHost } from '../util/paths.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -508,6 +509,21 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         return this.currentCwd;
     }
 
+    private resolvePath(inputPath: string): string {
+        const hostHome = process.env.HOST_HOME || '';
+        let resolved = inputPath;
+
+        if (resolved.startsWith('~')) {
+            resolved = hostHome ? resolved.replace('~', hostHome) : resolved.replace('~', homedir());
+        }
+
+        if (!resolved.startsWith('/')) {
+            resolved = join(this.currentCwd, resolved);
+        }
+
+        return hostToContainer(resolved);
+    }
+
     private async saveMessage(role: 'user' | 'assistant', content: string): Promise<void> {
         if (!isDbConnected()) return;
         try {
@@ -592,10 +608,10 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         this.emitActivity(activity);
 
         try {
-            const filePath = resolve(path.replace('~', homedir()));
+            const filePath = this.resolvePath(path);
             if (!existsSync(filePath)) {
                 activity.status = 'error';
-                activity.error = `File not found: ${filePath}`;
+                activity.error = `File not found: ${path}`;
                 this.emitActivity(activity);
                 return activity.error;
             }
@@ -619,7 +635,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     @toolparam({ key: 'content', type: 'string', required: true, description: 'Content to write' })
     async writeToFile(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { path, content } = call.fn_args;
-        const filePath = resolve(path.replace('~', homedir()));
+        const filePath = this.resolvePath(path);
 
         let oldContent: string | null = null;
         try {
@@ -667,7 +683,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         }
     }
 
-    @tool({ description: 'Execute a bash command in the shell' })
+    @tool({ description: 'Execute a bash command in the shell. Commands run in the current working directory. Use relative paths when possible.' })
     @toolparam({ key: 'command', type: 'string', required: true, description: 'The bash command to execute' })
     async runBash(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { command } = call.fn_args;
@@ -682,6 +698,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
                 encoding: 'utf-8',
                 timeout: 30000,
                 maxBuffer: 1024 * 1024 * 10,
+                cwd: this.currentCwd,
             });
             activity.status = 'complete';
             activity.result = output.trim();
@@ -704,11 +721,12 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     @toolparam({ key: 'fileType', type: 'string', required: false, description: 'File extension filter (e.g., "ts", "js")' })
     async grepSearch(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { pattern, path, fileType } = call.fn_args;
-        const searchPath = path ? resolve(path) : this.currentCwd;
-        const approved = await this.requestPermission('grep', { pattern, path: searchPath, fileType });
+        const searchPath = path ? this.resolvePath(path) : this.currentCwd;
+        const displayPath = containerToHost(searchPath);
+        const approved = await this.requestPermission('grep', { pattern, path: displayPath, fileType });
         if (!approved) return 'Permission denied by user.';
 
-        const activity: ToolActivity = { tool: 'grep', args: { pattern, path: searchPath }, status: 'running' };
+        const activity: ToolActivity = { tool: 'grep', args: { pattern, path: displayPath }, status: 'running' };
         this.emitActivity(activity);
 
         try {
@@ -720,7 +738,8 @@ You are responding via Slack DM. Use Slack-friendly formatting:
             activity.status = 'complete';
             activity.result = `Found matches for "${pattern}"`;
             this.emitActivity(activity);
-            return output.trim() || 'No matches found';
+            const result = output.trim() || 'No matches found';
+            return result.replace(/\/host\/home/g, process.env.HOST_HOME || '/host/home');
         } catch (error) {
             activity.status = 'complete';
             activity.result = 'No matches found';
@@ -733,11 +752,12 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     @toolparam({ key: 'path', type: 'string', required: false, description: 'Directory path (default: cwd)' })
     async listFiles(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { path } = call.fn_args;
-        const dirPath = path ? resolve(path.replace('~', homedir())) : this.currentCwd;
-        const approved = await this.requestPermission('ls', { path: dirPath });
+        const dirPath = path ? this.resolvePath(path) : this.currentCwd;
+        const displayPath = containerToHost(dirPath);
+        const approved = await this.requestPermission('ls', { path: displayPath });
         if (!approved) return 'Permission denied by user.';
 
-        const activity: ToolActivity = { tool: 'ls', args: { path: dirPath }, status: 'running' };
+        const activity: ToolActivity = { tool: 'ls', args: { path: displayPath }, status: 'running' };
         this.emitActivity(activity);
 
         try {
@@ -762,11 +782,12 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     @toolparam({ key: 'path', type: 'string', required: false, description: 'Directory to search in (default: cwd)' })
     async findFiles(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { pattern, path } = call.fn_args;
-        const searchPath = path ? resolve(path) : this.currentCwd;
-        const approved = await this.requestPermission('find', { pattern, path: searchPath });
+        const searchPath = path ? this.resolvePath(path) : this.currentCwd;
+        const displayPath = containerToHost(searchPath);
+        const approved = await this.requestPermission('find', { pattern, path: displayPath });
         if (!approved) return 'Permission denied by user.';
 
-        const activity: ToolActivity = { tool: 'find', args: { pattern, path: searchPath }, status: 'running' };
+        const activity: ToolActivity = { tool: 'find', args: { pattern, path: displayPath }, status: 'running' };
         this.emitActivity(activity);
 
         try {
@@ -776,7 +797,8 @@ You are responding via Slack DM. Use Slack-friendly formatting:
             activity.status = 'complete';
             activity.result = `Found files matching "${pattern}"`;
             this.emitActivity(activity);
-            return output.trim() || 'No files found';
+            const result = output.trim() || 'No files found';
+            return result.replace(/\/host\/home/g, process.env.HOST_HOME || '/host/home');
         } catch (error) {
             activity.status = 'complete';
             activity.result = 'No files found';

@@ -66,27 +66,23 @@ export class Logger {
     }
 
     tool(activity: ToolActivity) {
-        const blue = chalk.hex(NERO_BLUE);
         const toolName = this.formatToolName(activity.tool);
         const argPreview = this.getArgPreview(activity.args);
 
         if (activity.status === 'running') {
-            const prefix = blue('▒○');
             console.log(
-                `${prefix} ${blue.bold(toolName)}${argPreview ? chalk.dim(` ${argPreview}`) : ''} ${chalk.dim('...')}`,
+                `[${chalk.hex(NERO_BLUE).bold('Nero')}][${chalk.yellow('CALL')}] ${toolName}${argPreview ? chalk.dim(` ${argPreview}`) : ''}`,
             );
         } else if (activity.status === 'complete') {
-            const prefix = blue('░◆');
             const resultPreview = activity.result
-                ? chalk.dim(` ↳ ${activity.result.slice(0, 60).replace(/\n/g, ' ')}${activity.result.length > 60 ? '...' : ''}`)
+                ? chalk.dim(` ${activity.result.slice(0, 60).replace(/\n/g, ' ')}${activity.result.length > 60 ? '...' : ''}`)
                 : '';
             console.log(
-                `${prefix} ${blue.bold(toolName)}${resultPreview}`,
+                `[${chalk.hex(NERO_BLUE).bold('Nero')}][${chalk.green('DONE')}] ${toolName}${resultPreview}`,
             );
         } else if (activity.status === 'error') {
-            const prefix = chalk.red('░◇');
             console.log(
-                `${prefix} ${chalk.red.bold(toolName)} ${chalk.red(activity.error || 'Unknown error')}`,
+                `[${chalk.hex(NERO_BLUE).bold('Nero')}][${chalk.red('FAIL')}] ${toolName} ${chalk.red(activity.error || 'Unknown error')}`,
             );
         }
     }
