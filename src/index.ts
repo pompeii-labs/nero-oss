@@ -25,7 +25,7 @@ const program = new Command();
 program
     .name('nero')
     .description('Open source AI companion')
-    .version(VERSION);
+    .version(VERSION, '-v, --version');
 
 program
     .command('chat', { isDefault: true })

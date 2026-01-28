@@ -35,10 +35,10 @@ jobs:
       - name: Build binaries
         run: |
           mkdir -p dist/binaries
-          bun build --compile --target=bun-linux-x64 src/index.ts --outfile dist/binaries/nero-linux-x64
-          bun build --compile --target=bun-linux-arm64 src/index.ts --outfile dist/binaries/nero-linux-arm64
-          bun build --compile --target=bun-darwin-x64 src/index.ts --outfile dist/binaries/nero-darwin-x64
-          bun build --compile --target=bun-darwin-arm64 src/index.ts --outfile dist/binaries/nero-darwin-arm64
+          bun build --compile --target=bun-linux-x64 --define "NERO_VERSION='\"$VERSION\"'" src/index.ts --outfile dist/binaries/nero-linux-x64
+          bun build --compile --target=bun-linux-arm64 --define "NERO_VERSION='\"$VERSION\"'" src/index.ts --outfile dist/binaries/nero-linux-arm64
+          bun build --compile --target=bun-darwin-x64 --define "NERO_VERSION='\"$VERSION\"'" src/index.ts --outfile dist/binaries/nero-darwin-x64
+          bun build --compile --target=bun-darwin-arm64 --define "NERO_VERSION='\"$VERSION\"'" src/index.ts --outfile dist/binaries/nero-darwin-arm64
 
       - name: Create checksums
         run: |
