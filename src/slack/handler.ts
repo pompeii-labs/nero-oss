@@ -1,6 +1,8 @@
 import type { Request, Response } from 'express';
-import chalk from 'chalk';
 import { Nero } from '../agent/nero.js';
+import { Logger } from '../util/logger.js';
+
+const logger = new Logger('Slack');
 
 interface SlackMessage {
     text: string;
@@ -24,20 +26,25 @@ export async function handleSlack(req: Request, res: Response, agent: Nero): Pro
             return;
         }
 
-        console.log(chalk.dim(`[slack] From ${user}: ${text.slice(0, 50)}...`));
+        logger.info(`From ${user}: ${text.slice(0, 50)}${text.length > 50 ? '...' : ''}`);
 
         res.status(200).json({ ok: true });
 
         agent.setMedium('slack');
+        agent.setActivityCallback((activity) => logger.tool(activity));
+
         const response = await agent.chat(text);
+
+        agent.setActivityCallback(undefined);
 
         const responseText = response.content || "I couldn't generate a response. Try again.";
         await sendSlackMessage(botToken, channel, responseText);
 
-        console.log(chalk.dim(`[slack] Sent response to ${channel}`));
+        logger.info(`Sent response to ${channel}`);
     } catch (error) {
         const err = error as Error;
-        console.error(chalk.red(`[slack] Error: ${err.message}`));
+        logger.error(err.message);
+        agent.setActivityCallback(undefined);
         if (!res.headersSent) {
             res.status(500).json({ error: 'Something went wrong' });
         }

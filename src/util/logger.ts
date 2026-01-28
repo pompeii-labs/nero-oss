@@ -1,4 +1,13 @@
 import chalk from 'chalk';
+import { NERO_BLUE } from '../cli/theme.js';
+
+interface ToolActivity {
+    tool: string;
+    args: Record<string, any>;
+    status: 'pending' | 'approved' | 'denied' | 'running' | 'complete' | 'error';
+    result?: string;
+    error?: string;
+}
 
 export enum LogLevel {
     DEBUG = 'DEBUG',
@@ -54,5 +63,58 @@ export class Logger {
         console.log(
             `[${chalk.green.bold(this.name)}][${chalk.green('OK')}] ${chalk.green(message)}${detailsStr}`,
         );
+    }
+
+    tool(activity: ToolActivity) {
+        const blue = chalk.hex(NERO_BLUE);
+        const toolName = this.formatToolName(activity.tool);
+        const argPreview = this.getArgPreview(activity.args);
+
+        if (activity.status === 'running') {
+            const prefix = blue('▒○');
+            console.log(
+                `${prefix} ${blue.bold(toolName)}${argPreview ? chalk.dim(` ${argPreview}`) : ''} ${chalk.dim('...')}`,
+            );
+        } else if (activity.status === 'complete') {
+            const prefix = blue('░◆');
+            const resultPreview = activity.result
+                ? chalk.dim(` ↳ ${activity.result.slice(0, 60).replace(/\n/g, ' ')}${activity.result.length > 60 ? '...' : ''}`)
+                : '';
+            console.log(
+                `${prefix} ${blue.bold(toolName)}${resultPreview}`,
+            );
+        } else if (activity.status === 'error') {
+            const prefix = chalk.red('░◇');
+            console.log(
+                `${prefix} ${chalk.red.bold(toolName)} ${chalk.red(activity.error || 'Unknown error')}`,
+            );
+        }
+    }
+
+    private formatToolName(tool: string): string {
+        const name = tool.includes(':') ? tool.split(':')[1] : tool;
+        return name!
+            .replace(/_/g, ' ')
+            .replace(/([a-z])([A-Z])/g, '$1 $2')
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+    }
+
+    private getArgPreview(args: Record<string, any>): string {
+        const mainArg = Object.entries(args).find(([key]) =>
+            !['isNewFile', 'linesAdded', 'linesRemoved', 'oldContent', 'newContent'].includes(key)
+        );
+        if (!mainArg) return '';
+
+        const value = mainArg[1];
+        if (typeof value === 'string') {
+            return value.length > 50 ? value.slice(0, 50) + '...' : value;
+        }
+        if (typeof value === 'object' && value !== null) {
+            const str = JSON.stringify(value);
+            return str.length > 50 ? str.slice(0, 50) + '...' : str;
+        }
+        return String(value);
     }
 }

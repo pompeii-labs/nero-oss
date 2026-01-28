@@ -1,6 +1,8 @@
 import type { Request, Response } from 'express';
-import chalk from 'chalk';
 import { Nero } from '../agent/nero.js';
+import { Logger } from '../util/logger.js';
+
+const logger = new Logger('SMS');
 
 export async function handleSms(req: Request, res: Response, agent: Nero): Promise<void> {
     try {
@@ -13,10 +15,14 @@ export async function handleSms(req: Request, res: Response, agent: Nero): Promi
             return void res.status(400).send('<Response><Message>Invalid request</Message></Response>');
         }
 
-        console.log(chalk.dim(`[sms] From ${phone}: ${message.slice(0, 50)}...`));
+        logger.info(`From ${phone}: ${message.slice(0, 50)}${message.length > 50 ? '...' : ''}`);
 
         agent.setMedium('sms');
+        agent.setActivityCallback((activity) => logger.tool(activity));
+
         const response = await agent.chat(message);
+
+        agent.setActivityCallback(undefined);
 
         res.setHeader('Content-Type', 'application/xml');
         return void res.send(
@@ -24,7 +30,8 @@ export async function handleSms(req: Request, res: Response, agent: Nero): Promi
         );
     } catch (error) {
         const err = error as Error;
-        console.error(chalk.red(`[sms] Error: ${err.message}`));
+        logger.error(err.message);
+        agent.setActivityCallback(undefined);
         res.setHeader('Content-Type', 'application/xml');
         return void res.send(
             `<Response><Message>Something went wrong. Try again.</Message></Response>`

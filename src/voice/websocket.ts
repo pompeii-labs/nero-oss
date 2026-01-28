@@ -10,6 +10,9 @@ import {
 } from '@pompeii-labs/audio/voice';
 import { Nero } from '../agent/nero.js';
 import { NeroConfig } from '../config.js';
+import { Logger } from '../util/logger.js';
+
+const logger = new Logger('Voice');
 
 interface Connection {
     id: string;
@@ -134,9 +137,9 @@ export class VoiceWebSocketManager {
 
                     let toolMessageSent = false;
                     this.agent.setActivityCallback((activity) => {
+                        logger.tool(activity);
                         if (activity.status === 'running' && !toolMessageSent) {
                             toolMessageSent = true;
-                            console.log(chalk.dim(`[voice] Tool running: ${activity.tool}`));
                             flow?.inputText("Hold on, let me check that.");
                             flow?.inputText(null as unknown as string);
                         }
