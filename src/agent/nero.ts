@@ -940,15 +940,28 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     }
 
     @tool({
-        description: 'Send a Slack message to the user. Only available if Slack is connected.',
+        description: `Send a Slack message to the user. Supports plain text or rich Block Kit formatting.
+For rich messages, use the blocks parameter with Slack Block Kit JSON array.
+Common blocks: section (text), divider, header, context, image.
+Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _italic_"}}]`,
         enabled: (agent) => !!(agent as Nero).config.licenseKey,
     })
-    @toolparam({ key: 'message', type: 'string', required: true, description: 'The message to send' })
+    @toolparam({ key: 'text', type: 'string', required: true, description: 'Plain text message (also used as fallback for blocks)' })
+    @toolparam({ key: 'blocks', type: 'string', required: false, description: 'Optional Block Kit JSON array for rich formatting' })
     async sendSlackMessage(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { message } = call.fn_args;
+        const { text, blocks } = call.fn_args;
 
-        const activity: ToolActivity = { tool: 'slack_message', args: { message: message.slice(0, 50) + '...' }, status: 'running' };
+        const activity: ToolActivity = { tool: 'slack_message', args: { text: text.slice(0, 50) + '...' }, status: 'running' };
         this.emitActivity(activity);
+
+        let parsedBlocks: any[] | undefined;
+        if (blocks) {
+            try {
+                parsedBlocks = JSON.parse(blocks);
+            } catch {
+                return 'Error: Invalid Block Kit JSON';
+            }
+        }
 
         try {
             const apiUrl = process.env.POMPEII_API_URL || 'https://api.magmadeploy.com';
@@ -958,7 +971,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
                     'Content-Type': 'application/json',
                     'x-license-key': this.config.licenseKey,
                 },
-                body: JSON.stringify({ message }),
+                body: JSON.stringify({ text, blocks: parsedBlocks }),
             });
 
             if (!response.ok) {
