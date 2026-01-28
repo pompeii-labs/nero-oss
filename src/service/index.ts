@@ -41,9 +41,7 @@ export class NeroService {
 
     private setupMiddleware(): void {
         const backendUrl = process.env.BACKEND_URL || 'https://api.magmadeploy.com';
-        const corsOptions = this.config.licenseKey
-            ? { origin: backendUrl }
-            : { origin: true };
+        const corsOptions = this.config.licenseKey ? { origin: backendUrl } : { origin: true };
 
         this.app.use(cors(corsOptions));
         this.app.use(express.json());
@@ -150,9 +148,12 @@ export class NeroService {
 
     private async checkForUpdates(): Promise<void> {
         try {
-            const response = await fetch('https://api.github.com/repos/pompeii-labs/nero-oss/releases/latest', {
-                headers: { 'User-Agent': 'Nero' },
-            });
+            const response = await fetch(
+                'https://api.github.com/repos/pompeii-labs/nero-oss/releases/latest',
+                {
+                    headers: { 'User-Agent': 'Nero' },
+                },
+            );
 
             if (!response.ok) return;
 
@@ -160,11 +161,12 @@ export class NeroService {
             const latest = data.tag_name?.replace(/^v/, '');
 
             if (latest && semver.gt(latest, VERSION)) {
-                this.logger.warn(`[Update] New version available: v${latest} (current: v${VERSION})`);
+                this.logger.warn(
+                    `[Update] New version available: v${latest} (current: v${VERSION})`,
+                );
                 this.logger.warn(`[Update] Run 'nero update' to upgrade`);
             }
-        } catch {
-        }
+        } catch {}
     }
 
     private async startLicensePoll(): Promise<void> {

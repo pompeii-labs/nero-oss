@@ -15,7 +15,7 @@ export interface DiffLine {
 export function generateDiff(
     oldContent: string | null,
     newContent: string,
-    maxLines = 100
+    maxLines = 100,
 ): DiffResult {
     const old = oldContent ?? '';
     const changes = diffLines(old, newContent);

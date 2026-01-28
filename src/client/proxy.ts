@@ -1,6 +1,11 @@
 import { NeroClient, ActivityEvent } from './index.js';
 import { Logger } from '../util/logger.js';
-import type { LoadedMessage, PermissionCallback, ActivityCallback, ToolActivity } from '../agent/nero.js';
+import type {
+    LoadedMessage,
+    PermissionCallback,
+    ActivityCallback,
+    ToolActivity,
+} from '../agent/nero.js';
 
 export class NeroProxy {
     private client: NeroClient;
@@ -10,7 +15,11 @@ export class NeroProxy {
     private loadedMessages: LoadedMessage[] = [];
     private hasSummary = false;
     private cachedMcpTools: string[] = [];
-    private cachedContext: { tokens: number; limit: number; percentage: number } = { tokens: 0, limit: 180000, percentage: 0 };
+    private cachedContext: { tokens: number; limit: number; percentage: number } = {
+        tokens: 0,
+        limit: 180000,
+        percentage: 0,
+    };
     private cwd?: string;
 
     constructor(serviceUrl: string, cwd?: string, licenseKey?: string) {
@@ -20,7 +29,11 @@ export class NeroProxy {
 
     async setup(): Promise<void> {
         const context = await this.client.getContext();
-        this.cachedContext = { tokens: context.tokens, limit: context.limit, percentage: context.percentage };
+        this.cachedContext = {
+            tokens: context.tokens,
+            limit: context.limit,
+            percentage: context.percentage,
+        };
         this.cachedMcpTools = context.mcpTools;
         this.logger.info(`Connected to service (${context.percentage}% context used)`);
 
@@ -28,7 +41,9 @@ export class NeroProxy {
         this.loadedMessages = history.messages;
         this.hasSummary = history.hasSummary;
         if (history.messages.length > 0) {
-            this.logger.info(`Loaded ${history.messages.length} messages${history.hasSummary ? ' (with summary)' : ''}`);
+            this.logger.info(
+                `Loaded ${history.messages.length} messages${history.hasSummary ? ' (with summary)' : ''}`,
+            );
         }
     }
 
@@ -36,7 +51,10 @@ export class NeroProxy {
         // Nothing to clean up for client
     }
 
-    async chat(message: string, onChunk?: (chunk: string) => void): Promise<{ content: string; streamed: boolean }> {
+    async chat(
+        message: string,
+        onChunk?: (chunk: string) => void,
+    ): Promise<{ content: string; streamed: boolean }> {
         const handlePermission = async (id: string, activity: ActivityEvent) => {
             if (!this.permissionCallback) {
                 await this.client.respondToPermission(id, true);
@@ -60,7 +78,7 @@ export class NeroProxy {
             (chunk) => onChunk?.(chunk),
             (activity) => this.activityCallback?.(activity),
             this.cwd,
-            handlePermission
+            handlePermission,
         );
 
         return response;
@@ -112,7 +130,9 @@ export class NeroProxy {
         return result.summary;
     }
 
-    async getMessageHistory(limit = 20): Promise<Array<{ role: string; content: string; created_at: string }>> {
+    async getMessageHistory(
+        limit = 20,
+    ): Promise<Array<{ role: string; content: string; created_at: string }>> {
         // TODO: Call service endpoint
         return [];
     }

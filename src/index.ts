@@ -23,10 +23,7 @@ dotenv.config();
 
 const program = new Command();
 
-program
-    .name('nero')
-    .description('Open source AI companion')
-    .version(VERSION, '-v, --version');
+program.name('nero').description('Open source AI companion').version(VERSION, '-v, --version');
 
 program
     .command('chat', { isDefault: true })
@@ -68,7 +65,6 @@ program
             await startRepl(config);
         }
     });
-
 
 program
     .command('migrate')
@@ -120,36 +116,43 @@ program
         console.log(chalk.bold('\nNero Configuration:\n'));
 
         console.log(chalk.dim('Settings:'));
-        console.log(`  Streaming: ${config.settings.streaming ? chalk.green('on') : chalk.yellow('off')}`);
+        console.log(
+            `  Streaming: ${config.settings.streaming ? chalk.green('on') : chalk.yellow('off')}`,
+        );
         console.log(`  Model: ${chalk.cyan(config.settings.model)}`);
-        console.log(`  Verbose: ${config.settings.verbose ? chalk.green('on') : chalk.yellow('off')}`);
+        console.log(
+            `  Verbose: ${config.settings.verbose ? chalk.green('on') : chalk.yellow('off')}`,
+        );
 
         console.log(chalk.dim('\nMCP Servers:'));
         const servers = Object.keys(config.mcpServers || {});
         if (servers.length === 0) {
             console.log(chalk.yellow('  No MCP servers configured'));
         } else {
-            servers.forEach(name => {
+            servers.forEach((name) => {
                 console.log(chalk.green(`  - ${name}`));
             });
         }
 
         console.log(chalk.dim('\nFeatures:'));
-        console.log(`  Voice: ${config.voice?.enabled ? chalk.green('enabled') : chalk.dim('disabled')}`);
-        console.log(`  SMS: ${config.sms?.enabled ? chalk.green('enabled') : chalk.dim('disabled')}`);
-        console.log(`  License Key: ${config.licenseKey ? chalk.green('configured') : chalk.dim('not set')}`);
+        console.log(
+            `  Voice: ${config.voice?.enabled ? chalk.green('enabled') : chalk.dim('disabled')}`,
+        );
+        console.log(
+            `  SMS: ${config.sms?.enabled ? chalk.green('enabled') : chalk.dim('disabled')}`,
+        );
+        console.log(
+            `  License Key: ${config.licenseKey ? chalk.green('configured') : chalk.dim('not set')}`,
+        );
 
         console.log(chalk.dim('\nConfig Path:'));
         console.log(`  ${getConfigPath()}`);
         console.log();
     });
 
-const mcp = program
-    .command('mcp')
-    .description('Manage MCP servers');
+const mcp = program.command('mcp').description('Manage MCP servers');
 
-mcp
-    .command('add <name> [url]')
+mcp.command('add <name> [url]')
     .description('Add an MCP server (stdio: use --, http: provide URL)')
     .option('-t, --transport <transport>', 'Transport type: stdio or http', 'stdio')
     .option('-e, --env <env...>', 'Environment variables (KEY=VALUE)')
@@ -232,8 +235,7 @@ mcp
         }
     });
 
-mcp
-    .command('list')
+mcp.command('list')
     .alias('ls')
     .description('List configured MCP servers')
     .action(async () => {
@@ -255,7 +257,9 @@ mcp
                 console.log(chalk.dim(`    URL: ${server.url}`));
             }
             if (server.command) {
-                console.log(chalk.dim(`    Command: ${server.command} ${(server.args || []).join(' ')}`));
+                console.log(
+                    chalk.dim(`    Command: ${server.command} ${(server.args || []).join(' ')}`),
+                );
             }
             if (server.env) {
                 console.log(chalk.dim(`    Env: ${Object.keys(server.env).join(', ')}`));
@@ -267,8 +271,7 @@ mcp
         console.log();
     });
 
-mcp
-    .command('remove <name>')
+mcp.command('remove <name>')
     .alias('rm')
     .description('Remove an MCP server')
     .action(async (name) => {
@@ -284,8 +287,7 @@ mcp
         console.log(chalk.green(`Removed MCP server: ${name}`));
     });
 
-mcp
-    .command('auth <name>')
+mcp.command('auth <name>')
     .description('Authenticate with an MCP server using OAuth')
     .option('-p, --port <port>', 'Local port for OAuth callback', '8976')
     .action(async (name, options) => {
@@ -321,7 +323,7 @@ mcp
             clientRegistration = await registerClient(
                 metadata.authServer,
                 `nero-${name}`,
-                redirectUri
+                redirectUri,
             );
 
             if (!clientRegistration) {
@@ -342,62 +344,73 @@ mcp
 
         openBrowser(authUrl);
 
-        const tokens = await new Promise<Awaited<ReturnType<typeof exchangeCodeForTokens>>>((resolve, reject) => {
-            const server = createServer(async (req, res) => {
-                const url = new URL(req.url || '', `http://localhost:${port}`);
+        const tokens = await new Promise<Awaited<ReturnType<typeof exchangeCodeForTokens>>>(
+            (resolve, reject) => {
+                const server = createServer(async (req, res) => {
+                    const url = new URL(req.url || '', `http://localhost:${port}`);
 
-                if (url.pathname === '/callback') {
-                    const code = url.searchParams.get('code');
-                    const returnedState = url.searchParams.get('state');
-                    const error = url.searchParams.get('error');
+                    if (url.pathname === '/callback') {
+                        const code = url.searchParams.get('code');
+                        const returnedState = url.searchParams.get('state');
+                        const error = url.searchParams.get('error');
 
-                    if (error) {
-                        res.writeHead(400, { 'Content-Type': 'text/html' });
-                        res.end(`<html><body><h1>Authentication Failed</h1><p>${error}</p></body></html>`);
+                        if (error) {
+                            res.writeHead(400, { 'Content-Type': 'text/html' });
+                            res.end(
+                                `<html><body><h1>Authentication Failed</h1><p>${error}</p></body></html>`,
+                            );
+                            server.close();
+                            reject(new Error(`OAuth error: ${error}`));
+                            return;
+                        }
+
+                        if (!code || returnedState !== state) {
+                            res.writeHead(400, { 'Content-Type': 'text/html' });
+                            res.end(
+                                '<html><body><h1>Invalid Response</h1><p>Missing code or state mismatch</p></body></html>',
+                            );
+                            server.close();
+                            reject(new Error('Invalid OAuth response'));
+                            return;
+                        }
+
+                        res.writeHead(200, { 'Content-Type': 'text/html' });
+                        res.end(
+                            '<html><body><h1>Authentication Successful</h1><p>You can close this window.</p></body></html>',
+                        );
                         server.close();
-                        reject(new Error(`OAuth error: ${error}`));
-                        return;
-                    }
 
-                    if (!code || returnedState !== state) {
-                        res.writeHead(400, { 'Content-Type': 'text/html' });
-                        res.end('<html><body><h1>Invalid Response</h1><p>Missing code or state mismatch</p></body></html>');
+                        const tokens = await exchangeCodeForTokens(
+                            metadata.authServer!,
+                            clientRegistration!.client_id,
+                            code,
+                            codeVerifier,
+                            redirectUri,
+                        );
+                        resolve(tokens);
+                    } else {
+                        res.writeHead(404);
+                        res.end('Not found');
+                    }
+                });
+
+                server.listen(port, () => {
+                    console.log(chalk.dim(`Waiting for OAuth callback on port ${port}...`));
+                });
+
+                server.on('error', (err) => {
+                    reject(err);
+                });
+
+                setTimeout(
+                    () => {
                         server.close();
-                        reject(new Error('Invalid OAuth response'));
-                        return;
-                    }
-
-                    res.writeHead(200, { 'Content-Type': 'text/html' });
-                    res.end('<html><body><h1>Authentication Successful</h1><p>You can close this window.</p></body></html>');
-                    server.close();
-
-                    const tokens = await exchangeCodeForTokens(
-                        metadata.authServer!,
-                        clientRegistration!.client_id,
-                        code,
-                        codeVerifier,
-                        redirectUri
-                    );
-                    resolve(tokens);
-                } else {
-                    res.writeHead(404);
-                    res.end('Not found');
-                }
-            });
-
-            server.listen(port, () => {
-                console.log(chalk.dim(`Waiting for OAuth callback on port ${port}...`));
-            });
-
-            server.on('error', (err) => {
-                reject(err);
-            });
-
-            setTimeout(() => {
-                server.close();
-                reject(new Error('OAuth timeout - no callback received within 5 minutes'));
-            }, 5 * 60 * 1000);
-        });
+                        reject(new Error('OAuth timeout - no callback received within 5 minutes'));
+                    },
+                    5 * 60 * 1000,
+                );
+            },
+        );
 
         if (!tokens) {
             console.error(chalk.red('Failed to obtain access token'));
@@ -416,8 +429,7 @@ mcp
         console.log(chalk.dim('Tokens have been stored in your config.'));
     });
 
-mcp
-    .command('logout <name>')
+mcp.command('logout <name>')
     .description('Remove OAuth credentials for an MCP server')
     .action(async (name) => {
         const config = await loadConfig();
@@ -529,7 +541,11 @@ tunnel
         } else if (useCloudflared) {
             if (!hasCommand('cloudflared')) {
                 console.error(chalk.red('cloudflared not found.'));
-                console.log(chalk.dim('\nInstall: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/'));
+                console.log(
+                    chalk.dim(
+                        '\nInstall: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/',
+                    ),
+                );
                 console.log(chalk.dim('  brew install cloudflared  (macOS)'));
                 process.exit(1);
             }
@@ -562,16 +578,14 @@ tunnel
             const logFd = openSync(TUNNEL_LOG_FILE, 'a');
 
             const proc = spawn(
-                tool === 'cloudflared'
-                    ? 'cloudflared'
-                    : 'ngrok',
+                tool === 'cloudflared' ? 'cloudflared' : 'ngrok',
                 tool === 'cloudflared'
                     ? ['tunnel', '--url', `http://localhost:${port}`]
                     : ['http', port],
                 {
                     stdio: ['ignore', logFd, logFd],
                     detached: true,
-                }
+                },
             );
 
             proc.unref();
@@ -579,7 +593,7 @@ tunnel
             const pollForUrl = async (): Promise<string | null> => {
                 const maxAttempts = 30;
                 for (let i = 0; i < maxAttempts; i++) {
-                    await new Promise(r => setTimeout(r, 500));
+                    await new Promise((r) => setTimeout(r, 500));
 
                     if (tool === 'cloudflared') {
                         try {
@@ -590,8 +604,12 @@ tunnel
                     } else {
                         try {
                             const response = await fetch('http://localhost:4040/api/tunnels');
-                            const data = await response.json() as { tunnels: Array<{ public_url: string }> };
-                            const tunnelInfo = data.tunnels.find((t: { public_url: string }) => t.public_url.startsWith('https'));
+                            const data = (await response.json()) as {
+                                tunnels: Array<{ public_url: string }>;
+                            };
+                            const tunnelInfo = data.tunnels.find((t: { public_url: string }) =>
+                                t.public_url.startsWith('https'),
+                            );
                             if (tunnelInfo) return tunnelInfo.public_url;
                         } catch {}
                     }
@@ -618,7 +636,6 @@ tunnel
             console.log(chalk.dim(`  Running in background (PID: ${proc.pid})`));
             console.log(chalk.dim('  Run `nero tunnel stop` to stop.\n'));
             process.exit(0);
-
         } else {
             if (tool === 'cloudflared') {
                 const proc = spawn('cloudflared', ['tunnel', '--url', `http://localhost:${port}`], {
@@ -650,7 +667,6 @@ tunnel
                 process.on('SIGINT', () => {
                     proc.kill('SIGINT');
                 });
-
             } else {
                 const proc = spawn('ngrok', ['http', port], {
                     stdio: ['ignore', 'pipe', 'pipe'],
@@ -659,14 +675,22 @@ tunnel
                 setTimeout(async () => {
                     try {
                         const response = await fetch('http://localhost:4040/api/tunnels');
-                        const data = await response.json() as { tunnels: Array<{ public_url: string }> };
-                        const tunnelInfo = data.tunnels.find((t: { public_url: string }) => t.public_url.startsWith('https'));
+                        const data = (await response.json()) as {
+                            tunnels: Array<{ public_url: string }>;
+                        };
+                        const tunnelInfo = data.tunnels.find((t: { public_url: string }) =>
+                            t.public_url.startsWith('https'),
+                        );
                         if (tunnelInfo) {
-                            console.log(chalk.bold.green(`\n  Tunnel URL: ${tunnelInfo.public_url}`));
+                            console.log(
+                                chalk.bold.green(`\n  Tunnel URL: ${tunnelInfo.public_url}`),
+                            );
                             console.log(chalk.dim('  Press Ctrl+C to stop.\n'));
                         }
                     } catch {
-                        console.log(chalk.yellow('Could not fetch ngrok URL. Check http://localhost:4040'));
+                        console.log(
+                            chalk.yellow('Could not fetch ngrok URL. Check http://localhost:4040'),
+                        );
                     }
                 }, 2000);
 
@@ -837,12 +861,18 @@ license
                 process.exit(1);
             }
 
-            const data = await response.json() as { valid: boolean; active: boolean; tunnel_url: string | null };
+            const data = (await response.json()) as {
+                valid: boolean;
+                active: boolean;
+                tunnel_url: string | null;
+            };
 
             console.log(chalk.bold('\nLicense Status:\n'));
             console.log(`  Valid: ${data.valid ? chalk.green('yes') : chalk.red('no')}`);
             console.log(`  Active: ${data.active ? chalk.green('yes') : chalk.red('no')}`);
-            console.log(`  Tunnel URL: ${data.tunnel_url ? chalk.cyan(data.tunnel_url) : chalk.dim('not registered')}`);
+            console.log(
+                `  Tunnel URL: ${data.tunnel_url ? chalk.cyan(data.tunnel_url) : chalk.dim('not registered')}`,
+            );
             console.log();
         } catch (error) {
             console.error(chalk.red(`Status check failed: ${(error as Error).message}`));
@@ -850,8 +880,7 @@ license
         }
     });
 
-mcp
-    .command('status [name]')
+mcp.command('status [name]')
     .description('Show authentication status of MCP servers')
     .action(async (name) => {
         const config = await loadConfig();
@@ -875,7 +904,9 @@ mcp
             if (server.oauth?.tokens) {
                 console.log(chalk.green('  Status: Authenticated'));
                 if (server.oauth.tokens.issued_at && server.oauth.tokens.expires_in) {
-                    const expiresAt = new Date(server.oauth.tokens.issued_at + server.oauth.tokens.expires_in * 1000);
+                    const expiresAt = new Date(
+                        server.oauth.tokens.issued_at + server.oauth.tokens.expires_in * 1000,
+                    );
                     console.log(chalk.dim(`  Token expires: ${expiresAt.toLocaleString()}`));
                 }
             } else {
@@ -905,7 +936,9 @@ mcp
                 }
 
                 const isAuth = !!server.oauth?.tokens;
-                const status = isAuth ? chalk.green('authenticated') : chalk.yellow('not authenticated');
+                const status = isAuth
+                    ? chalk.green('authenticated')
+                    : chalk.yellow('not authenticated');
                 console.log(`  ${chalk.cyan(serverName)} ${chalk.dim('(http)')} - ${status}`);
             }
             console.log();
@@ -938,14 +971,18 @@ program
             }
 
             if (options.check) {
-                console.log(chalk.yellow(`\nUpdate available! Run ${chalk.cyan('nero update')} to install.`));
+                console.log(
+                    chalk.yellow(
+                        `\nUpdate available! Run ${chalk.cyan('nero update')} to install.`,
+                    ),
+                );
                 process.exit(0);
             }
 
             console.log(chalk.dim('\nUpdating...'));
 
-            const isDockerCompose = await import('fs').then(fs =>
-                fs.existsSync(join(homedir(), '.nero', 'docker-compose.yml'))
+            const isDockerCompose = await import('fs').then((fs) =>
+                fs.existsSync(join(homedir(), '.nero', 'docker-compose.yml')),
             );
 
             if (isDockerCompose) {
@@ -986,9 +1023,12 @@ program
             const binaryUrl = `https://github.com/${REPO}/releases/download/${latestTag}/${binary}`;
 
             console.log(chalk.dim(`Downloading ${binary}...`));
-            execSync(`curl -fsSL "${binaryUrl}" -o /tmp/nero && chmod +x /tmp/nero && sudo mv /tmp/nero /usr/local/bin/nero`, {
-                stdio: 'inherit',
-            });
+            execSync(
+                `curl -fsSL "${binaryUrl}" -o /tmp/nero && chmod +x /tmp/nero && sudo mv /tmp/nero /usr/local/bin/nero`,
+                {
+                    stdio: 'inherit',
+                },
+            );
 
             console.log(chalk.green(`\nNero updated to ${latestVersion}!`));
         } catch (error) {

@@ -75,7 +75,9 @@ export class Logger {
             );
         } else if (activity.status === 'complete') {
             const resultPreview = activity.result
-                ? chalk.dim(` ${activity.result.slice(0, 60).replace(/\n/g, ' ')}${activity.result.length > 60 ? '...' : ''}`)
+                ? chalk.dim(
+                      ` ${activity.result.slice(0, 60).replace(/\n/g, ' ')}${activity.result.length > 60 ? '...' : ''}`,
+                  )
                 : '';
             console.log(
                 `[${chalk.hex(NERO_BLUE).bold('Nero')}][${chalk.green('DONE')}] ${toolName}${resultPreview}`,
@@ -93,13 +95,16 @@ export class Logger {
             .replace(/_/g, ' ')
             .replace(/([a-z])([A-Z])/g, '$1 $2')
             .split(' ')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
     }
 
     private getArgPreview(args: Record<string, any>): string {
-        const mainArg = Object.entries(args).find(([key]) =>
-            !['isNewFile', 'linesAdded', 'linesRemoved', 'oldContent', 'newContent'].includes(key)
+        const mainArg = Object.entries(args).find(
+            ([key]) =>
+                !['isNewFile', 'linesAdded', 'linesRemoved', 'oldContent', 'newContent'].includes(
+                    key,
+                ),
         );
         if (!mainArg) return '';
 

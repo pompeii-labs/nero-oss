@@ -57,7 +57,7 @@ export class NeroClient {
         onChunk?: (chunk: string) => void,
         onActivity?: (activity: ActivityEvent) => void,
         cwd?: string,
-        onPermission?: PermissionHandler
+        onPermission?: PermissionHandler,
     ): Promise<ChatResponse> {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
@@ -67,7 +67,7 @@ export class NeroClient {
                 method: 'POST',
                 headers: this.getHeaders({
                     'Content-Type': 'application/json',
-                    'Accept': 'text/event-stream',
+                    Accept: 'text/event-stream',
                 }),
                 body: JSON.stringify({ message, medium: 'cli', cwd }),
                 signal: controller.signal,
@@ -95,7 +95,7 @@ export class NeroClient {
         response: Response,
         onChunk?: (chunk: string) => void,
         onActivity?: (activity: ActivityEvent) => void,
-        onPermission?: PermissionHandler
+        onPermission?: PermissionHandler,
     ): Promise<ChatResponse> {
         const reader = response.body?.getReader();
         if (!reader) {

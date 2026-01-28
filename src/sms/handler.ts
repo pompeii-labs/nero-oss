@@ -12,7 +12,9 @@ export async function handleSms(req: Request, res: Response, agent: Nero): Promi
 
         if (!phone) {
             res.setHeader('Content-Type', 'application/xml');
-            return void res.status(400).send('<Response><Message>Invalid request</Message></Response>');
+            return void res
+                .status(400)
+                .send('<Response><Message>Invalid request</Message></Response>');
         }
 
         logger.info(`From ${phone}: ${message.slice(0, 50)}${message.length > 50 ? '...' : ''}`);
@@ -26,7 +28,7 @@ export async function handleSms(req: Request, res: Response, agent: Nero): Promi
 
         res.setHeader('Content-Type', 'application/xml');
         return void res.send(
-            `<Response><Message>${escapeXml(response.content || "Something went wrong. Try again.")}</Message></Response>`
+            `<Response><Message>${escapeXml(response.content || 'Something went wrong. Try again.')}</Message></Response>`,
         );
     } catch (error) {
         const err = error as Error;
@@ -34,7 +36,7 @@ export async function handleSms(req: Request, res: Response, agent: Nero): Promi
         agent.setActivityCallback(undefined);
         res.setHeader('Content-Type', 'application/xml');
         return void res.send(
-            `<Response><Message>Something went wrong. Try again.</Message></Response>`
+            `<Response><Message>Something went wrong. Try again.</Message></Response>`,
         );
     }
 }

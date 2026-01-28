@@ -1,6 +1,10 @@
 import { MagmaAgent } from '@pompeii-labs/magma';
 import { tool, toolparam } from '@pompeii-labs/magma/decorators';
-import type { MagmaMessage, MagmaToolCall, MagmaSystemMessageType } from '@pompeii-labs/magma/types';
+import type {
+    MagmaMessage,
+    MagmaToolCall,
+    MagmaSystemMessageType,
+} from '@pompeii-labs/magma/types';
 import OpenAI from 'openai';
 import chalk from 'chalk';
 import { readFile, writeFile, readdir } from 'fs/promises';
@@ -102,7 +106,7 @@ export class Nero extends MagmaAgent {
 
         try {
             const summaryResult = await db.query(
-                `SELECT content, covers_until FROM summaries ORDER BY created_at DESC LIMIT 1`
+                `SELECT content, covers_until FROM summaries ORDER BY created_at DESC LIMIT 1`,
             );
 
             if (summaryResult.rows.length > 0) {
@@ -117,10 +121,10 @@ export class Nero extends MagmaAgent {
                     `SELECT role, content, created_at FROM messages
                      WHERE created_at > $1 AND compacted = FALSE
                      ORDER BY created_at ASC LIMIT $2`,
-                    [summary.covers_until, limit]
+                    [summary.covers_until, limit],
                 );
 
-                this.loadedMessages = messagesResult.rows.map(row => ({
+                this.loadedMessages = messagesResult.rows.map((row) => ({
                     role: row.role,
                     content: row.content,
                     created_at: row.created_at,
@@ -133,16 +137,18 @@ export class Nero extends MagmaAgent {
                     }
                 }
 
-                console.log(chalk.dim(`[setup] Loaded summary + ${messagesResult.rows.length} messages`));
+                console.log(
+                    chalk.dim(`[setup] Loaded summary + ${messagesResult.rows.length} messages`),
+                );
             } else {
                 const messagesResult = await db.query(
                     `SELECT role, content, created_at FROM messages
                      ORDER BY created_at DESC LIMIT $1`,
-                    [limit]
+                    [limit],
                 );
 
                 const messages = messagesResult.rows.reverse();
-                this.loadedMessages = messages.map(row => ({
+                this.loadedMessages = messages.map((row) => ({
                     role: row.role,
                     content: row.content,
                     created_at: row.created_at,
@@ -199,7 +205,7 @@ export class Nero extends MagmaAgent {
         }
 
         const previousSummaryResult = await db.query(
-            `SELECT content FROM summaries ORDER BY created_at DESC LIMIT 1`
+            `SELECT content FROM summaries ORDER BY created_at DESC LIMIT 1`,
         );
         const previousSummary = previousSummaryResult.rows[0]?.content;
 
@@ -221,15 +227,18 @@ Be thorough - this summary will be the primary context for future conversations.
 
         const currentMessages = this.getMessages();
         const conversationText = currentMessages
-            .filter(m => m.role === 'user' || m.role === 'assistant')
-            .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+            .filter((m) => m.role === 'user' || m.role === 'assistant')
+            .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
             .join('\n\n');
 
         const response = await this.openaiClient.chat.completions.create({
             model: this.config.settings.model,
             messages: [
                 { role: 'system', content: summaryPrompt },
-                { role: 'user', content: `Here is the conversation to summarize:\n\n${conversationText}` },
+                {
+                    role: 'user',
+                    content: `Here is the conversation to summarize:\n\n${conversationText}`,
+                },
             ],
             temperature: 0.7,
             max_tokens: 2500,
@@ -241,7 +250,7 @@ Be thorough - this summary will be the primary context for future conversations.
         await db.query(
             `INSERT INTO summaries (content, covers_until, token_estimate)
              VALUES ($1, NOW(), $2)`,
-            [summary, tokenEstimate]
+            [summary, tokenEstimate],
         );
 
         await db.query(`UPDATE messages SET compacted = TRUE WHERE compacted = FALSE`);
@@ -257,13 +266,15 @@ Be thorough - this summary will be the primary context for future conversations.
         return summary;
     }
 
-    async getMessageHistory(limit = 20): Promise<Array<{ role: string; content: string; created_at: string }>> {
+    async getMessageHistory(
+        limit = 20,
+    ): Promise<Array<{ role: string; content: string; created_at: string }>> {
         if (!isDbConnected()) return [];
 
         const result = await db.query(
             `SELECT role, content, created_at FROM messages
              ORDER BY created_at DESC LIMIT $1`,
-            [limit]
+            [limit],
         );
 
         return result.rows.reverse();
@@ -273,7 +284,7 @@ Be thorough - this summary will be the primary context for future conversations.
         if (!isDbConnected()) return;
         try {
             const result = await db.query(
-                `SELECT body, created_at FROM memories ORDER BY created_at DESC LIMIT 20`
+                `SELECT body, created_at FROM memories ORDER BY created_at DESC LIMIT 20`,
             );
             this.memoriesCache = result.rows;
         } catch (error) {
@@ -285,7 +296,7 @@ Be thorough - this summary will be the primary context for future conversations.
         if (!isDbConnected()) return;
         try {
             const result = await db.query(
-                `SELECT request, timestamp FROM actions WHERE timestamp > NOW() ORDER BY timestamp ASC`
+                `SELECT request, timestamp FROM actions WHERE timestamp > NOW() ORDER BY timestamp ASC`,
             );
             this.actionsCache = result.rows;
         } catch (error) {
@@ -316,14 +327,14 @@ Be thorough - this summary will be the primary context for future conversations.
         };
 
         if (memories.length > 0) {
-            context.memories = memories.map(m => ({
+            context.memories = memories.map((m) => ({
                 content: m.body,
                 date: m.created_at,
             }));
         }
 
         if (actions.length > 0) {
-            context.scheduledActions = actions.map(a => ({
+            context.scheduledActions = actions.map((a) => ({
                 task: a.request,
                 when: a.timestamp,
             }));
@@ -425,16 +436,32 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     }
 
     @tool({ description: 'Schedule an action to run at a specific time or on a recurring basis' })
-    @toolparam({ key: 'request', type: 'string', required: true, description: 'What to do when the action fires' })
-    @toolparam({ key: 'timestamp', type: 'string', required: true, description: 'ISO timestamp for when to run' })
-    @toolparam({ key: 'recurrence', type: 'string', required: false, description: 'Recurrence rule (daily, weekly, etc.)' })
+    @toolparam({
+        key: 'request',
+        type: 'string',
+        required: true,
+        description: 'What to do when the action fires',
+    })
+    @toolparam({
+        key: 'timestamp',
+        type: 'string',
+        required: true,
+        description: 'ISO timestamp for when to run',
+    })
+    @toolparam({
+        key: 'recurrence',
+        type: 'string',
+        required: false,
+        description: 'Recurrence rule (daily, weekly, etc.)',
+    })
     async scheduleAction(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { request, timestamp, recurrence } = call.fn_args;
 
-        await db.query(
-            `INSERT INTO actions (request, timestamp, recurrence) VALUES ($1, $2, $3)`,
-            [request, timestamp, recurrence || null]
-        );
+        await db.query(`INSERT INTO actions (request, timestamp, recurrence) VALUES ($1, $2, $3)`, [
+            request,
+            timestamp,
+            recurrence || null,
+        ]);
         await this.refreshActionsCache();
 
         return `Action scheduled for ${timestamp}${recurrence ? ` (${recurrence})` : ''}`;
@@ -443,25 +470,35 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     @tool({ description: 'Search and retrieve memories relevant to the conversation' })
     async findMemories(_call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const messages = this.getMessages(5);
-        const context = messages.map(m => m.content).join(' ');
+        const context = messages.map((m) => m.content).join(' ');
 
         const result = await db.query(
             `SELECT body, created_at FROM memories
              WHERE body ILIKE $1
              ORDER BY created_at DESC LIMIT 10`,
-            [`%${context.slice(0, 100)}%`]
+            [`%${context.slice(0, 100)}%`],
         );
 
         if (result.rows.length === 0) {
             return 'No relevant memories found.';
         }
 
-        return result.rows.map(r => `- ${r.body}`).join('\n');
+        return result.rows.map((r) => `- ${r.body}`).join('\n');
     }
 
     @tool({ description: 'Execute an MCP tool by name with optional JSON arguments' })
-    @toolparam({ key: 'toolName', type: 'string', required: true, description: 'The MCP tool name (e.g. "filesystem:read_file")' })
-    @toolparam({ key: 'args', type: 'string', required: false, description: 'JSON string of arguments to pass to the tool' })
+    @toolparam({
+        key: 'toolName',
+        type: 'string',
+        required: true,
+        description: 'The MCP tool name (e.g. "filesystem:read_file")',
+    })
+    @toolparam({
+        key: 'args',
+        type: 'string',
+        required: false,
+        description: 'JSON string of arguments to pass to the tool',
+    })
     async executeMcpTool(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { toolName, args } = call.fn_args;
         let parsedArgs: Record<string, unknown> = {};
@@ -493,7 +530,6 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         }
     }
 
-
     private currentMedium: 'cli' | 'voice' | 'sms' | 'slack' | 'api' = 'cli';
     private currentCwd: string = process.env.HOST_HOME ? '/host/home' : process.cwd();
 
@@ -514,7 +550,9 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         let resolved = inputPath;
 
         if (resolved.startsWith('~')) {
-            resolved = hostHome ? resolved.replace('~', hostHome) : resolved.replace('~', homedir());
+            resolved = hostHome
+                ? resolved.replace('~', hostHome)
+                : resolved.replace('~', homedir());
         }
 
         if (!resolved.startsWith('/')) {
@@ -527,10 +565,11 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     private async saveMessage(role: 'user' | 'assistant', content: string): Promise<void> {
         if (!isDbConnected()) return;
         try {
-            await db.query(
-                `INSERT INTO messages (role, content, medium) VALUES ($1, $2, $3)`,
-                [role, content, this.currentMedium]
-            );
+            await db.query(`INSERT INTO messages (role, content, medium) VALUES ($1, $2, $3)`, [
+                role,
+                content,
+                this.currentMedium,
+            ]);
         } catch (error) {
             const err = error as Error;
             console.error(chalk.dim(`[db] Failed to save message: ${err.message}`));
@@ -547,14 +586,14 @@ You are responding via Slack DM. Use Slack-friendly formatting:
 
     async getMemories(): Promise<Array<{ body: string; created_at: string }>> {
         const result = await db.query(
-            `SELECT body, created_at FROM memories ORDER BY created_at DESC LIMIT 20`
+            `SELECT body, created_at FROM memories ORDER BY created_at DESC LIMIT 20`,
         );
         return result.rows;
     }
 
     async getActions(): Promise<Array<{ request: string; timestamp: string }>> {
         const result = await db.query(
-            `SELECT request, timestamp FROM actions WHERE timestamp > NOW() ORDER BY timestamp ASC`
+            `SELECT request, timestamp FROM actions WHERE timestamp > NOW() ORDER BY timestamp ASC`,
         );
         return result.rows;
     }
@@ -597,8 +636,18 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     }
 
     @tool({ description: 'Read the contents of a file from the filesystem' })
-    @toolparam({ key: 'path', type: 'string', required: true, description: 'Path to the file to read' })
-    @toolparam({ key: 'limit', type: 'number', required: false, description: 'Max number of lines to read' })
+    @toolparam({
+        key: 'path',
+        type: 'string',
+        required: true,
+        description: 'Path to the file to read',
+    })
+    @toolparam({
+        key: 'limit',
+        type: 'number',
+        required: false,
+        description: 'Max number of lines to read',
+    })
     async readFile(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { path, limit } = call.fn_args;
         const approved = await this.requestPermission('read', { path, limit });
@@ -683,8 +732,16 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         }
     }
 
-    @tool({ description: 'Execute a bash command in the shell. Commands run in the current working directory. Use relative paths when possible.' })
-    @toolparam({ key: 'command', type: 'string', required: true, description: 'The bash command to execute' })
+    @tool({
+        description:
+            'Execute a bash command in the shell. Commands run in the current working directory. Use relative paths when possible.',
+    })
+    @toolparam({
+        key: 'command',
+        type: 'string',
+        required: true,
+        description: 'The bash command to execute',
+    })
     async runBash(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { command } = call.fn_args;
         const approved = await this.requestPermission('bash', { command });
@@ -716,24 +773,47 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     }
 
     @tool({ description: 'Search for a pattern in files using grep' })
-    @toolparam({ key: 'pattern', type: 'string', required: true, description: 'Regex pattern to search for' })
-    @toolparam({ key: 'path', type: 'string', required: false, description: 'Directory or file to search (default: cwd)' })
-    @toolparam({ key: 'fileType', type: 'string', required: false, description: 'File extension filter (e.g., "ts", "js")' })
+    @toolparam({
+        key: 'pattern',
+        type: 'string',
+        required: true,
+        description: 'Regex pattern to search for',
+    })
+    @toolparam({
+        key: 'path',
+        type: 'string',
+        required: false,
+        description: 'Directory or file to search (default: cwd)',
+    })
+    @toolparam({
+        key: 'fileType',
+        type: 'string',
+        required: false,
+        description: 'File extension filter (e.g., "ts", "js")',
+    })
     async grepSearch(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { pattern, path, fileType } = call.fn_args;
         const searchPath = path ? this.resolvePath(path) : this.currentCwd;
         const displayPath = containerToHost(searchPath);
-        const approved = await this.requestPermission('grep', { pattern, path: displayPath, fileType });
+        const approved = await this.requestPermission('grep', {
+            pattern,
+            path: displayPath,
+            fileType,
+        });
         if (!approved) return 'Permission denied by user.';
 
-        const activity: ToolActivity = { tool: 'grep', args: { pattern, path: displayPath }, status: 'running' };
+        const activity: ToolActivity = {
+            tool: 'grep',
+            args: { pattern, path: displayPath },
+            status: 'running',
+        };
         this.emitActivity(activity);
 
         try {
             const typeFlag = fileType ? `--include="*.${fileType}"` : '';
             const output = execSync(
                 `grep -r ${typeFlag} -n "${pattern}" ${searchPath} 2>/dev/null | head -50`,
-                { encoding: 'utf-8' }
+                { encoding: 'utf-8' },
             );
             activity.status = 'complete';
             activity.result = `Found matches for "${pattern}"`;
@@ -749,7 +829,12 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     }
 
     @tool({ description: 'List files in a directory' })
-    @toolparam({ key: 'path', type: 'string', required: false, description: 'Directory path (default: cwd)' })
+    @toolparam({
+        key: 'path',
+        type: 'string',
+        required: false,
+        description: 'Directory path (default: cwd)',
+    })
     async listFiles(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { path } = call.fn_args;
         const dirPath = path ? this.resolvePath(path) : this.currentCwd;
@@ -757,13 +842,17 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         const approved = await this.requestPermission('ls', { path: displayPath });
         if (!approved) return 'Permission denied by user.';
 
-        const activity: ToolActivity = { tool: 'ls', args: { path: displayPath }, status: 'running' };
+        const activity: ToolActivity = {
+            tool: 'ls',
+            args: { path: displayPath },
+            status: 'running',
+        };
         this.emitActivity(activity);
 
         try {
             const entries = await readdir(dirPath, { withFileTypes: true });
             const output = entries
-                .map(e => `${e.isDirectory() ? 'd' : '-'} ${e.name}`)
+                .map((e) => `${e.isDirectory() ? 'd' : '-'} ${e.name}`)
                 .join('\n');
             activity.status = 'complete';
             activity.result = `Listed ${entries.length} items`;
@@ -778,8 +867,18 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     }
 
     @tool({ description: 'Find files matching a glob pattern' })
-    @toolparam({ key: 'pattern', type: 'string', required: true, description: 'File name pattern (e.g., "*.ts", "package.json")' })
-    @toolparam({ key: 'path', type: 'string', required: false, description: 'Directory to search in (default: cwd)' })
+    @toolparam({
+        key: 'pattern',
+        type: 'string',
+        required: true,
+        description: 'File name pattern (e.g., "*.ts", "package.json")',
+    })
+    @toolparam({
+        key: 'path',
+        type: 'string',
+        required: false,
+        description: 'Directory to search in (default: cwd)',
+    })
     async findFiles(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { pattern, path } = call.fn_args;
         const searchPath = path ? this.resolvePath(path) : this.currentCwd;
@@ -787,13 +886,20 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         const approved = await this.requestPermission('find', { pattern, path: displayPath });
         if (!approved) return 'Permission denied by user.';
 
-        const activity: ToolActivity = { tool: 'find', args: { pattern, path: displayPath }, status: 'running' };
+        const activity: ToolActivity = {
+            tool: 'find',
+            args: { pattern, path: displayPath },
+            status: 'running',
+        };
         this.emitActivity(activity);
 
         try {
-            const output = execSync(`find ${searchPath} -name "${pattern}" 2>/dev/null | head -50`, {
-                encoding: 'utf-8',
-            });
+            const output = execSync(
+                `find ${searchPath} -name "${pattern}" 2>/dev/null | head -50`,
+                {
+                    encoding: 'utf-8',
+                },
+            );
             activity.status = 'complete';
             activity.result = `Found files matching "${pattern}"`;
             this.emitActivity(activity);
@@ -808,7 +914,12 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     }
 
     @tool({ description: 'Store a memory or piece of information for later recall' })
-    @toolparam({ key: 'content', type: 'string', required: true, description: 'The information to remember' })
+    @toolparam({
+        key: 'content',
+        type: 'string',
+        required: true,
+        description: 'The information to remember',
+    })
     async storeMemory(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { content } = call.fn_args;
 
@@ -816,14 +927,15 @@ You are responding via Slack DM. Use Slack-friendly formatting:
             return 'Cannot store memory: database not connected';
         }
 
-        const activity: ToolActivity = { tool: 'memory', args: { content: content.slice(0, 50) + '...' }, status: 'running' };
+        const activity: ToolActivity = {
+            tool: 'memory',
+            args: { content: content.slice(0, 50) + '...' },
+            status: 'running',
+        };
         this.emitActivity(activity);
 
         try {
-            await db.query(
-                `INSERT INTO memories (body) VALUES ($1)`,
-                [content]
-            );
+            await db.query(`INSERT INTO memories (body) VALUES ($1)`, [content]);
             await this.refreshMemoriesCache();
             activity.status = 'complete';
             activity.result = 'Memory stored';
@@ -837,11 +949,34 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         }
     }
 
-    @tool({ description: 'Search conversation history and past summaries for information from previous sessions' })
-    @toolparam({ key: 'query', type: 'string', required: true, description: 'Search term or phrase to find in history' })
-    @toolparam({ key: 'includeMessages', type: 'boolean', required: false, description: 'Include individual messages (default: true)' })
-    @toolparam({ key: 'includeSummaries', type: 'boolean', required: false, description: 'Include session summaries (default: true)' })
-    @toolparam({ key: 'limit', type: 'number', required: false, description: 'Max results to return (default: 20)' })
+    @tool({
+        description:
+            'Search conversation history and past summaries for information from previous sessions',
+    })
+    @toolparam({
+        key: 'query',
+        type: 'string',
+        required: true,
+        description: 'Search term or phrase to find in history',
+    })
+    @toolparam({
+        key: 'includeMessages',
+        type: 'boolean',
+        required: false,
+        description: 'Include individual messages (default: true)',
+    })
+    @toolparam({
+        key: 'includeSummaries',
+        type: 'boolean',
+        required: false,
+        description: 'Include session summaries (default: true)',
+    })
+    @toolparam({
+        key: 'limit',
+        type: 'number',
+        required: false,
+        description: 'Max results to return (default: 20)',
+    })
     async searchHistory(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { query, includeMessages = true, includeSummaries = true, limit = 20 } = call.fn_args;
 
@@ -849,7 +984,11 @@ You are responding via Slack DM. Use Slack-friendly formatting:
             return 'Cannot search history: database not connected';
         }
 
-        const activity: ToolActivity = { tool: 'search_history', args: { query }, status: 'running' };
+        const activity: ToolActivity = {
+            tool: 'search_history',
+            args: { query },
+            status: 'running',
+        };
         this.emitActivity(activity);
 
         try {
@@ -861,7 +1000,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
                     `SELECT content, created_at FROM summaries
                      WHERE content ILIKE $1
                      ORDER BY created_at DESC LIMIT $2`,
-                    [searchPattern, Math.ceil(limit / 2)]
+                    [searchPattern, Math.ceil(limit / 2)],
                 );
                 for (const row of summaryResult.rows) {
                     const date = new Date(row.created_at).toLocaleDateString();
@@ -874,12 +1013,14 @@ You are responding via Slack DM. Use Slack-friendly formatting:
                     `SELECT role, content, created_at FROM messages
                      WHERE content ILIKE $1
                      ORDER BY created_at DESC LIMIT $2`,
-                    [searchPattern, limit]
+                    [searchPattern, limit],
                 );
                 for (const row of messageResult.rows) {
                     const date = new Date(row.created_at).toLocaleString();
                     const role = row.role === 'user' ? 'User' : 'Nero';
-                    results.push(`[${date}] ${role}: ${row.content.slice(0, 300)}${row.content.length > 300 ? '...' : ''}`);
+                    results.push(
+                        `[${date}] ${role}: ${row.content.slice(0, 300)}${row.content.length > 300 ? '...' : ''}`,
+                    );
                 }
             }
 
@@ -900,7 +1041,10 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         }
     }
 
-    @tool({ description: 'Search the web for current information, news, documentation, or answers to questions' })
+    @tool({
+        description:
+            'Search the web for current information, news, documentation, or answers to questions',
+    })
     @toolparam({ key: 'query', type: 'string', required: true, description: 'The search query' })
     async webSearch(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { query } = call.fn_args;
@@ -968,12 +1112,26 @@ Common blocks: section (text), divider, header, context, image.
 Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _italic_"}}]`,
         enabled: (agent) => !!(agent as Nero).config.licenseKey,
     })
-    @toolparam({ key: 'text', type: 'string', required: true, description: 'Plain text message (also used as fallback for blocks)' })
-    @toolparam({ key: 'blocks', type: 'string', required: false, description: 'Optional Block Kit JSON array for rich formatting' })
+    @toolparam({
+        key: 'text',
+        type: 'string',
+        required: true,
+        description: 'Plain text message (also used as fallback for blocks)',
+    })
+    @toolparam({
+        key: 'blocks',
+        type: 'string',
+        required: false,
+        description: 'Optional Block Kit JSON array for rich formatting',
+    })
     async sendSlackMessage(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { text, blocks } = call.fn_args;
 
-        const activity: ToolActivity = { tool: 'slack_message', args: { text: text.slice(0, 50) + '...' }, status: 'running' };
+        const activity: ToolActivity = {
+            tool: 'slack_message',
+            args: { text: text.slice(0, 50) + '...' },
+            status: 'running',
+        };
         this.emitActivity(activity);
 
         let parsedBlocks: any[] | undefined;
@@ -1020,11 +1178,20 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
             return !!(nero.config.licenseKey && nero.config.sms?.enabled);
         },
     })
-    @toolparam({ key: 'message', type: 'string', required: true, description: 'The message to send' })
+    @toolparam({
+        key: 'message',
+        type: 'string',
+        required: true,
+        description: 'The message to send',
+    })
     async sendSmsToUser(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { message } = call.fn_args;
 
-        const activity: ToolActivity = { tool: 'sms_message', args: { message: message.slice(0, 50) + '...' }, status: 'running' };
+        const activity: ToolActivity = {
+            tool: 'sms_message',
+            args: { message: message.slice(0, 50) + '...' },
+            status: 'running',
+        };
         this.emitActivity(activity);
 
         try {
@@ -1062,7 +1229,12 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
             return !!(nero.config.licenseKey && nero.config.voice?.enabled);
         },
     })
-    @toolparam({ key: 'reason', type: 'string', required: false, description: 'Optional reason for the call (will be spoken when user answers)' })
+    @toolparam({
+        key: 'reason',
+        type: 'string',
+        required: false,
+        description: 'Optional reason for the call (will be spoken when user answers)',
+    })
     async callUser(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { reason } = call.fn_args;
 
@@ -1099,7 +1271,12 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
 
     @tool({ description: 'Fetch the contents of a URL and return the text or HTML' })
     @toolparam({ key: 'url', type: 'string', required: true, description: 'The URL to fetch' })
-    @toolparam({ key: 'format', type: 'string', required: false, description: 'Response format: "text", "json", or "html" (default: text)' })
+    @toolparam({
+        key: 'format',
+        type: 'string',
+        required: false,
+        description: 'Response format: "text", "json", or "html" (default: text)',
+    })
     async fetchUrl(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { url, format = 'text' } = call.fn_args;
         const approved = await this.requestPermission('fetch', { url });
@@ -1112,7 +1289,7 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
             const response = await fetch(url, {
                 headers: {
                     'User-Agent': 'Nero/1.0 (AI Assistant)',
-                    'Accept': 'text/html,application/json,text/plain,*/*',
+                    Accept: 'text/html,application/json,text/plain,*/*',
                 },
             });
 
@@ -1129,7 +1306,8 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
             } else {
                 result = await response.text();
                 if (result.length > 50000) {
-                    result = result.slice(0, 50000) + '\n\n[Content truncated - exceeded 50KB limit]';
+                    result =
+                        result.slice(0, 50000) + '\n\n[Content truncated - exceeded 50KB limit]';
                 }
             }
 

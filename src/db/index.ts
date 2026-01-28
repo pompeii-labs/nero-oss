@@ -74,12 +74,10 @@ export async function migrateDb(): Promise<void> {
         files = await readdir(altDir);
     }
 
-    const sqlFiles = files
-        .filter(f => f.endsWith('.sql'))
-        .sort();
+    const sqlFiles = files.filter((f) => f.endsWith('.sql')).sort();
 
     const { rows: completed } = await pool.query('SELECT name FROM _migrations');
-    const completedSet = new Set(completed.map(r => r.name));
+    const completedSet = new Set(completed.map((r) => r.name));
 
     for (const file of sqlFiles) {
         if (completedSet.has(file)) {

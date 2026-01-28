@@ -155,7 +155,10 @@ export function getConfig(): NeroConfig {
     return cachedConfig || defaultConfig;
 }
 
-export async function updateMcpServerOAuth(serverName: string, oauth: StoredOAuthData): Promise<void> {
+export async function updateMcpServerOAuth(
+    serverName: string,
+    oauth: StoredOAuthData,
+): Promise<void> {
     const config = await loadConfig();
     if (config.mcpServers[serverName]) {
         config.mcpServers[serverName].oauth = oauth;
@@ -187,7 +190,7 @@ export async function addAllowedTool(tool: string): Promise<void> {
 export async function removeAllowedTool(tool: string): Promise<void> {
     const config = await loadConfig();
     if (config.allowedTools) {
-        config.allowedTools = config.allowedTools.filter(t => t !== tool);
+        config.allowedTools = config.allowedTools.filter((t) => t !== tool);
         await saveConfig(config);
     }
 }

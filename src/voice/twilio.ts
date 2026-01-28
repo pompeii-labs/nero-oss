@@ -3,7 +3,11 @@ import chalk from 'chalk';
 import { NeroConfig } from '../config.js';
 import { createWsToken } from '../util/wstoken.js';
 
-export async function handleIncomingCall(req: Request, res: Response, config: NeroConfig): Promise<void> {
+export async function handleIncomingCall(
+    req: Request,
+    res: Response,
+    config: NeroConfig,
+): Promise<void> {
     const { From, CallSid } = req.body;
 
     console.log(chalk.dim(`[voice] Incoming call (${CallSid})`));

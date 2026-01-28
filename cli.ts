@@ -10,7 +10,7 @@ async function migrations() {
 
     if (rows.length === 0) return 'No migrations have been run';
 
-    const lines = rows.map(r => `${chalk.dim(r.run_at.toISOString())} ${chalk.cyan(r.name)}`);
+    const lines = rows.map((r) => `${chalk.dim(r.run_at.toISOString())} ${chalk.cyan(r.name)}`);
     return lines.join('\n');
 }
 
@@ -18,14 +18,13 @@ async function messages(...args: string[]) {
     if (!isDbConnected()) return 'Database not connected';
 
     const limit = parseInt(args[0]) || 20;
-    const { rows } = await db.query(
-        'SELECT * FROM messages ORDER BY created_at DESC LIMIT $1',
-        [limit]
-    );
+    const { rows } = await db.query('SELECT * FROM messages ORDER BY created_at DESC LIMIT $1', [
+        limit,
+    ]);
 
     if (rows.length === 0) return 'No messages found';
 
-    const lines = rows.map(r => {
+    const lines = rows.map((r) => {
         const role = r.role === 'user' ? chalk.cyan('user') : chalk.magenta('assistant');
         const content = r.content.length > 80 ? r.content.slice(0, 80) + '...' : r.content;
         return `${chalk.dim(r.created_at.toISOString())} [${role}] ${content}`;
@@ -37,14 +36,13 @@ async function memories(...args: string[]) {
     if (!isDbConnected()) return 'Database not connected';
 
     const limit = parseInt(args[0]) || 20;
-    const { rows } = await db.query(
-        'SELECT * FROM memories ORDER BY created_at DESC LIMIT $1',
-        [limit]
-    );
+    const { rows } = await db.query('SELECT * FROM memories ORDER BY created_at DESC LIMIT $1', [
+        limit,
+    ]);
 
     if (rows.length === 0) return 'No memories found';
 
-    const lines = rows.map(r => {
+    const lines = rows.map((r) => {
         const body = r.body.length > 80 ? r.body.slice(0, 80) + '...' : r.body;
         return `${chalk.dim(r.created_at.toISOString())} ${chalk.yellow(`[${r.id}]`)} ${body}`;
     });
@@ -54,14 +52,12 @@ async function memories(...args: string[]) {
 async function actions() {
     if (!isDbConnected()) return 'Database not connected';
 
-    const { rows } = await db.query(
-        'SELECT * FROM actions ORDER BY timestamp ASC'
-    );
+    const { rows } = await db.query('SELECT * FROM actions ORDER BY timestamp ASC');
 
     if (rows.length === 0) return 'No scheduled actions';
 
     const now = new Date();
-    const lines = rows.map(r => {
+    const lines = rows.map((r) => {
         const isPast = new Date(r.timestamp) < now;
         const status = isPast ? chalk.red('PAST') : chalk.green('PENDING');
         const recur = r.recurrence ? chalk.dim(`(${r.recurrence})`) : '';
@@ -81,8 +77,8 @@ async function stats() {
         counts[table] = parseInt(rows[0].count);
     }
 
-    const lines = Object.entries(counts).map(([table, count]) =>
-        `${chalk.cyan(table.padEnd(15))} ${count} rows`
+    const lines = Object.entries(counts).map(
+        ([table, count]) => `${chalk.cyan(table.padEnd(15))} ${count} rows`,
     );
     return lines.join('\n');
 }

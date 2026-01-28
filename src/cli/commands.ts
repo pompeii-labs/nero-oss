@@ -1,7 +1,13 @@
 import chalk from 'chalk';
 import { NERO_BLUE } from './theme.js';
 import { createServer } from 'http';
-import { NeroConfig, updateSettings, getConfigPath, saveConfig, updateMcpServerOAuth } from '../config.js';
+import {
+    NeroConfig,
+    updateSettings,
+    getConfigPath,
+    saveConfig,
+    updateMcpServerOAuth,
+} from '../config.js';
 import type { NeroProxy } from '../client/proxy.js';
 import {
     discoverOAuthMetadata,
@@ -38,7 +44,7 @@ async function validateModel(modelId: string): Promise<boolean> {
     try {
         const response = await fetch(`https://openrouter.ai/api/v1/models/${modelId}/endpoints`, {
             headers: {
-                'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
             },
         });
         return response.ok;
@@ -54,7 +60,7 @@ export const commands: SlashCommand[] = [
         description: 'Show available commands',
         execute: async () => {
             const helpText = commands
-                .map(cmd => {
+                .map((cmd) => {
                     const aliases = cmd.aliases.length > 0 ? ` (${cmd.aliases.join(', ')})` : '';
                     return `  /${cmd.name}${aliases} - ${cmd.description}`;
                 })
@@ -82,8 +88,9 @@ export const commands: SlashCommand[] = [
         execute: async (args, ctx) => {
             if (!args.includes('--confirm')) {
                 return {
-                    message: chalk.yellow('This will clear your current conversation.\n') +
-                             chalk.dim('Run /clear --confirm to proceed.')
+                    message:
+                        chalk.yellow('This will clear your current conversation.\n') +
+                        chalk.dim('Run /clear --confirm to proceed.'),
                 };
             }
             ctx.nero.clearHistory();
@@ -118,7 +125,9 @@ export const commands: SlashCommand[] = [
             ctx.log(chalk.dim(`Validating model ${newModel}...`));
             const isValid = await validateModel(newModel);
             if (!isValid) {
-                return { error: `Model not found: ${newModel}. Check available models at https://openrouter.ai/models` };
+                return {
+                    error: `Model not found: ${newModel}. Check available models at https://openrouter.ai/models`,
+                };
             }
 
             await updateSettings({ model: newModel });
@@ -150,7 +159,10 @@ export const commands: SlashCommand[] = [
                 return { message: chalk.dim('No memories stored yet.') };
             }
             const list = memories
-                .map((m, i) => `  ${chalk.dim(`${i + 1}.`)} ${m.body}\n      ${chalk.dim(m.created_at)}`)
+                .map(
+                    (m, i) =>
+                        `  ${chalk.dim(`${i + 1}.`)} ${m.body}\n      ${chalk.dim(m.created_at)}`,
+                )
                 .join('\n');
             return { message: `\n${chalk.bold('Memories:')}\n\n${list}\n` };
         },
@@ -165,7 +177,10 @@ export const commands: SlashCommand[] = [
                 return { message: chalk.dim('No scheduled actions.') };
             }
             const list = actions
-                .map((a, i) => `  ${chalk.dim(`${i + 1}.`)} ${a.request}\n      ${chalk.dim(`Next: ${a.timestamp}`)}`)
+                .map(
+                    (a, i) =>
+                        `  ${chalk.dim(`${i + 1}.`)} ${a.request}\n      ${chalk.dim(`Next: ${a.timestamp}`)}`,
+                )
                 .join('\n');
             return { message: `\n${chalk.bold('Scheduled Actions:')}\n\n${list}\n` };
         },
@@ -177,9 +192,11 @@ export const commands: SlashCommand[] = [
         execute: async (_, ctx) => {
             const tools = ctx.nero.getMcpToolNames();
             if (tools.length === 0) {
-                return { message: chalk.dim('No MCP tools configured. Add servers to .nero/config.json') };
+                return {
+                    message: chalk.dim('No MCP tools configured. Add servers to .nero/config.json'),
+                };
             }
-            const list = tools.map(t => `  ${chalk.cyan(t)}`).join('\n');
+            const list = tools.map((t) => `  ${chalk.cyan(t)}`).join('\n');
             return { message: `\n${chalk.bold('Available MCP Tools:')}\n\n${list}\n` };
         },
     },
@@ -242,13 +259,17 @@ export const commands: SlashCommand[] = [
             if (servers.length === 0) {
                 let output = chalk.cyan('No MCP servers configured.\n\n');
                 output += chalk.dim('Add one with:\n');
-                output += chalk.cyan('  nero mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem ~/Documents\n');
-                output += chalk.cyan('  nero mcp add github -e GITHUB_TOKEN=xxx -- npx -y @modelcontextprotocol/server-github\n');
+                output += chalk.cyan(
+                    '  nero mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem ~/Documents\n',
+                );
+                output += chalk.cyan(
+                    '  nero mcp add github -e GITHUB_TOKEN=xxx -- npx -y @modelcontextprotocol/server-github\n',
+                );
                 return { message: output };
             }
 
             const tools = ctx.nero.getMcpToolNames();
-            const connectedServers = new Set(tools.map(t => t.split(':')[0]));
+            const connectedServers = new Set(tools.map((t) => t.split(':')[0]));
 
             let output = `\n${chalk.bold('MCP Servers:')}\n\n`;
             for (const [name, config] of servers) {
@@ -280,7 +301,7 @@ export const commands: SlashCommand[] = [
 
                 if (config.env) {
                     const envKeys = Object.keys(config.env);
-                    const hasValues = envKeys.every(k => config.env![k] && config.env![k] !== '');
+                    const hasValues = envKeys.every((k) => config.env![k] && config.env![k] !== '');
                     if (hasValues) {
                         output += `    ${chalk.dim('Env:')} ${envKeys.join(', ')} ${chalk.green('✓')}\n`;
                     } else {
@@ -337,8 +358,10 @@ export const commands: SlashCommand[] = [
                 ctx.setLoading(null);
                 ctx.clearScreen();
                 return {
-                    message: chalk.green('Conversation compacted.\n\n') +
-                             chalk.dim('Summary: ') + summary
+                    message:
+                        chalk.green('Conversation compacted.\n\n') +
+                        chalk.dim('Summary: ') +
+                        summary,
                 };
             } catch (error) {
                 ctx.setLoading(null);
@@ -369,9 +392,8 @@ export const commands: SlashCommand[] = [
             for (const msg of messages) {
                 const role = msg.role === 'user' ? chalk.cyan('you') : chalk.blue('nero');
                 const time = new Date(msg.created_at).toLocaleTimeString();
-                const preview = msg.content.length > 60
-                    ? msg.content.slice(0, 60) + '...'
-                    : msg.content;
+                const preview =
+                    msg.content.length > 60 ? msg.content.slice(0, 60) + '...' : msg.content;
                 output += `  ${chalk.dim(time)} ${role}: ${preview}\n`;
             }
 
@@ -391,9 +413,12 @@ export const commands: SlashCommand[] = [
                 bar += i < filled ? '=' : '-';
             }
 
-            const color = usage.percentage > 80 ? chalk.red :
-                          usage.percentage > 60 ? chalk.hex(NERO_BLUE) :
-                          chalk.green;
+            const color =
+                usage.percentage > 80
+                    ? chalk.red
+                    : usage.percentage > 60
+                      ? chalk.hex(NERO_BLUE)
+                      : chalk.green;
 
             let output = `\n${chalk.bold('Context Usage')}\n\n`;
             output += `  Tokens: ${chalk.cyan(usage.tokens.toLocaleString())} / ${usage.limit.toLocaleString()}\n`;
@@ -413,8 +438,9 @@ export const commands: SlashCommand[] = [
         execute: async (_, ctx) => {
             if (!ctx.config.licenseKey) {
                 return {
-                    error: 'License key required for Slack integration.\n' +
-                           chalk.dim('Get one at https://nero.pompeiilabs.com'),
+                    error:
+                        'License key required for Slack integration.\n' +
+                        chalk.dim('Get one at https://nero.pompeiilabs.com'),
                 };
             }
 
@@ -443,8 +469,9 @@ export const commands: SlashCommand[] = [
                 openBrowser(url);
 
                 return {
-                    message: chalk.green('Complete the authorization in your browser.\n') +
-                             chalk.dim('Once done, you can DM Nero directly in Slack!'),
+                    message:
+                        chalk.green('Complete the authorization in your browser.\n') +
+                        chalk.dim('Once done, you can DM Nero directly in Slack!'),
                 };
             } catch (error) {
                 ctx.setLoading(null);
@@ -468,7 +495,7 @@ export const commands: SlashCommand[] = [
                 }
 
                 const response = await fetch('https://openrouter.ai/api/v1/key', {
-                    headers: { 'Authorization': `Bearer ${apiKey}` },
+                    headers: { Authorization: `Bearer ${apiKey}` },
                 });
 
                 if (!response.ok) {
@@ -495,13 +522,19 @@ export const commands: SlashCommand[] = [
                         bar += i < filled ? '=' : '-';
                     }
 
-                    const color = usagePercent > 90 ? chalk.red :
-                                  usagePercent > 70 ? chalk.hex(NERO_BLUE) :
-                                  chalk.green;
+                    const color =
+                        usagePercent > 90
+                            ? chalk.red
+                            : usagePercent > 70
+                              ? chalk.hex(NERO_BLUE)
+                              : chalk.green;
 
-                    const remainingColor = remaining < 1 ? chalk.red :
-                                           remaining < 5 ? chalk.hex(NERO_BLUE) :
-                                           chalk.green;
+                    const remainingColor =
+                        remaining < 1
+                            ? chalk.red
+                            : remaining < 5
+                              ? chalk.hex(NERO_BLUE)
+                              : chalk.green;
 
                     output += `  Limit:     $${limit.toFixed(2)}\n`;
                     output += `  Used:      $${totalUsage.toFixed(2)}\n`;
@@ -548,7 +581,11 @@ async function handleMcpAuth(serverName: string, ctx: CommandContext): Promise<C
     }
 
     if (serverConfig.oauth?.tokens) {
-        return { message: chalk.cyan(`Server ${serverName} is already authenticated. Use /mcp logout ${serverName} first.`) };
+        return {
+            message: chalk.cyan(
+                `Server ${serverName} is already authenticated. Use /mcp logout ${serverName} first.`,
+            ),
+        };
     }
 
     ctx.log(chalk.dim(`Discovering OAuth metadata for ${serverName}...`));
@@ -569,7 +606,7 @@ async function handleMcpAuth(serverName: string, ctx: CommandContext): Promise<C
         clientRegistration = await registerClient(
             metadata.authServer,
             `nero-${serverName}`,
-            redirectUri
+            redirectUri,
         );
 
         if (!clientRegistration) {
@@ -590,62 +627,73 @@ async function handleMcpAuth(serverName: string, ctx: CommandContext): Promise<C
     openBrowser(authUrl);
 
     try {
-        const tokens = await new Promise<Awaited<ReturnType<typeof exchangeCodeForTokens>>>((resolve, reject) => {
-            const server = createServer(async (req, res) => {
-                const url = new URL(req.url || '', `http://localhost:${port}`);
+        const tokens = await new Promise<Awaited<ReturnType<typeof exchangeCodeForTokens>>>(
+            (resolve, reject) => {
+                const server = createServer(async (req, res) => {
+                    const url = new URL(req.url || '', `http://localhost:${port}`);
 
-                if (url.pathname === '/callback') {
-                    const code = url.searchParams.get('code');
-                    const returnedState = url.searchParams.get('state');
-                    const error = url.searchParams.get('error');
+                    if (url.pathname === '/callback') {
+                        const code = url.searchParams.get('code');
+                        const returnedState = url.searchParams.get('state');
+                        const error = url.searchParams.get('error');
 
-                    if (error) {
-                        res.writeHead(400, { 'Content-Type': 'text/html' });
-                        res.end(`<html><body><h1>Authentication Failed</h1><p>${error}</p></body></html>`);
+                        if (error) {
+                            res.writeHead(400, { 'Content-Type': 'text/html' });
+                            res.end(
+                                `<html><body><h1>Authentication Failed</h1><p>${error}</p></body></html>`,
+                            );
+                            server.close();
+                            reject(new Error(`OAuth error: ${error}`));
+                            return;
+                        }
+
+                        if (!code || returnedState !== state) {
+                            res.writeHead(400, { 'Content-Type': 'text/html' });
+                            res.end(
+                                '<html><body><h1>Invalid Response</h1><p>Missing code or state mismatch</p></body></html>',
+                            );
+                            server.close();
+                            reject(new Error('Invalid OAuth response'));
+                            return;
+                        }
+
+                        res.writeHead(200, { 'Content-Type': 'text/html' });
+                        res.end(
+                            '<html><body><h1>Authentication Successful</h1><p>You can close this window and return to Nero.</p></body></html>',
+                        );
                         server.close();
-                        reject(new Error(`OAuth error: ${error}`));
-                        return;
-                    }
 
-                    if (!code || returnedState !== state) {
-                        res.writeHead(400, { 'Content-Type': 'text/html' });
-                        res.end('<html><body><h1>Invalid Response</h1><p>Missing code or state mismatch</p></body></html>');
+                        const tokens = await exchangeCodeForTokens(
+                            metadata.authServer!,
+                            clientRegistration!.client_id,
+                            code,
+                            codeVerifier,
+                            redirectUri,
+                        );
+                        resolve(tokens);
+                    } else {
+                        res.writeHead(404);
+                        res.end('Not found');
+                    }
+                });
+
+                server.listen(port, () => {
+                    ctx.log(chalk.dim(`Waiting for OAuth callback on port ${port}...`));
+                });
+
+                server.on('error', (err) => {
+                    reject(err);
+                });
+
+                setTimeout(
+                    () => {
                         server.close();
-                        reject(new Error('Invalid OAuth response'));
-                        return;
-                    }
-
-                    res.writeHead(200, { 'Content-Type': 'text/html' });
-                    res.end('<html><body><h1>Authentication Successful</h1><p>You can close this window and return to Nero.</p></body></html>');
-                    server.close();
-
-                    const tokens = await exchangeCodeForTokens(
-                        metadata.authServer!,
-                        clientRegistration!.client_id,
-                        code,
-                        codeVerifier,
-                        redirectUri
-                    );
-                    resolve(tokens);
-                } else {
-                    res.writeHead(404);
-                    res.end('Not found');
-                }
-            });
-
-            server.listen(port, () => {
-                ctx.log(chalk.dim(`Waiting for OAuth callback on port ${port}...`));
-            });
-
-            server.on('error', (err) => {
-                reject(err);
-            });
-
-            setTimeout(() => {
-                server.close();
-                reject(new Error('OAuth timeout - no callback received within 5 minutes'));
-            }, 5 * 60 * 1000);
-        });
+                        reject(new Error('OAuth timeout - no callback received within 5 minutes'));
+                    },
+                    5 * 60 * 1000,
+                );
+            },
+        );
 
         if (!tokens) {
             return { error: 'Failed to obtain access token' };
@@ -661,7 +709,11 @@ async function handleMcpAuth(serverName: string, ctx: CommandContext): Promise<C
         await updateMcpServerOAuth(serverName, oauthData);
         ctx.config.mcpServers[serverName].oauth = oauthData;
 
-        return { message: chalk.green(`\nAuthentication successful for ${serverName}! Restart Nero to connect.`) };
+        return {
+            message: chalk.green(
+                `\nAuthentication successful for ${serverName}! Restart Nero to connect.`,
+            ),
+        };
     } catch (error) {
         const err = error as Error;
         return { error: `Authentication failed: ${err.message}` };
@@ -699,7 +751,9 @@ async function handleMcpDisable(serverName: string, ctx: CommandContext): Promis
     ctx.config.mcpServers[serverName].disabled = true;
     await saveConfig(ctx.config);
 
-    return { message: chalk.green(`Server ${serverName} disabled. It will not connect on next restart.`) };
+    return {
+        message: chalk.green(`Server ${serverName} disabled. It will not connect on next restart.`),
+    };
 }
 
 async function handleMcpLogout(serverName: string, ctx: CommandContext): Promise<CommandResult> {
@@ -721,20 +775,17 @@ async function handleMcpLogout(serverName: string, ctx: CommandContext): Promise
 
 export function findCommand(input: string): SlashCommand | null {
     const name = input.toLowerCase();
-    return commands.find(cmd => cmd.name === name || cmd.aliases.includes(name)) || null;
+    return commands.find((cmd) => cmd.name === name || cmd.aliases.includes(name)) || null;
 }
 
 export function getCommandSuggestions(partial: string): SlashCommand[] {
     const lower = partial.toLowerCase();
     return commands.filter(
-        cmd => cmd.name.startsWith(lower) || cmd.aliases.some(a => a.startsWith(lower))
+        (cmd) => cmd.name.startsWith(lower) || cmd.aliases.some((a) => a.startsWith(lower)),
     );
 }
 
-export async function executeCommand(
-    input: string,
-    ctx: CommandContext
-): Promise<CommandResult> {
+export async function executeCommand(input: string, ctx: CommandContext): Promise<CommandResult> {
     const parts = input.slice(1).split(/\s+/);
     const cmdName = parts[0];
     const args = parts.slice(1);

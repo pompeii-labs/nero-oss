@@ -152,7 +152,7 @@ export class VoiceWebSocketManager {
                         logger.tool(activity);
                         if (activity.status === 'running' && !toolMessageSent) {
                             toolMessageSent = true;
-                            flow?.inputText("Hold on, let me check that.");
+                            flow?.inputText('Hold on, let me check that.');
                             flow?.inputText(null as unknown as string);
                         }
                     });
@@ -168,11 +168,13 @@ export class VoiceWebSocketManager {
                 },
                 onAudioOutput: (buffer: Buffer) => {
                     if (ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({
-                            event: 'media',
-                            streamSid,
-                            media: { payload: buffer.toString('base64') },
-                        }));
+                        ws.send(
+                            JSON.stringify({
+                                event: 'media',
+                                streamSid,
+                                media: { payload: buffer.toString('base64') },
+                            }),
+                        );
                     }
                 },
             });

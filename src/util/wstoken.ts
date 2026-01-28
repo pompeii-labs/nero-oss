@@ -31,8 +31,5 @@ export function verifyWsToken(token: string, licenseKey: string): boolean {
 
     if (providedHmac.length !== expectedHmac.length) return false;
 
-    return crypto.timingSafeEqual(
-        Buffer.from(providedHmac),
-        Buffer.from(expectedHmac)
-    );
+    return crypto.timingSafeEqual(Buffer.from(providedHmac), Buffer.from(expectedHmac));
 }

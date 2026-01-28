@@ -60,9 +60,10 @@ function generateState(): string {
     return randomBytes(16).toString('base64url');
 }
 
-export async function discoverOAuthMetadata(
-    serverUrl: string
-): Promise<{ resource?: OAuthProtectedResourceMetadata; authServer?: OAuthAuthorizationServerMetadata } | null> {
+export async function discoverOAuthMetadata(serverUrl: string): Promise<{
+    resource?: OAuthProtectedResourceMetadata;
+    authServer?: OAuthAuthorizationServerMetadata;
+} | null> {
     try {
         const baseUrl = new URL(serverUrl);
         const resourceUrl = new URL('/.well-known/oauth-protected-resource', baseUrl);
@@ -74,7 +75,10 @@ export async function discoverOAuthMetadata(
 
         const resourceMetadata: OAuthProtectedResourceMetadata = await resourceResponse.json();
 
-        if (!resourceMetadata.authorization_servers || resourceMetadata.authorization_servers.length === 0) {
+        if (
+            !resourceMetadata.authorization_servers ||
+            resourceMetadata.authorization_servers.length === 0
+        ) {
             console.log(chalk.yellow('No authorization servers found in resource metadata'));
             return { resource: resourceMetadata };
         }
@@ -86,16 +90,22 @@ export async function discoverOAuthMetadata(
             authServerMetadataUrl = authServerUrl;
         } else {
             const authBase = new URL(authServerUrl);
-            authServerMetadataUrl = new URL('/.well-known/oauth-authorization-server', authBase).toString();
+            authServerMetadataUrl = new URL(
+                '/.well-known/oauth-authorization-server',
+                authBase,
+            ).toString();
         }
 
         const authServerResponse = await fetch(authServerMetadataUrl);
         if (!authServerResponse.ok) {
-            console.log(chalk.yellow(`Failed to fetch auth server metadata from ${authServerMetadataUrl}`));
+            console.log(
+                chalk.yellow(`Failed to fetch auth server metadata from ${authServerMetadataUrl}`),
+            );
             return { resource: resourceMetadata };
         }
 
-        const authServerMetadata: OAuthAuthorizationServerMetadata = await authServerResponse.json();
+        const authServerMetadata: OAuthAuthorizationServerMetadata =
+            await authServerResponse.json();
 
         return {
             resource: resourceMetadata,
@@ -109,7 +119,7 @@ export async function discoverOAuthMetadata(
 export async function registerClient(
     authServerMetadata: OAuthAuthorizationServerMetadata,
     clientName: string,
-    redirectUri: string
+    redirectUri: string,
 ): Promise<OAuthClientRegistration | null> {
     if (!authServerMetadata.registration_endpoint) {
         console.log(chalk.yellow('No registration endpoint available'));
@@ -187,7 +197,7 @@ export async function exchangeCodeForTokens(
     clientId: string,
     code: string,
     codeVerifier: string,
-    redirectUri: string
+    redirectUri: string,
 ): Promise<OAuthTokens | null> {
     try {
         const response = await fetch(authServerMetadata.token_endpoint, {
@@ -223,7 +233,7 @@ export async function exchangeCodeForTokens(
 export async function refreshAccessToken(
     authServerMetadata: OAuthAuthorizationServerMetadata,
     clientId: string,
-    refreshToken: string
+    refreshToken: string,
 ): Promise<OAuthTokens | null> {
     try {
         const response = await fetch(authServerMetadata.token_endpoint, {
@@ -258,9 +268,9 @@ export function isTokenExpired(tokens: OAuthTokens): boolean {
     if (!tokens.expires_in || !tokens.issued_at) {
         return false;
     }
-    const expiresAt = tokens.issued_at + (tokens.expires_in * 1000);
+    const expiresAt = tokens.issued_at + tokens.expires_in * 1000;
     const bufferMs = 60 * 1000;
-    return Date.now() > (expiresAt - bufferMs);
+    return Date.now() > expiresAt - bufferMs;
 }
 
 export function openBrowser(url: string): void {

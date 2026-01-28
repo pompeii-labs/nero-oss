@@ -57,12 +57,15 @@ export class McpClient {
     }
 
     private async connectServer(name: string, config: McpServerConfig): Promise<void> {
-        const client = new Client({
-            name: `nero-${name}`,
-            version: VERSION,
-        }, {
-            capabilities: {},
-        });
+        const client = new Client(
+            {
+                name: `nero-${name}`,
+                version: VERSION,
+            },
+            {
+                capabilities: {},
+            },
+        );
 
         let transport: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport;
         let proc: ChildProcess | undefined;
@@ -79,7 +82,7 @@ export class McpClient {
                     const newTokens = await refreshAccessToken(
                         config.oauth.authServerMetadata,
                         config.oauth.clientRegistration.client_id,
-                        tokens.refresh_token
+                        tokens.refresh_token,
                     );
 
                     if (newTokens) {
@@ -88,7 +91,11 @@ export class McpClient {
                         await updateMcpServerOAuth(name, config.oauth);
                         console.log(chalk.dim(`[mcp] Token refreshed for ${name}`));
                     } else {
-                        console.log(chalk.yellow(`[mcp] Failed to refresh token for ${name}, may need to re-authenticate`));
+                        console.log(
+                            chalk.yellow(
+                                `[mcp] Failed to refresh token for ${name}, may need to re-authenticate`,
+                            ),
+                        );
                     }
                 }
 
@@ -96,7 +103,11 @@ export class McpClient {
             } else {
                 const oauthMetadata = await discoverOAuthMetadata(config.url);
                 if (oauthMetadata?.authServer) {
-                    console.log(chalk.yellow(`[mcp] Server ${name} requires authentication. Run: nero mcp auth ${name}`));
+                    console.log(
+                        chalk.yellow(
+                            `[mcp] Server ${name} requires authentication. Run: nero mcp auth ${name}`,
+                        ),
+                    );
                 }
             }
 
@@ -143,7 +154,7 @@ export class McpClient {
 
         console.log(chalk.dim(`[mcp] Connected, fetching tools...`));
         const toolsResult = await client.listTools();
-        const tools: McpTool[] = (toolsResult.tools || []).map(t => ({
+        const tools: McpTool[] = (toolsResult.tools || []).map((t) => ({
             name: t.name,
             description: t.description,
             inputSchema: t.inputSchema,
@@ -189,7 +200,7 @@ export class McpClient {
     getToolNames(): string[] {
         const names: string[] = [];
         for (const server of this.servers.values()) {
-            names.push(...server.tools.map(t => `${server.name}:${t.name}`));
+            names.push(...server.tools.map((t) => `${server.name}:${t.name}`));
         }
         return names;
     }
@@ -231,7 +242,7 @@ export class McpClient {
         for (const server of this.servers.values()) {
             if (serverName && server.name !== serverName) continue;
 
-            const tool = server.tools.find(t => t.name === actualToolName);
+            const tool = server.tools.find((t) => t.name === actualToolName);
             if (tool) {
                 try {
                     const result = await server.client.callTool({
@@ -241,7 +252,7 @@ export class McpClient {
 
                     if (result.content && Array.isArray(result.content)) {
                         return result.content
-                            .map(c => {
+                            .map((c) => {
                                 if (c.type === 'text') return c.text;
                                 return JSON.stringify(c);
                             })

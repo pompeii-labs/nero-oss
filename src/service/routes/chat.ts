@@ -30,10 +30,11 @@ async function registerWorkspace(cwdPath: string, detectedFrom: string): Promise
     }
 
     const name = path.basename(cwdPath);
-    await db.query(
-        'INSERT INTO workspaces (name, path, detected_from) VALUES ($1, $2, $3)',
-        [name, cwdPath, detectedFrom]
-    );
+    await db.query('INSERT INTO workspaces (name, path, detected_from) VALUES ($1, $2, $3)', [
+        name,
+        cwdPath,
+        detectedFrom,
+    ]);
 }
 
 export function createChatRouter(agent: Nero, authMiddleware: RequestHandler) {
