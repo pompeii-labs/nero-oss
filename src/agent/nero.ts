@@ -986,7 +986,7 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
         }
 
         try {
-            const apiUrl = process.env.POMPEII_API_URL || 'https://api.magmadeploy.com';
+            const apiUrl = process.env.BACKEND_URL || 'https://api.magmadeploy.com';
             const response = await fetch(`${apiUrl}/v1/nero/send-slack`, {
                 method: 'POST',
                 headers: {
@@ -1028,7 +1028,7 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
         this.emitActivity(activity);
 
         try {
-            const apiUrl = process.env.POMPEII_API_URL || 'https://api.magmadeploy.com';
+            const apiUrl = process.env.BACKEND_URL || 'https://api.magmadeploy.com';
             const response = await fetch(`${apiUrl}/v1/nero/send-sms`, {
                 method: 'POST',
                 headers: {
@@ -1070,7 +1070,7 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
         this.emitActivity(activity);
 
         try {
-            const apiUrl = process.env.POMPEII_API_URL || 'https://api.magmadeploy.com';
+            const apiUrl = process.env.BACKEND_URL || 'https://api.magmadeploy.com';
             const response = await fetch(`${apiUrl}/v1/nero/call-user`, {
                 method: 'POST',
                 headers: {

@@ -11,6 +11,7 @@ import {
 import { Nero } from '../agent/nero.js';
 import { NeroConfig } from '../config.js';
 import { Logger } from '../util/logger.js';
+import { verifyWsToken } from '../util/wstoken.js';
 
 const logger = new Logger('Voice');
 
@@ -37,9 +38,20 @@ export class VoiceWebSocketManager {
         this.wss = new WebSocketServer({ noServer: true });
 
         server.on('upgrade', (request, socket, head) => {
-            const pathname = new URL(request.url!, `http://${request.headers.host}`).pathname;
+            const url = new URL(request.url!, `http://${request.headers.host}`);
+            const pathname = url.pathname;
 
-            if (pathname === '/webhook/voice/stream') {
+            if (pathname.startsWith('/webhook/voice/stream')) {
+                if (this.config.licenseKey) {
+                    const tokenMatch = pathname.match(/\/token=([^/]+)/);
+                    const token = tokenMatch ? tokenMatch[1] : null;
+                    if (!token || !verifyWsToken(token, this.config.licenseKey)) {
+                        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+                        socket.destroy();
+                        return;
+                    }
+                }
+
                 this.wss.handleUpgrade(request, socket, head, (ws) => {
                     this.wss.emit('connection', ws, request);
                 });
@@ -125,7 +137,7 @@ export class VoiceWebSocketManager {
                 onTranscription: async (output: MagmaFlowSTTOutput) => {
                     if (!output.text) return;
 
-                    console.log(chalk.cyan(`[voice] User: ${output.text}`));
+                    console.log(chalk.cyan(`[voice] User transcription received`));
 
                     flow?.interruptTTS();
                     if (ws.readyState === WebSocket.OPEN) {
@@ -152,7 +164,7 @@ export class VoiceWebSocketManager {
 
                     this.agent.setActivityCallback(undefined);
 
-                    console.log(chalk.magenta(`[voice] Nero: ${response.content.slice(0, 50)}...`));
+                    console.log(chalk.magenta(`[voice] Response sent`));
                 },
                 onAudioOutput: (buffer: Buffer) => {
                     if (ws.readyState === WebSocket.OPEN) {

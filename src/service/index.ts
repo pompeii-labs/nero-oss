@@ -1,4 +1,4 @@
-import express, { Express, Request, Response } from 'express';
+import express, { Express, Request, Response, RequestHandler } from 'express';
 import { createServer, Server as HTTPServer } from 'http';
 import cors from 'cors';
 import semver from 'semver';
@@ -12,6 +12,7 @@ import { handleSms } from '../sms/handler.js';
 import { handleSlack } from '../slack/handler.js';
 import { handleIncomingCall } from '../voice/twilio.js';
 import { VoiceWebSocketManager } from '../voice/websocket.js';
+import { createAuthMiddleware } from './middleware/auth.js';
 
 export class NeroService {
     private app: Express;
@@ -39,7 +40,12 @@ export class NeroService {
     }
 
     private setupMiddleware(): void {
-        this.app.use(cors());
+        const backendUrl = process.env.BACKEND_URL || 'https://api.magmadeploy.com';
+        const corsOptions = this.config.licenseKey
+            ? { origin: backendUrl }
+            : { origin: true };
+
+        this.app.use(cors(corsOptions));
         this.app.use(express.json());
         this.app.use(express.urlencoded({ extended: true }));
 
@@ -57,6 +63,8 @@ export class NeroService {
     }
 
     private setupRoutes(): void {
+        const authMiddleware = createAuthMiddleware(this.config.licenseKey) as RequestHandler;
+
         this.app.get('/', (req: Request, res: Response) => {
             res.json({
                 name: 'OpenNero',
@@ -69,11 +77,11 @@ export class NeroService {
             });
         });
 
-        this.app.use(createHealthRouter(this.agent));
-        this.app.use(createChatRouter(this.agent));
+        this.app.use(createHealthRouter(this.agent, authMiddleware));
+        this.app.use(createChatRouter(this.agent, authMiddleware));
 
         if (this.config.sms?.enabled) {
-            this.app.post('/webhook/sms', async (req, res) => {
+            this.app.post('/webhook/sms', authMiddleware, async (req, res) => {
                 await handleSms(req, res, this.agent);
             });
             this.logger.info('[SMS] Webhook enabled at /webhook/sms');
@@ -87,7 +95,7 @@ export class NeroService {
             this.logger.info('[Voice] Webhook enabled at /webhook/voice');
         }
 
-        this.app.post('/webhook/slack', async (req, res) => {
+        this.app.post('/webhook/slack', authMiddleware, async (req, res) => {
             await handleSlack(req, res, this.agent);
         });
         this.logger.info('[Slack] Webhook enabled at /webhook/slack');
@@ -161,7 +169,7 @@ export class NeroService {
 
     private async startLicensePoll(): Promise<void> {
         const pollInterval = 300000;
-        const apiUrl = process.env.POMPEII_API_URL || 'https://api.magmadeploy.com';
+        const apiUrl = process.env.BACKEND_URL || 'https://api.magmadeploy.com';
 
         const poll = async () => {
             try {

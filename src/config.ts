@@ -28,6 +28,8 @@ export interface NeroSettings {
 export interface NeroConfig {
     mcpServers: Record<string, McpServerConfig>;
     licenseKey: string | null;
+    tunnelUrl?: string;
+    port?: number;
     voice: {
         enabled: boolean;
         elevenlabsVoiceId?: string;
@@ -76,6 +78,20 @@ export function getConfigPath(): string {
     return join(getConfigDir(), 'config.json');
 }
 
+async function loadTunnelUrl(): Promise<string | undefined> {
+    const tunnelStatePath = join(homedir(), '.nero', 'tunnel.json');
+    if (existsSync(tunnelStatePath)) {
+        try {
+            const content = await readFile(tunnelStatePath, 'utf-8');
+            const tunnelState = JSON.parse(content);
+            return tunnelState.url;
+        } catch {
+            return undefined;
+        }
+    }
+    return undefined;
+}
+
 export async function loadConfig(forceReload = false): Promise<NeroConfig> {
     if (cachedConfig && !forceReload) return cachedConfig;
 
@@ -83,6 +99,8 @@ export async function loadConfig(forceReload = false): Promise<NeroConfig> {
         join(process.cwd(), '.nero', 'config.json'),
         join(homedir(), '.nero', 'config.json'),
     ];
+
+    const tunnelUrl = await loadTunnelUrl();
 
     for (const path of configPaths) {
         if (existsSync(path)) {
@@ -94,6 +112,7 @@ export async function loadConfig(forceReload = false): Promise<NeroConfig> {
                     ...defaultConfig,
                     ...userConfig,
                     licenseKey: process.env.NERO_LICENSE_KEY || userConfig.licenseKey || null,
+                    tunnelUrl: tunnelUrl || userConfig.tunnelUrl,
                     settings: { ...defaultSettings, ...userConfig.settings },
                 };
                 cachedConfig = merged;
@@ -108,6 +127,7 @@ export async function loadConfig(forceReload = false): Promise<NeroConfig> {
     cachedConfig = {
         ...defaultConfig,
         licenseKey: process.env.NERO_LICENSE_KEY || null,
+        tunnelUrl,
     };
     return cachedConfig;
 }

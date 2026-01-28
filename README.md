@@ -223,10 +223,11 @@ Popular MCP servers:
 | `OPENROUTER_API_KEY` | Yes | OpenRouter API key |
 | `DATABASE_URL` | No | PostgreSQL connection string |
 | `NERO_SERVICE_URL` | No | Service URL for CLI (default: `http://localhost:4848`) |
+| `BACKEND_URL` | No | Backend API URL for license/webhook routing (default: `https://api.magmadeploy.com`) |
 | `TAVILY_API_KEY` | No | For web search tool |
 | `DEEPGRAM_API_KEY` | No | For voice STT |
 | `ELEVENLABS_API_KEY` | No | For voice TTS |
-| `NERO_LICENSE_KEY` | No | For voice/SMS via Pompeii |
+| `NERO_LICENSE_KEY` | No | For voice/SMS webhook routing |
 
 ## Architecture
 
@@ -257,32 +258,43 @@ Nero runs as a service with a CLI client:
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Voice, SMS & Slack
+## Voice, SMS & Slack (Optional)
 
-Voice and SMS require a license key from Pompeii Labs for webhook routing. The license handles Twilio credentials so you don't need your own. Slack works independently via OAuth.
+**Nero works fully without a license.** The CLI, chat, and MCP tools all work out of the box for local development.
 
-### Setup
+A license unlocks voice calls, SMS, and Slack integration by routing webhooks through our infrastructure (so you don't need your own Twilio credentials).
 
-1. Get a license key from [pompeiilabs.com/nero](https://pompeiilabs.com/nero)
-2. Add to your environment:
-   ```bash
-   NERO_LICENSE_KEY=your_key
-   DEEPGRAM_API_KEY=your_key    # For voice STT
-   ELEVENLABS_API_KEY=your_key  # For voice TTS
-   ```
-3. Enable in `~/.nero/config.json`:
-   ```json
-   {
-     "voice": { "enabled": true },
-     "sms": { "enabled": true },
-     "licenseKey": "your_key"
-   }
-   ```
+> **Want voice/SMS/Slack?** Email **founders@pompeiilabs.com** to request a license.
 
-### Tunnels
+### Quick Start
 
-To receive voice/SMS webhooks, Nero needs to be accessible from the internet. Use the built-in tunnel command:
+```bash
+# 1. Install cloudflared (for tunneling)
+brew install cloudflared
 
+# 2. Add keys to your environment
+export NERO_LICENSE_KEY=your_license_key
+export DEEPGRAM_API_KEY=your_key      # For voice STT
+export ELEVENLABS_API_KEY=your_key    # For voice TTS
+
+# 3. Start Nero service
+docker-compose up -d
+
+# 4. Start tunnel (in a separate terminal or use -d for background)
+nero tunnel -d
+
+# 5. Register your tunnel with your license
+nero license register
+
+# 6. Check status
+nero license status
+```
+
+Once registered, you can receive calls and texts at the phone number provided with your license.
+
+### Commands Reference
+
+**Tunnel:**
 ```bash
 nero tunnel              # Start tunnel (foreground)
 nero tunnel -d           # Start tunnel in background (daemon)
@@ -290,28 +302,16 @@ nero tunnel status       # Check tunnel status
 nero tunnel stop         # Stop background tunnel
 ```
 
-Requires `cloudflared` (recommended, free) or `ngrok`:
-```bash
-brew install cloudflared  # macOS
-# or
-brew install ngrok
-```
-
-### License Registration
-
-After starting a tunnel, register it with your license:
-
+**License:**
 ```bash
 nero license register              # Auto-detects running tunnel
 nero license register --url https://your-tunnel.com
 nero license status                # Check license and tunnel status
 ```
 
-Once registered, you can receive calls and texts at the phone number provided with your license.
-
 ### Slack
 
-Connect Nero to Slack with a single command (requires license):
+Connect Nero to Slack (requires license):
 
 ```bash
 /install-slack   # In the REPL, opens browser for OAuth
@@ -320,6 +320,29 @@ Connect Nero to Slack with a single command (requires license):
 Once connected, DM Nero in Slack and it joins the same conversation as CLI, voice, and SMS.
 
 Nero can also proactively message you on Slack, SMS, or initiate voice calls when configured with a license.
+
+## Security
+
+Nero is designed with security as a priority, addressing vulnerabilities found in similar tools:
+
+### vs Molt/Clawdbot
+
+| Concern | Molt | Nero |
+|---------|------|------|
+| **Execution environment** | Direct host access, no sandboxing | Docker container with mounted volumes |
+| **Webhook exposure** | User exposes gateway directly to internet | Webhooks route through Pompeii (authenticated) |
+| **Secret storage** | Plaintext in ~/.clawdbot/*.json | Environment variables only |
+| **Plugin ecosystem** | ClawdHub with no vetting/signing | User-configured MCP servers only |
+| **Authentication** | Optional, often misconfigured | License key required for remote access |
+| **API key exposure** | Stored in markdown files, targeted by infostealers | Never stored on disk |
+
+### How Nero Protects You
+
+- **Containerized execution**: File operations happen in a Docker container with explicit volume mounts
+- **Authenticated webhooks**: All SMS/Voice/Slack webhooks route through Pompeii's infrastructure with license key validation
+- **No credential storage**: API keys are environment variables, never written to disk
+- **No untrusted plugins**: MCP servers are explicitly configured by you, not downloaded from a marketplace
+- **Secure by default**: Remote access requires license key authentication
 
 ## License
 

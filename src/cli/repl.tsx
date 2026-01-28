@@ -948,7 +948,8 @@ export async function startRepl(config: NeroConfig): Promise<void> {
         process.exit(1);
     }
 
-    const nero = new NeroProxy(serviceUrl, process.cwd());
+    const licenseKey = config.licenseKey || undefined;
+    const nero = new NeroProxy(serviceUrl, process.cwd(), licenseKey);
     await nero.setup();
 
     const initialHistory = nero.getLoadedMessages();

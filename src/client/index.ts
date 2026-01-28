@@ -3,6 +3,7 @@ import { Logger } from '../util/logger.js';
 export interface NeroClientConfig {
     baseUrl: string;
     timeout?: number;
+    licenseKey?: string;
 }
 
 export interface ChatResponse {
@@ -23,11 +24,21 @@ export type PermissionHandler = (id: string, activity: ActivityEvent) => void;
 export class NeroClient {
     private baseUrl: string;
     private timeout: number;
+    private licenseKey?: string;
     private logger = new Logger('Client');
 
     constructor(config: NeroClientConfig) {
         this.baseUrl = config.baseUrl.replace(/\/$/, '');
         this.timeout = config.timeout || 120000;
+        this.licenseKey = config.licenseKey;
+    }
+
+    private getHeaders(extra?: Record<string, string>): Record<string, string> {
+        const headers: Record<string, string> = { ...extra };
+        if (this.licenseKey) {
+            headers['x-license-key'] = this.licenseKey;
+        }
+        return headers;
     }
 
     static async checkServiceRunning(baseUrl: string): Promise<boolean> {
@@ -54,10 +65,10 @@ export class NeroClient {
         try {
             const response = await fetch(`${this.baseUrl}/chat`, {
                 method: 'POST',
-                headers: {
+                headers: this.getHeaders({
                     'Content-Type': 'application/json',
                     'Accept': 'text/event-stream',
-                },
+                }),
                 body: JSON.stringify({ message, medium: 'cli', cwd }),
                 signal: controller.signal,
             });
@@ -148,7 +159,9 @@ export class NeroClient {
         percentage: number;
         mcpTools: string[];
     }> {
-        const response = await fetch(`${this.baseUrl}/context`);
+        const response = await fetch(`${this.baseUrl}/context`, {
+            headers: this.getHeaders(),
+        });
         if (!response.ok) {
             throw new Error(`Context request failed: ${response.status}`);
         }
@@ -159,7 +172,9 @@ export class NeroClient {
         messages: Array<{ role: 'user' | 'assistant'; content: string; created_at: string }>;
         hasSummary: boolean;
     }> {
-        const response = await fetch(`${this.baseUrl}/history`);
+        const response = await fetch(`${this.baseUrl}/history`, {
+            headers: this.getHeaders(),
+        });
         if (!response.ok) {
             throw new Error(`History request failed: ${response.status}`);
         }
@@ -169,6 +184,7 @@ export class NeroClient {
     async compact(): Promise<{ success: boolean; summary: string }> {
         const response = await fetch(`${this.baseUrl}/compact`, {
             method: 'POST',
+            headers: this.getHeaders(),
         });
         if (!response.ok) {
             const error = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -180,6 +196,7 @@ export class NeroClient {
     async reload(): Promise<{ success: boolean; mcpTools: number }> {
         const response = await fetch(`${this.baseUrl}/reload`, {
             method: 'POST',
+            headers: this.getHeaders(),
         });
         if (!response.ok) {
             const error = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -191,7 +208,7 @@ export class NeroClient {
     async respondToPermission(id: string, approved: boolean): Promise<void> {
         const response = await fetch(`${this.baseUrl}/permission/${id}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: this.getHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ approved }),
         });
         if (!response.ok) {

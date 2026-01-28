@@ -13,8 +13,8 @@ export class NeroProxy {
     private cachedContext: { tokens: number; limit: number; percentage: number } = { tokens: 0, limit: 180000, percentage: 0 };
     private cwd?: string;
 
-    constructor(serviceUrl: string, cwd?: string) {
-        this.client = new NeroClient({ baseUrl: serviceUrl });
+    constructor(serviceUrl: string, cwd?: string, licenseKey?: string) {
+        this.client = new NeroClient({ baseUrl: serviceUrl, licenseKey });
         this.cwd = cwd;
     }
 

@@ -1,9 +1,9 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, RequestHandler } from 'express';
 import { Nero } from '../../agent/nero.js';
 import { loadConfig } from '../../config.js';
 import { Logger } from '../../util/logger.js';
 
-export function createHealthRouter(agent: Nero) {
+export function createHealthRouter(agent: Nero, authMiddleware: RequestHandler) {
     const router = Router();
     const logger = new Logger('Health');
 
@@ -17,6 +17,8 @@ export function createHealthRouter(agent: Nero) {
             },
         });
     });
+
+    router.use(authMiddleware);
 
     router.get('/context', (req: Request, res: Response) => {
         const context = agent.getContextUsage();

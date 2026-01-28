@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, RequestHandler } from 'express';
 import path from 'path';
 import crypto from 'crypto';
 import { Nero, ToolActivity } from '../../agent/nero.js';
@@ -36,9 +36,11 @@ async function registerWorkspace(cwdPath: string, detectedFrom: string): Promise
     );
 }
 
-export function createChatRouter(agent: Nero) {
+export function createChatRouter(agent: Nero, authMiddleware: RequestHandler) {
     const router = Router();
     const logger = new Logger('Chat');
+
+    router.use(authMiddleware);
 
     router.post('/permission/:id', (req: Request, res: Response) => {
         const id = req.params.id as string;

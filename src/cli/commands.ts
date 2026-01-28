@@ -421,7 +421,7 @@ export const commands: SlashCommand[] = [
             ctx.setLoading('Getting Slack install URL');
 
             try {
-                const apiUrl = process.env.POMPEII_API_URL || 'https://api.magmadeploy.com';
+                const apiUrl = process.env.BACKEND_URL || 'https://api.magmadeploy.com';
                 const response = await fetch(`${apiUrl}/v1/nero/slack/install`, {
                     headers: {
                         'x-license-key': ctx.config.licenseKey,

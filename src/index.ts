@@ -744,7 +744,7 @@ const license = program
     .command('license')
     .description('Manage Nero license for voice/SMS features');
 
-const POMPEII_API = process.env.POMPEII_API_URL || 'https://api.magmadeploy.com';
+const BACKEND_API = process.env.BACKEND_URL || 'https://api.magmadeploy.com';
 
 license
     .command('register')
@@ -784,7 +784,7 @@ license
         console.log(chalk.dim('Registering with Pompeii...'));
 
         try {
-            const response = await fetch(`${POMPEII_API}/v1/license/register`, {
+            const response = await fetch(`${BACKEND_API}/v1/license/register`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -821,7 +821,7 @@ license
         }
 
         try {
-            const response = await fetch(`${POMPEII_API}/v1/license/verify`, {
+            const response = await fetch(`${BACKEND_API}/v1/license/verify`, {
                 method: 'GET',
                 headers: {
                     'x-license-key': licenseKey,
