@@ -926,12 +926,13 @@ program
         try {
             const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
             const data = await response.json();
-            const latest = data.tag_name?.replace(/^v/, '');
+            const latestTag = data.tag_name;
+            const latestVersion = latestTag?.replace(/^v/, '');
 
             console.log(`Current: ${chalk.cyan(VERSION)}`);
-            console.log(`Latest:  ${chalk.cyan(latest)}`);
+            console.log(`Latest:  ${chalk.cyan(latestVersion)}`);
 
-            if (!semver.gt(latest, VERSION)) {
+            if (!semver.gt(latestVersion, VERSION)) {
                 console.log(chalk.green('\nYou are on the latest version!'));
                 process.exit(0);
             }
@@ -982,14 +983,14 @@ program
             const archName = arch === 'arm64' ? 'arm64' : 'x64';
             const binary = `nero-${osName}-${archName}`;
 
-            const binaryUrl = `https://github.com/${REPO}/releases/download/${latest}/${binary}`;
+            const binaryUrl = `https://github.com/${REPO}/releases/download/${latestTag}/${binary}`;
 
             console.log(chalk.dim(`Downloading ${binary}...`));
             execSync(`curl -fsSL "${binaryUrl}" -o /tmp/nero && chmod +x /tmp/nero && sudo mv /tmp/nero /usr/local/bin/nero`, {
                 stdio: 'inherit',
             });
 
-            console.log(chalk.green(`\nNero updated to ${latest}!`));
+            console.log(chalk.green(`\nNero updated to ${latestVersion}!`));
         } catch (error) {
             const err = error as Error;
             console.error(chalk.red(`Update failed: ${err.message}`));
