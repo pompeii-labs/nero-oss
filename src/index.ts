@@ -25,14 +25,26 @@ const program = new Command();
 
 program.name('nero').description('Open source AI companion').version(VERSION, '-v, --version');
 
+async function readStdin(): Promise<string> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+        chunks.push(chunk);
+    }
+    return Buffer.concat(chunks).toString('utf-8').trim();
+}
+
 program
     .command('chat', { isDefault: true })
     .description('Start interactive chat session')
     .option('-m, --message <message>', 'Send a single message and exit')
+    .option('-p, --pipe', 'Read message from stdin (pipe mode)')
     .action(async (options) => {
         const config = await loadConfig();
 
-        if (options.message) {
+        const isPiped = !process.stdin.isTTY;
+        const message = options.message || (isPiped ? await readStdin() : null);
+
+        if (message) {
             const { NeroClient } = await import('./client/index.js');
             const { Logger } = await import('./util/logger.js');
             const logger = new Logger('CLI');
@@ -47,10 +59,10 @@ program
                 process.exit(1);
             }
 
-            const client = new NeroClient({ baseUrl: serviceUrl });
+            const client = new NeroClient({ baseUrl: serviceUrl, licenseKey: config.licenseKey });
 
             try {
-                await client.chat(options.message, (chunk) => {
+                await client.chat(message, (chunk) => {
                     process.stdout.write(chunk);
                 });
                 console.log();
@@ -81,6 +93,7 @@ program
     .description('Reload service configuration (MCP servers, etc.)')
     .action(async () => {
         const { NeroClient } = await import('./client/index.js');
+        const config = await loadConfig();
 
         const serviceUrl = process.env.NERO_SERVICE_URL || 'http://localhost:4848';
         const serviceRunning = await NeroClient.checkServiceRunning(serviceUrl);
@@ -93,7 +106,7 @@ program
         }
 
         console.log(chalk.dim('Reloading service configuration...'));
-        const client = new NeroClient({ baseUrl: serviceUrl });
+        const client = new NeroClient({ baseUrl: serviceUrl, licenseKey: config.licenseKey });
 
         try {
             const result = await client.reload();
