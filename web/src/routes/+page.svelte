@@ -14,6 +14,7 @@
     import Terminal from '@lucide/svelte/icons/terminal';
     import Cpu from '@lucide/svelte/icons/cpu';
     import Zap from '@lucide/svelte/icons/zap';
+    import AlertCircle from '@lucide/svelte/icons/alert-circle';
     import NeroIcon from '$lib/components/icons/nero-icon.svelte';
 
     type Message = {
@@ -41,6 +42,7 @@
 
     let thinkingMode = $state(false);
     let thinkingActivities: ToolActivity[] = $state([]);
+    let connectionError = $state<string | null>(null);
 
     const SCROLL_THRESHOLD = 100;
 
@@ -191,8 +193,10 @@
         loading = true;
         loadingText = 'Processing';
         streamingContent = '';
+        connectionError = null;
         scrollToBottom();
 
+        try {
         await streamChat({
             message,
             callbacks: {
@@ -256,9 +260,23 @@
                     console.error('Chat error:', error);
                     loading = false;
                     streamingContent = '';
+
+                    if (error.includes('Failed to fetch') || error.includes('NetworkError') || error.includes('ECONNREFUSED')) {
+                        connectionError = 'Unable to connect to Nero. Make sure it\'s running!';
+                    } else {
+                        connectionError = error;
+                    }
+                    scrollToBottom();
                 }
             }
         });
+        } catch (err) {
+            console.error('Chat fetch error:', err);
+            loading = false;
+            streamingContent = '';
+            connectionError = 'Unable to connect to Nero. Make sure it\'s running!';
+            scrollToBottom();
+        }
     }
 
     function handlePermissionResponse() {
@@ -402,6 +420,29 @@
             {:else if loading && !streamingContent}
                 <div class="message-appear">
                     <GlitchLoader text={loadingText} />
+                </div>
+            {/if}
+
+            {#if connectionError}
+                <div class="message-appear">
+                    <div class="glass-panel rounded-xl p-4 border-red-500/30 bg-red-500/5">
+                        <div class="flex items-start gap-3">
+                            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-400 shrink-0">
+                                <AlertCircle class="h-4 w-4" />
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm text-red-400 font-medium">Connection Error</p>
+                                <p class="text-sm text-muted-foreground mt-1">{connectionError}</p>
+                            </div>
+                            <button
+                                type="button"
+                                onclick={() => connectionError = null}
+                                class="text-muted-foreground/50 hover:text-muted-foreground text-xs"
+                            >
+                                Dismiss
+                            </button>
+                        </div>
+                    </div>
                 </div>
             {/if}
         </div>
