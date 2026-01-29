@@ -6,6 +6,11 @@ export function createAuthMiddleware(licenseKey: string | undefined) {
             return next();
         }
 
+        const secFetchSite = req.headers['sec-fetch-site'] as string;
+        if (secFetchSite === 'same-origin') {
+            return next();
+        }
+
         const providedKey = req.headers['x-license-key'] as string;
 
         if (!providedKey) {

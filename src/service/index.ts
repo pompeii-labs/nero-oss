@@ -1,5 +1,8 @@
 import express, { Express, Request, Response, RequestHandler } from 'express';
 import { createServer, Server as HTTPServer } from 'http';
+import { join, dirname } from 'path';
+import { existsSync } from 'fs';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 import semver from 'semver';
 import { Logger } from '../util/logger.js';
@@ -8,11 +11,14 @@ import { Nero } from '../agent/nero.js';
 import { NeroConfig } from '../config.js';
 import { createHealthRouter } from './routes/health.js';
 import { createChatRouter } from './routes/chat.js';
+import { createWebRouter } from './routes/web.js';
 import { handleSms } from '../sms/handler.js';
 import { handleSlack } from '../slack/handler.js';
 import { handleIncomingCall } from '../voice/twilio.js';
 import { VoiceWebSocketManager } from '../voice/websocket.js';
 import { createAuthMiddleware } from './middleware/auth.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export class NeroService {
     private app: Express;
@@ -63,7 +69,9 @@ export class NeroService {
     private setupRoutes(): void {
         const authMiddleware = createAuthMiddleware(this.config.licenseKey) as RequestHandler;
 
-        this.app.get('/', (req: Request, res: Response) => {
+        this.setupStaticServing();
+
+        this.app.get('/api', (req: Request, res: Response) => {
             res.json({
                 name: 'OpenNero',
                 version: VERSION,
@@ -75,28 +83,110 @@ export class NeroService {
             });
         });
 
-        this.app.use(createHealthRouter(this.agent, authMiddleware));
-        this.app.use(createChatRouter(this.agent, authMiddleware));
-
-        if (this.config.sms?.enabled) {
-            this.app.post('/webhook/sms', authMiddleware, async (req, res) => {
-                await handleSms(req, res, this.agent);
+        this.app.get('/health', (req: Request, res: Response) => {
+            const context = this.agent.getContextUsage();
+            res.json({
+                status: 'ok',
+                agent: {
+                    contextUsage: context.percentage,
+                    contextTokens: context.tokens,
+                },
             });
-            this.logger.info('[SMS] Webhook enabled at /webhook/sms');
-        }
+        });
+
+        this.wsManager = new VoiceWebSocketManager(this.httpServer, this.config, this.agent);
+        this.logger.info('[Voice] WebSocket enabled at /webhook/voice/stream');
 
         if (this.config.voice?.enabled) {
             this.app.post('/webhook/voice', async (req, res) => {
                 await handleIncomingCall(req, res, this.config);
             });
-            this.wsManager = new VoiceWebSocketManager(this.httpServer, this.config, this.agent);
-            this.logger.info('[Voice] Webhook enabled at /webhook/voice');
+            this.logger.info('[Voice] Twilio webhook enabled at /webhook/voice');
         }
 
-        this.app.post('/webhook/slack', authMiddleware, async (req, res) => {
+        this.app.get('/', (req: Request, res: Response, next) => {
+            if (this.isLocalRequest(req)) {
+                return next();
+            }
+            res.json({
+                name: 'OpenNero',
+                version: VERSION,
+                status: 'running',
+                webDashboard: 'localhost only',
+                features: {
+                    voice: this.config.voice?.enabled || false,
+                    sms: this.config.sms?.enabled || false,
+                },
+            });
+        });
+
+        this.app.use(authMiddleware);
+
+        this.app.use(createHealthRouter(this.agent));
+        this.app.use(createChatRouter(this.agent));
+        this.app.use(createWebRouter(this.agent));
+
+        if (this.config.sms?.enabled) {
+            this.app.post('/webhook/sms', async (req, res) => {
+                await handleSms(req, res, this.agent);
+            });
+            this.logger.info('[SMS] Webhook enabled at /webhook/sms');
+        }
+
+        this.app.post('/webhook/slack', async (req, res) => {
             await handleSlack(req, res, this.agent);
         });
         this.logger.info('[Slack] Webhook enabled at /webhook/slack');
+
+        this.setupSpaFallback();
+    }
+
+    private webDistPath: string | null = null;
+
+    private isLocalRequest(req: Request): boolean {
+        const host = req.hostname || req.headers.host || '';
+        return (
+            host === 'localhost' ||
+            host.startsWith('localhost:') ||
+            host === '127.0.0.1' ||
+            host.startsWith('127.0.0.1:')
+        );
+    }
+
+    private setupStaticServing(): void {
+        const webDistPaths = [
+            join(__dirname, '../web/build'),
+            join(__dirname, '../../web/build'),
+            join(process.cwd(), 'web/build'),
+        ];
+
+        for (const path of webDistPaths) {
+            if (existsSync(path)) {
+                this.webDistPath = path;
+                break;
+            }
+        }
+
+        if (this.webDistPath) {
+            this.app.use((req: Request, res: Response, next) => {
+                if (this.config.licenseKey && !this.isLocalRequest(req)) {
+                    return next();
+                }
+                express.static(this.webDistPath!)(req, res, next);
+            });
+            this.logger.info(`[Web] Dashboard served from ${this.webDistPath}`);
+            if (this.config.licenseKey) {
+                this.logger.info(`[Web] Dashboard restricted to localhost (tunnel mode)`);
+            }
+        }
+    }
+
+    private setupSpaFallback(): void {
+        if (this.webDistPath) {
+            this.app.get('*', (req: Request, res: Response) => {
+                res.sendFile(join(this.webDistPath!, 'index.html'));
+            });
+        }
     }
 
     private setupShutdown(): void {

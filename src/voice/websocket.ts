@@ -20,11 +20,11 @@ interface Connection {
     ws: WebSocket;
     flow?: MagmaFlow;
     active: boolean;
-    streamSid?: string;
 }
 
 export class VoiceWebSocketManager {
-    private wss: WebSocketServer;
+    private twilioWss: WebSocketServer;
+    private webWss: WebSocketServer;
     private connections: Map<string, Connection> = new Map();
     private config: NeroConfig;
     private agent: Nero;
@@ -35,33 +35,52 @@ export class VoiceWebSocketManager {
     constructor(server: HttpServer, config: NeroConfig, agent: Nero) {
         this.config = config;
         this.agent = agent;
-        this.wss = new WebSocketServer({ noServer: true });
+
+        this.twilioWss = new WebSocketServer({ noServer: true });
+        this.webWss = new WebSocketServer({ noServer: true });
+
+        console.log(chalk.dim(`[voice] VoiceWebSocketManager initialized`));
 
         server.on('upgrade', (request, socket, head) => {
             const url = new URL(request.url!, `http://${request.headers.host}`);
             const pathname = url.pathname;
 
-            if (pathname.startsWith('/webhook/voice/stream')) {
-                if (this.config.licenseKey) {
-                    const tokenMatch = pathname.match(/\/token=([^/]+)/);
-                    const token = tokenMatch ? tokenMatch[1] : null;
-                    if (!token || !verifyWsToken(token, this.config.licenseKey)) {
-                        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                        socket.destroy();
-                        return;
-                    }
+            console.log(chalk.dim(`[voice] WebSocket upgrade: ${pathname}`));
+
+            if (pathname.startsWith('/webhook/voice/stream/token=')) {
+                const tokenMatch = pathname.match(/\/token=([^/]+)/);
+                const token = tokenMatch ? tokenMatch[1] : null;
+
+                if (
+                    this.config.licenseKey &&
+                    (!token || !verifyWsToken(token, this.config.licenseKey))
+                ) {
+                    console.log(chalk.red(`[voice] Twilio auth failed`));
+                    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+                    socket.destroy();
+                    return;
                 }
 
-                this.wss.handleUpgrade(request, socket, head, (ws) => {
-                    this.wss.emit('connection', ws, request);
+                console.log(chalk.green(`[voice] Twilio connection accepted`));
+                this.twilioWss.handleUpgrade(request, socket, head, (ws) => {
+                    this.twilioWss.emit('connection', ws, request);
+                });
+            } else if (pathname === '/webhook/voice/stream') {
+                console.log(chalk.green(`[voice] Web voice connection accepted`));
+                this.webWss.handleUpgrade(request, socket, head, (ws) => {
+                    this.webWss.emit('connection', ws, request);
                 });
             } else {
+                console.log(chalk.yellow(`[voice] Unknown path: ${pathname}`));
                 socket.destroy();
             }
         });
 
-        this.wss.on('connection', (ws, req) => this.handleConnection(ws, req));
-        this.wss.on('error', (error) => console.error(chalk.red(`[ws] Error: ${error.message}`)));
+        this.twilioWss.on('connection', (ws, req) => this.handleTwilio(ws, req));
+        this.twilioWss.on('error', (err) => console.error(chalk.red(`[twilio-ws] ${err.message}`)));
+
+        this.webWss.on('connection', (ws, req) => this.handleWebVoice(ws, req));
+        this.webWss.on('error', (err) => console.error(chalk.red(`[web-ws] ${err.message}`)));
 
         this.startHeartbeat();
     }
@@ -70,7 +89,7 @@ export class VoiceWebSocketManager {
         this.heartbeatTimer = setInterval(() => {
             this.connections.forEach((conn, id) => {
                 if (!conn.active) {
-                    console.log(chalk.dim(`[ws] Terminating inactive: ${id}`));
+                    console.log(chalk.dim(`[voice] Terminating inactive: ${id}`));
                     conn.ws.terminate();
                     this.connections.delete(id);
                     return;
@@ -81,70 +100,51 @@ export class VoiceWebSocketManager {
         }, this.HEARTBEAT_INTERVAL);
     }
 
-    private async handleConnection(ws: WebSocket, req: IncomingMessage): Promise<void> {
+    private async handleTwilio(ws: WebSocket, req: IncomingMessage): Promise<void> {
         if (this.connections.size >= this.MAX_CONNECTIONS) {
-            ws.close(1008, 'Server is overloaded');
-            return;
+            return ws.close(1008, 'Server is overloaded');
         }
 
         const connectionId = crypto.randomUUID();
         let streamSid: string | undefined;
         let flow: MagmaFlow | undefined;
-        let currentBuffer = '';
+
+        console.log(chalk.dim(`[twilio] Connection established: ${connectionId}`));
 
         const setupFlow = () => {
             const voiceId = this.config.voice?.elevenlabsVoiceId || 'cjVigY5qzO86Huf0OWal';
 
-            const tts = new ElevenLabsTTS({
-                model: 'eleven_flash_v2_5',
-                voice: voiceId,
-                config: {
-                    voice_settings: {
-                        use_speaker_boost: true,
-                        similarity_boost: 0.75,
-                        stability: 0.75,
-                    },
-                },
-            });
-
-            const stt = new DeepgramSTT({
-                model: DeepgramModel.NOVA_3,
-            });
-
             flow = new MagmaFlow({
-                stt,
-                tts,
-                config: {
-                    pauseDurationMs: 250,
-                    sentenceChunkLength: 30,
-                },
-                inputFormat: {
-                    encoding: 'mulaw',
-                    sampleRate: 8000,
-                    channels: 1,
-                },
-                outputFormat: {
-                    encoding: 'mulaw',
-                    sampleRate: 8000,
-                    channels: 1,
-                },
+                stt: new DeepgramSTT({ model: DeepgramModel.NOVA_3 }),
+                tts: new ElevenLabsTTS({
+                    model: 'eleven_flash_v2_5',
+                    voice: voiceId,
+                    config: {
+                        voice_settings: {
+                            use_speaker_boost: true,
+                            similarity_boost: 0.75,
+                            stability: 0.75,
+                        },
+                    },
+                }),
+                config: { pauseDurationMs: 250, sentenceChunkLength: 30 },
+                inputFormat: { encoding: 'mulaw', sampleRate: 8000, channels: 1 },
+                outputFormat: { encoding: 'mulaw', sampleRate: 8000, channels: 1 },
                 onSpeechDetected: () => {
+                    flow?.interruptTTS();
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ event: 'clear', streamSid }));
                     }
-                    flow?.interruptTTS();
                 },
                 onTranscription: async (output: MagmaFlowSTTOutput) => {
                     if (!output.text) return;
-
-                    console.log(chalk.cyan(`[voice] User transcription received`));
+                    console.log(chalk.cyan(`[twilio] Transcription received`));
 
                     flow?.interruptTTS();
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ event: 'clear', streamSid }));
                     }
 
-                    currentBuffer = output.text;
                     this.agent.setMedium('voice');
 
                     let toolMessageSent = false;
@@ -157,14 +157,9 @@ export class VoiceWebSocketManager {
                         }
                     });
 
-                    const response = await this.agent.chat(currentBuffer, (chunk) => {
-                        flow?.inputText(chunk);
-                    });
+                    await this.agent.chat(output.text, (chunk) => flow?.inputText(chunk));
                     flow?.inputText(null as unknown as string);
-
                     this.agent.setActivityCallback(undefined);
-
-                    console.log(chalk.magenta(`[voice] Response sent`));
                 },
                 onAudioOutput: (buffer: Buffer) => {
                     if (ws.readyState === WebSocket.OPEN) {
@@ -181,53 +176,37 @@ export class VoiceWebSocketManager {
 
             const conn = this.connections.get(connectionId);
             if (conn) conn.flow = flow;
-
-            console.log(chalk.dim('[voice] MagmaFlow setup complete'));
         };
 
         ws.on('message', async (data) => {
             try {
                 const parsed = JSON.parse(data.toString());
-                const event = parsed.event as string;
 
-                switch (event) {
+                switch (parsed.event) {
                     case 'start':
                         streamSid = parsed.start?.streamSid;
-                        console.log(chalk.dim(`[voice] Stream started: ${streamSid}`));
+                        console.log(chalk.dim(`[twilio] Stream started: ${streamSid}`));
                         break;
-
-                    case 'media': {
-                        const payload = Buffer.from(parsed.media.payload, 'base64');
-                        flow?.inputAudio(payload);
+                    case 'media':
+                        flow?.inputAudio(Buffer.from(parsed.media.payload, 'base64'));
                         break;
-                    }
-
                     case 'stop':
                         flow?.kill();
                         break;
-
                     case 'connected':
                         if (!flow) setupFlow();
-
                         flow?.inputText("Hey, this is Nero. What's on your mind?");
                         flow?.inputText(null as unknown as string);
                         break;
-
-                    default:
-                        if (event) console.log(chalk.dim(`[voice] Unknown event: ${event}`));
                 }
-            } catch (error) {
-                const err = error as Error;
-                console.error(chalk.red(`[voice] Parse error: ${err.message}`));
+            } catch (err) {
+                console.error(chalk.red(`[twilio] Parse error: ${(err as Error).message}`));
             }
         });
 
-        ws.on('close', async (code, reason) => {
-            console.log(chalk.dim(`[voice] Connection closed: ${connectionId} (${code})`));
-            const conn = this.connections.get(connectionId);
-            if (conn) {
-                conn.flow?.kill();
-            }
+        ws.on('close', () => {
+            console.log(chalk.dim(`[twilio] Connection closed: ${connectionId}`));
+            this.connections.get(connectionId)?.flow?.kill();
             this.connections.delete(connectionId);
         });
 
@@ -236,47 +215,156 @@ export class VoiceWebSocketManager {
             if (conn) conn.active = true;
         });
 
-        ws.on('error', (error) => {
-            console.error(chalk.red(`[voice] WS error: ${error.message}`));
+        ws.on('error', (err) => console.error(chalk.red(`[twilio] Error: ${err.message}`)));
+
+        this.connections.set(connectionId, { id: connectionId, ws, flow, active: true });
+    }
+
+    private async handleWebVoice(ws: WebSocket, req: IncomingMessage): Promise<void> {
+        if (this.connections.size >= this.MAX_CONNECTIONS) {
+            return ws.close(1008, 'Server is overloaded');
+        }
+
+        const connectionId = crypto.randomUUID();
+        let flow: MagmaFlow | undefined;
+
+        console.log(chalk.dim(`[web-voice] Connection established: ${connectionId}`));
+
+        const setupFlow = () => {
+            const voiceId = this.config.voice?.elevenlabsVoiceId || 'cjVigY5qzO86Huf0OWal';
+
+            flow = new MagmaFlow({
+                stt: new DeepgramSTT({ model: DeepgramModel.NOVA_3 }),
+                tts: new ElevenLabsTTS({
+                    model: 'eleven_flash_v2_5',
+                    voice: voiceId,
+                    config: {
+                        voice_settings: {
+                            use_speaker_boost: true,
+                            similarity_boost: 0.75,
+                            stability: 0.75,
+                        },
+                    },
+                }),
+                config: { pauseDurationMs: 250, sentenceChunkLength: 30 },
+                inputFormat: { encoding: 'pcm', sampleRate: 48000, channels: 1 },
+                outputFormat: { encoding: 'pcm', sampleRate: 48000, channels: 1 },
+                onSpeechDetected: () => {
+                    flow?.interruptTTS();
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'clear' }));
+                    }
+                },
+                onTranscription: async (output: MagmaFlowSTTOutput) => {
+                    if (!output.text) return;
+                    console.log(chalk.cyan(`[web-voice] Transcription: "${output.text}"`));
+
+                    flow?.interruptTTS();
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'clear' }));
+                        ws.send(
+                            JSON.stringify({ type: 'transcript', data: { text: output.text } }),
+                        );
+                    }
+
+                    this.agent.setMedium('voice');
+
+                    let toolMessageSent = false;
+                    this.agent.setActivityCallback((activity) => {
+                        logger.tool(activity);
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ type: 'activity', data: activity }));
+                        }
+                        if (activity.status === 'running' && !toolMessageSent) {
+                            toolMessageSent = true;
+                            flow?.inputText('Hold on, let me check that.');
+                            flow?.inputText(null as unknown as string);
+                        }
+                    });
+
+                    await this.agent.chat(output.text, (chunk) => flow?.inputText(chunk));
+                    flow?.inputText(null as unknown as string);
+                    this.agent.setActivityCallback(undefined);
+                },
+                onAudioOutput: (buffer: Buffer) => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(
+                            JSON.stringify({
+                                type: 'audio',
+                                data: { audio: buffer.toString('base64') },
+                            }),
+                        );
+                    }
+                },
+            });
+
+            const conn = this.connections.get(connectionId);
+            if (conn) conn.flow = flow;
+        };
+
+        ws.on('message', async (data) => {
+            try {
+                const parsed = JSON.parse(data.toString());
+
+                switch (parsed.type) {
+                    case 'medium':
+                        if (!flow) {
+                            setupFlow();
+                            flow?.inputText("Hey, this is Nero. What's on your mind?");
+                            flow?.inputText(null as unknown as string);
+                        }
+                        console.log(chalk.dim(`[web-voice] Flow initialized`));
+                        break;
+                    case 'audio':
+                        flow?.inputAudio(Buffer.from(parsed.data.audio, 'base64'));
+                        break;
+                }
+            } catch (err) {
+                console.error(chalk.red(`[web-voice] Parse error: ${(err as Error).message}`));
+            }
         });
 
-        this.connections.set(connectionId, {
-            id: connectionId,
-            ws,
-            flow,
-            active: true,
-            streamSid,
+        ws.on('close', () => {
+            console.log(chalk.dim(`[web-voice] Connection closed: ${connectionId}`));
+            this.connections.get(connectionId)?.flow?.kill();
+            this.connections.delete(connectionId);
         });
 
-        console.log(chalk.dim(`[voice] Connection established: ${connectionId}`));
+        ws.on('pong', () => {
+            const conn = this.connections.get(connectionId);
+            if (conn) conn.active = true;
+        });
+
+        ws.on('error', (err) => console.error(chalk.red(`[web-voice] Error: ${err.message}`)));
+
+        this.connections.set(connectionId, { id: connectionId, ws, flow, active: true });
     }
 
     async shutdown(): Promise<void> {
-        console.log(chalk.dim('[ws] Shutting down...'));
+        console.log(chalk.dim('[voice] Shutting down...'));
 
-        if (this.heartbeatTimer) {
-            clearInterval(this.heartbeatTimer);
-        }
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
 
         for (const [id, conn] of this.connections) {
             try {
                 conn.flow?.kill();
                 conn.ws.close(1001, 'Server shutting down');
-            } catch (error) {
-                const err = error as Error;
-                console.error(chalk.red(`[ws] Error closing ${id}: ${err.message}`));
+            } catch (err) {
+                console.error(chalk.red(`[voice] Error closing ${id}: ${(err as Error).message}`));
             }
         }
 
         this.connections.clear();
 
-        await new Promise<void>((resolve, reject) => {
-            this.wss.close((error) => {
-                if (error) reject(error);
-                else resolve();
-            });
-        });
+        await Promise.all([
+            new Promise<void>((resolve, reject) => {
+                this.twilioWss.close((err) => (err ? reject(err) : resolve()));
+            }),
+            new Promise<void>((resolve, reject) => {
+                this.webWss.close((err) => (err ? reject(err) : resolve()));
+            }),
+        ]);
 
-        console.log(chalk.dim('[ws] Shutdown complete'));
+        console.log(chalk.dim('[voice] Shutdown complete'));
     }
 }

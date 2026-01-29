@@ -42,6 +42,7 @@ export interface LoadedMessage {
     role: 'user' | 'assistant';
     content: string;
     created_at: string;
+    medium?: 'cli' | 'api' | 'voice' | 'sms' | 'slack';
     isHistory?: boolean;
 }
 
@@ -118,7 +119,7 @@ export class Nero extends MagmaAgent {
                 });
 
                 const messagesResult = await db.query(
-                    `SELECT role, content, created_at FROM messages
+                    `SELECT role, content, created_at, medium FROM messages
                      WHERE created_at > $1 AND compacted = FALSE
                      ORDER BY created_at ASC LIMIT $2`,
                     [summary.covers_until, limit],
@@ -128,6 +129,7 @@ export class Nero extends MagmaAgent {
                     role: row.role,
                     content: row.content,
                     created_at: row.created_at,
+                    medium: row.medium,
                     isHistory: true,
                 }));
 
@@ -142,7 +144,7 @@ export class Nero extends MagmaAgent {
                 );
             } else {
                 const messagesResult = await db.query(
-                    `SELECT role, content, created_at FROM messages
+                    `SELECT role, content, created_at, medium FROM messages
                      ORDER BY created_at DESC LIMIT $1`,
                     [limit],
                 );
@@ -152,6 +154,7 @@ export class Nero extends MagmaAgent {
                     role: row.role,
                     content: row.content,
                     created_at: row.created_at,
+                    medium: row.medium,
                     isHistory: true,
                 }));
 
@@ -267,12 +270,12 @@ Be thorough - this summary will be the primary context for future conversations.
     }
 
     async getMessageHistory(
-        limit = 20,
-    ): Promise<Array<{ role: string; content: string; created_at: string }>> {
+        limit = 50,
+    ): Promise<Array<{ role: string; content: string; created_at: string; medium?: string }>> {
         if (!isDbConnected()) return [];
 
         const result = await db.query(
-            `SELECT role, content, created_at FROM messages
+            `SELECT role, content, created_at, medium FROM messages
              ORDER BY created_at DESC LIMIT $1`,
             [limit],
         );

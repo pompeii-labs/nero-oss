@@ -1,4 +1,4 @@
-import { Router, Request, Response, RequestHandler } from 'express';
+import { Router, Request, Response } from 'express';
 import path from 'path';
 import crypto from 'crypto';
 import { Nero, ToolActivity } from '../../agent/nero.js';
@@ -37,11 +37,9 @@ async function registerWorkspace(cwdPath: string, detectedFrom: string): Promise
     ]);
 }
 
-export function createChatRouter(agent: Nero, authMiddleware: RequestHandler) {
+export function createChatRouter(agent: Nero) {
     const router = Router();
     const logger = new Logger('Chat');
-
-    router.use(authMiddleware);
 
     router.post('/permission/:id', (req: Request, res: Response) => {
         const id = req.params.id as string;
@@ -70,6 +68,8 @@ export function createChatRouter(agent: Nero, authMiddleware: RequestHandler) {
         }
 
         logger.info(`Received message via ${medium}${cwd ? ` from ${cwd}` : ''}`);
+
+        agent.setMedium(medium as 'cli' | 'api' | 'voice' | 'sms' | 'slack');
 
         if (cwd) {
             try {
@@ -138,9 +138,12 @@ export function createChatRouter(agent: Nero, authMiddleware: RequestHandler) {
         });
 
         try {
-            const response = await agent.chat(message, (chunk) => {
-                sendSSE({ type: 'chunk', data: chunk });
-            });
+            const streamingEnabled = agent.config.settings.streaming;
+            const onChunk = streamingEnabled
+                ? (chunk: string) => sendSSE({ type: 'chunk', data: chunk })
+                : undefined;
+
+            const response = await agent.chat(message, onChunk);
 
             sendSSE({ type: 'done', data: { content: response.content } });
 
@@ -181,6 +184,18 @@ export function createChatRouter(agent: Nero, authMiddleware: RequestHandler) {
         } catch (error) {
             const err = error as Error;
             logger.error(`Compaction failed: ${err.message}`);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/clear', async (req: Request, res: Response) => {
+        try {
+            logger.info('Clearing conversation history');
+            agent.clearHistory();
+            res.json({ success: true });
+        } catch (error) {
+            const err = error as Error;
+            logger.error(`Clear failed: ${err.message}`);
             res.status(500).json({ error: err.message });
         }
     });

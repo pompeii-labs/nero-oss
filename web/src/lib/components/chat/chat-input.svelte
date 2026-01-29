@@ -1,0 +1,159 @@
+<script lang="ts">
+    import { Textarea } from '$lib/components/ui/textarea';
+    import { Button } from '$lib/components/ui/button';
+    import CommandPalette from './command-palette.svelte';
+    import { getCommandSuggestions, isSlashCommand, type SlashCommand } from '$lib/commands';
+    import ArrowUp from '@lucide/svelte/icons/arrow-up';
+    import Loader2 from '@lucide/svelte/icons/loader-2';
+
+    type Props = {
+        onSubmit: (message: string) => void;
+        onCommand?: (command: string) => void;
+        disabled?: boolean;
+        loading?: boolean;
+    };
+
+    let { onSubmit, onCommand, disabled = false, loading = false }: Props = $props();
+
+    let message = $state('');
+    let textareaRef: HTMLTextAreaElement | null = $state(null);
+    let containerRef: HTMLDivElement | null = $state(null);
+    let suggestions: SlashCommand[] = $state([]);
+    let selectedIndex = $state(0);
+    let isFocused = $state(false);
+
+    const MIN_HEIGHT = 56;
+    const MAX_HEIGHT = 200;
+
+    function updateSuggestions() {
+        if (isSlashCommand(message)) {
+            const partial = message.slice(1).split(/\s+/)[0] || '';
+            if (!message.includes(' ')) {
+                suggestions = getCommandSuggestions(partial);
+                selectedIndex = 0;
+            } else {
+                suggestions = [];
+            }
+        } else {
+            suggestions = [];
+        }
+    }
+
+    function handleSubmit() {
+        if (!message.trim() || disabled || loading) return;
+
+        if (isSlashCommand(message) && onCommand) {
+            onCommand(message.trim());
+        } else {
+            onSubmit(message.trim());
+        }
+        message = '';
+        suggestions = [];
+        textareaRef?.focus();
+    }
+
+    function selectCommand(command: SlashCommand) {
+        message = `/${command.name} `;
+        suggestions = [];
+        textareaRef?.focus();
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+        if (suggestions.length > 0) {
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                selectedIndex = (selectedIndex + 1) % suggestions.length;
+                return;
+            }
+            if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                selectedIndex = (selectedIndex - 1 + suggestions.length) % suggestions.length;
+                return;
+            }
+            if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
+                event.preventDefault();
+                selectCommand(suggestions[selectedIndex]);
+                return;
+            }
+            if (event.key === 'Escape') {
+                suggestions = [];
+                return;
+            }
+        }
+
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            handleSubmit();
+        }
+    }
+
+    function handleInput() {
+        updateSuggestions();
+    }
+
+    $effect(() => {
+        message;
+        if (!textareaRef || !containerRef) return;
+
+        textareaRef.style.height = 'auto';
+        const scrollHeight = textareaRef.scrollHeight;
+        const newHeight = Math.min(Math.max(scrollHeight, MIN_HEIGHT), MAX_HEIGHT);
+        containerRef.style.height = `${newHeight}px`;
+        textareaRef.style.height = '100%';
+    });
+</script>
+
+<div class="floating-input p-4 pt-6">
+    <div class="mx-auto max-w-3xl">
+        <div
+            bind:this={containerRef}
+            class="relative input-glow rounded-2xl {isFocused ? 'ring-1 ring-primary/30' : ''}"
+            style="height: {MIN_HEIGHT}px"
+        >
+            <CommandPalette
+                commands={suggestions}
+                {selectedIndex}
+                onSelect={selectCommand}
+            />
+
+            <Textarea
+                bind:ref={textareaRef}
+                bind:value={message}
+                placeholder="Ask Nero anything..."
+                class="h-full w-full resize-none bg-transparent border-0 pr-14 pl-4 pt-4 font-mono text-sm placeholder:text-muted-foreground/40 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                onkeydown={handleKeyDown}
+                oninput={handleInput}
+                onfocus={() => isFocused = true}
+                onblur={() => isFocused = false}
+                {disabled}
+            />
+
+            <div class="absolute bottom-3 right-3">
+                <button
+                    type="button"
+                    onclick={handleSubmit}
+                    disabled={!message.trim() || disabled || loading}
+                    class="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground transition-all hover:from-primary/90 hover:to-primary/70 disabled:opacity-40 disabled:cursor-not-allowed group"
+                >
+                    <div class="absolute inset-0 rounded-xl bg-primary/30 blur-lg opacity-0 group-hover:opacity-60 transition-opacity"></div>
+                    {#if loading}
+                        <Loader2 class="relative h-4 w-4 animate-spin" />
+                    {:else}
+                        <ArrowUp class="relative h-4 w-4" />
+                    {/if}
+                </button>
+            </div>
+        </div>
+
+        <div class="mt-3 flex items-center justify-center gap-4 text-[11px] text-muted-foreground/50">
+            <span class="flex items-center gap-1.5">
+                <kbd class="px-1.5 py-0.5 rounded bg-muted/30 border border-border/50 font-mono text-[10px]">Enter</kbd>
+                <span>to send</span>
+            </span>
+            <span class="flex items-center gap-1.5">
+                <kbd class="px-1.5 py-0.5 rounded bg-muted/30 border border-border/50 font-mono text-[10px]">/</kbd>
+                <span>for commands</span>
+            </span>
+        </div>
+    </div>
+</div>
