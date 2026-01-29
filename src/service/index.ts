@@ -12,6 +12,8 @@ import { NeroConfig } from '../config.js';
 import { createHealthRouter } from './routes/health.js';
 import { createChatRouter } from './routes/chat.js';
 import { createWebRouter } from './routes/web.js';
+import { createAdminRouter } from './routes/admin.js';
+import { isDbConnected } from '../db/index.js';
 import { handleSms } from '../sms/handler.js';
 import { handleSlack } from '../slack/handler.js';
 import { handleIncomingCall } from '../voice/twilio.js';
@@ -79,6 +81,7 @@ export class NeroService {
                 features: {
                     voice: this.config.voice?.enabled || false,
                     sms: this.config.sms?.enabled || false,
+                    database: isDbConnected(),
                 },
             });
         });
@@ -122,9 +125,18 @@ export class NeroService {
 
         this.app.use(authMiddleware);
 
-        this.app.use(createHealthRouter(this.agent));
-        this.app.use(createChatRouter(this.agent));
-        this.app.use(createWebRouter(this.agent));
+        this.app.use('/api', createHealthRouter(this.agent));
+        this.app.use('/api', createChatRouter(this.agent));
+        this.app.use('/api', createWebRouter(this.agent));
+
+        this.app.use((req: Request, res: Response, next) => {
+            if (req.path.startsWith('/api/admin') && !this.isLocalRequest(req)) {
+                res.status(403).json({ error: 'Admin routes are localhost only' });
+                return;
+            }
+            next();
+        });
+        this.app.use('/api', createAdminRouter());
 
         if (this.config.sms?.enabled) {
             this.app.post('/webhook/sms', async (req, res) => {
@@ -184,6 +196,10 @@ export class NeroService {
     private setupSpaFallback(): void {
         if (this.webDistPath) {
             this.app.get('*', (req: Request, res: Response) => {
+                if (!this.isLocalRequest(req)) {
+                    res.status(404).json({ error: 'Not found' });
+                    return;
+                }
                 res.sendFile(join(this.webDistPath!, 'index.html'));
             });
         }

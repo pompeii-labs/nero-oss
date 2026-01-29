@@ -25,7 +25,7 @@ export type NeroConfig = {
 
 export async function getSettings(): Promise<ServerResponse<NeroConfig>> {
     try {
-        const response = await fetch(getServerUrl('/settings'));
+        const response = await fetch(getServerUrl('/api/settings'));
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         return buildServerResponse({ data });
@@ -38,7 +38,7 @@ export async function updateSettings(
     settings: Partial<NeroSettings>,
 ): Promise<ServerResponse<NeroConfig>> {
     try {
-        const response = await fetch(getServerUrl('/settings'), {
+        const response = await fetch(getServerUrl('/api/settings'), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ settings }),
@@ -53,7 +53,7 @@ export async function updateSettings(
 
 export async function updateLicenseKey(licenseKey: string | null): Promise<ServerResponse<void>> {
     try {
-        const response = await fetch(getServerUrl('/settings/license'), {
+        const response = await fetch(getServerUrl('/api/settings/license'), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ licenseKey }),
@@ -67,7 +67,7 @@ export async function updateLicenseKey(licenseKey: string | null): Promise<Serve
 
 export async function getAllowedTools(): Promise<ServerResponse<string[]>> {
     try {
-        const response = await fetch(getServerUrl('/settings/allowed-tools'));
+        const response = await fetch(getServerUrl('/api/settings/allowed-tools'));
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         return buildServerResponse({ data: data.tools });
@@ -79,7 +79,7 @@ export async function getAllowedTools(): Promise<ServerResponse<string[]>> {
 export async function revokeAllowedTool(tool: string): Promise<ServerResponse<void>> {
     try {
         const response = await fetch(
-            getServerUrl(`/settings/allowed-tools/${encodeURIComponent(tool)}`),
+            getServerUrl(`/api/settings/allowed-tools/${encodeURIComponent(tool)}`),
             {
                 method: 'DELETE',
             },
@@ -94,7 +94,7 @@ export async function revokeAllowedTool(tool: string): Promise<ServerResponse<vo
 export async function validateModel(modelId: string): Promise<boolean> {
     try {
         const response = await fetch(
-            getServerUrl(`/models/validate/${encodeURIComponent(modelId)}`),
+            getServerUrl(`/api/models/validate/${encodeURIComponent(modelId)}`),
         );
         if (!response.ok) return true;
         const data = await response.json();

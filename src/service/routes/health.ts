@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
+import semver from 'semver';
 import { Nero } from '../../agent/nero.js';
 import { loadConfig } from '../../config.js';
 import { Logger } from '../../util/logger.js';
+import { VERSION } from '../../util/version.js';
 
 export function createHealthRouter(agent: Nero) {
     const router = Router();
@@ -65,6 +67,32 @@ export function createHealthRouter(agent: Nero) {
             const err = error as Error;
             logger.error(`Reload failed: ${err.message}`);
             res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.get('/update-check', async (req: Request, res: Response) => {
+        try {
+            const response = await fetch(
+                'https://api.github.com/repos/pompeii-labs/nero-oss/releases/latest',
+                { headers: { 'User-Agent': 'Nero' } },
+            );
+
+            if (!response.ok) {
+                res.json({ current: VERSION, latest: null, updateAvailable: false });
+                return;
+            }
+
+            const data = await response.json();
+            const latest = data.tag_name?.replace(/^v/, '') || null;
+            const updateAvailable = latest ? semver.gt(latest, VERSION) : false;
+
+            res.json({
+                current: VERSION,
+                latest,
+                updateAvailable,
+            });
+        } catch {
+            res.json({ current: VERSION, latest: null, updateAvailable: false });
         }
     });
 

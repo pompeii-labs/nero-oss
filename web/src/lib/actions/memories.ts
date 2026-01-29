@@ -8,7 +8,7 @@ export type Memory = {
 
 export async function getMemories(): Promise<ServerResponse<Memory[]>> {
     try {
-        const response = await fetch(getServerUrl('/memories'));
+        const response = await fetch(getServerUrl('/api/memories'));
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         return buildServerResponse({ data });
@@ -19,7 +19,7 @@ export async function getMemories(): Promise<ServerResponse<Memory[]>> {
 
 export async function createMemory(body: string): Promise<ServerResponse<Memory>> {
     try {
-        const response = await fetch(getServerUrl('/memories'), {
+        const response = await fetch(getServerUrl('/api/memories'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ body }),
@@ -34,7 +34,7 @@ export async function createMemory(body: string): Promise<ServerResponse<Memory>
 
 export async function deleteMemory(id: number): Promise<ServerResponse<void>> {
     try {
-        const response = await fetch(getServerUrl(`/memories/${id}`), {
+        const response = await fetch(getServerUrl(`/api/memories/${id}`), {
             method: 'DELETE',
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);

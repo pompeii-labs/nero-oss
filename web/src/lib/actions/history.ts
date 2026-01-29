@@ -21,7 +21,7 @@ type HistoryResponse = {
 
 export async function getConversations(): Promise<{ success: boolean; data: Conversation[] }> {
     try {
-        const url = getServerUrl('/history');
+        const url = getServerUrl('/api/history');
         const response = await fetch(url);
 
         if (!response.ok) {

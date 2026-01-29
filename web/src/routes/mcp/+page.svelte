@@ -312,9 +312,9 @@
                                             onclick={() => handleToggleServer(name, config.disabled || false)}
                                         >
                                             {#if config.disabled}
-                                                <Power class="h-4 w-4 text-green-400" />
-                                            {:else}
                                                 <PowerOff class="h-4 w-4 text-muted-foreground" />
+                                            {:else}
+                                                <Power class="h-4 w-4 text-green-400" />
                                             {/if}
                                         </Button>
                                         <Button

@@ -65,7 +65,7 @@ export class NeroClient {
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
         try {
-            const response = await fetch(`${this.baseUrl}/chat`, {
+            const response = await fetch(`${this.baseUrl}/api/chat`, {
                 method: 'POST',
                 headers: this.getHeaders({
                     'Content-Type': 'application/json',
@@ -161,7 +161,7 @@ export class NeroClient {
         percentage: number;
         mcpTools: string[];
     }> {
-        const response = await fetch(`${this.baseUrl}/context`, {
+        const response = await fetch(`${this.baseUrl}/api/context`, {
             headers: this.getHeaders(),
         });
         if (!response.ok) {
@@ -174,7 +174,7 @@ export class NeroClient {
         messages: Array<{ role: 'user' | 'assistant'; content: string; created_at: string }>;
         hasSummary: boolean;
     }> {
-        const response = await fetch(`${this.baseUrl}/history`, {
+        const response = await fetch(`${this.baseUrl}/api/history`, {
             headers: this.getHeaders(),
         });
         if (!response.ok) {
@@ -184,7 +184,7 @@ export class NeroClient {
     }
 
     async compact(): Promise<{ success: boolean; summary: string }> {
-        const response = await fetch(`${this.baseUrl}/compact`, {
+        const response = await fetch(`${this.baseUrl}/api/compact`, {
             method: 'POST',
             headers: this.getHeaders(),
         });
@@ -196,7 +196,7 @@ export class NeroClient {
     }
 
     async reload(): Promise<{ success: boolean; mcpTools: number }> {
-        const response = await fetch(`${this.baseUrl}/reload`, {
+        const response = await fetch(`${this.baseUrl}/api/reload`, {
             method: 'POST',
             headers: this.getHeaders(),
         });
@@ -208,7 +208,7 @@ export class NeroClient {
     }
 
     async respondToPermission(id: string, approved: boolean): Promise<void> {
-        const response = await fetch(`${this.baseUrl}/permission/${id}`, {
+        const response = await fetch(`${this.baseUrl}/api/permission/${id}`, {
             method: 'POST',
             headers: this.getHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ approved }),
@@ -223,7 +223,7 @@ export class NeroClient {
         onActivity?: (activity: ActivityEvent) => void,
         onStatus?: (status: string) => void,
     ): Promise<{ thought: string | null; urgent: boolean }> {
-        const response = await fetch(`${this.baseUrl}/think`, {
+        const response = await fetch(`${this.baseUrl}/api/think`, {
             method: 'POST',
             headers: this.getHeaders({ Accept: 'text/event-stream' }),
         });

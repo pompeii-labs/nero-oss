@@ -3,16 +3,23 @@
     import {
         getSettings,
         updateSettings,
-        updateLicenseKey,
         getAllowedTools,
         revokeAllowedTool,
         type NeroConfig
     } from '$lib/actions/settings';
-    import { getServerInfo, type ServerInfo } from '$lib/actions/health';
+    import {
+        getServerInfo,
+        checkForUpdates,
+        getEnvVars,
+        updateEnvVars,
+        restartService,
+        type ServerInfo,
+        type UpdateInfo,
+        type EnvInfo
+    } from '$lib/actions/health';
     import { Button } from '$lib/components/ui/button';
     import { Input } from '$lib/components/ui/input';
     import { toast } from 'svelte-sonner';
-    import Key from '@lucide/svelte/icons/key';
     import Server from '@lucide/svelte/icons/server';
     import Shield from '@lucide/svelte/icons/shield';
     import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -23,25 +30,40 @@
     import Zap from '@lucide/svelte/icons/zap';
     import Activity from '@lucide/svelte/icons/activity';
     import Copy from '@lucide/svelte/icons/copy';
+    import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+    import Terminal from '@lucide/svelte/icons/terminal';
+    import ArrowUp from '@lucide/svelte/icons/arrow-up';
+    import Save from '@lucide/svelte/icons/save';
     import { cn } from '$lib/utils';
 
-    async function copyTunnelUrl() {
-        if (config?.tunnelUrl) {
-            await navigator.clipboard.writeText(config.tunnelUrl);
-            toast.success('Tunnel URL copied');
-        }
+    const envVarsMeta = [
+        { name: 'OPENROUTER_API_KEY', required: true, description: 'OpenRouter API key for LLM access' },
+        { name: 'DATABASE_URL', required: false, description: 'PostgreSQL connection string' },
+        { name: 'NERO_LICENSE_KEY', required: false, description: 'Pompeii Labs license for voice/SMS' },
+        { name: 'ELEVENLABS_API_KEY', required: false, description: 'ElevenLabs API key for TTS' },
+        { name: 'DEEPGRAM_API_KEY', required: false, description: 'Deepgram API key for STT' },
+        { name: 'TAVILY_API_KEY', required: false, description: 'Tavily API key for web search' },
+    ];
+
+    async function copyToClipboard(text: string) {
+        await navigator.clipboard.writeText(text);
+        toast.success('Copied to clipboard');
     }
 
     let config: NeroConfig | null = $state(null);
     let serverInfo: ServerInfo | null = $state(null);
+    let updateInfo: UpdateInfo | null = $state(null);
+    let envInfo: EnvInfo | null = $state(null);
     let allowedTools: string[] = $state([]);
     let loading = $state(true);
 
-    let licenseKey = $state('');
-    let savingLicense = $state(false);
-
     let historyLimit = $state(20);
     let savingSettings = $state(false);
+
+    let envValues: Record<string, string> = $state({});
+    let savingEnv = $state(false);
+    let restarting = $state(false);
+    let envDirty = $state(false);
 
     onMount(async () => {
         await loadData();
@@ -50,15 +72,16 @@
     async function loadData() {
         loading = true;
 
-        const [configRes, serverRes, toolsRes] = await Promise.all([
+        const [configRes, serverRes, toolsRes, updateRes, envRes] = await Promise.all([
             getSettings(),
             getServerInfo(),
-            getAllowedTools()
+            getAllowedTools(),
+            checkForUpdates(),
+            getEnvVars()
         ]);
 
         if (configRes.success) {
             config = configRes.data;
-            licenseKey = config.licenseKey || '';
             historyLimit = config.settings.historyLimit;
         }
 
@@ -70,18 +93,18 @@
             allowedTools = toolsRes.data;
         }
 
-        loading = false;
-    }
-
-    async function handleSaveLicense() {
-        savingLicense = true;
-        const response = await updateLicenseKey(licenseKey.trim() || null);
-        if (response.success) {
-            toast.success('License key updated');
-        } else {
-            toast.error('Failed to update license key');
+        if (updateRes.success) {
+            updateInfo = updateRes.data;
         }
-        savingLicense = false;
+
+        if (envRes.success) {
+            envInfo = envRes.data;
+            for (const key of envVarsMeta.map(e => e.name)) {
+                envValues[key] = '';
+            }
+        }
+
+        loading = false;
     }
 
     async function handleSaveSettings() {
@@ -102,6 +125,44 @@
             toast.success('Tool permission revoked');
         } else {
             toast.error('Failed to revoke tool');
+        }
+    }
+
+    function handleEnvChange(key: string, value: string) {
+        envValues[key] = value;
+        envDirty = true;
+    }
+
+    async function handleSaveEnv() {
+        savingEnv = true;
+        const toSave: Record<string, string> = {};
+        for (const [key, value] of Object.entries(envValues)) {
+            if (value.trim() !== '') {
+                toSave[key] = value;
+            }
+        }
+        const response = await updateEnvVars(toSave);
+        if (response.success) {
+            toast.success('Environment saved. Restart to apply changes.');
+            envDirty = false;
+            await loadData();
+        } else {
+            toast.error('Failed to save environment');
+        }
+        savingEnv = false;
+    }
+
+    async function handleRestart() {
+        restarting = true;
+        const response = await restartService();
+        if (response.success) {
+            toast.success('Restarting Nero...');
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        } else {
+            toast.error('Failed to restart');
+            restarting = false;
         }
     }
 </script>
@@ -127,6 +188,39 @@
                     <p class="mt-4 text-sm text-muted-foreground">Loading settings...</p>
                 </div>
             {:else}
+                {#if updateInfo?.updateAvailable}
+                    <div
+                        class="rounded-xl border border-primary/50 bg-gradient-to-br from-primary/10 to-primary/5 overflow-hidden opacity-0 animate-[floatUp_0.4s_ease-out_forwards]"
+                    >
+                        <div class="p-4">
+                            <div class="flex items-center gap-3">
+                                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary/30 to-primary/10 border border-primary/30">
+                                    <ArrowUp class="h-5 w-5 text-primary" />
+                                </div>
+                                <div class="flex-1">
+                                    <h2 class="font-medium text-foreground">Update Available</h2>
+                                    <p class="text-xs text-muted-foreground">
+                                        v{updateInfo.latest} is available (you have v{updateInfo.current})
+                                    </p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <code class="px-3 py-1.5 rounded-md bg-background border border-border font-mono text-sm text-foreground">
+                                        nero update
+                                    </code>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        class="h-8 w-8 shrink-0"
+                                        onclick={() => copyToClipboard('nero update')}
+                                    >
+                                        <Copy class="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {/if}
+
                 <div
                     class="rounded-xl border border-border/50 bg-gradient-to-br from-card/80 to-card/40 overflow-hidden opacity-0 animate-[floatUp_0.4s_ease-out_forwards]"
                     style="animation-delay: 0ms"
@@ -192,45 +286,67 @@
                     style="animation-delay: 50ms"
                 >
                     <div class="p-4 border-b border-border/30">
-                        <div class="flex items-center gap-3">
-                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-500/5 border border-amber-500/20">
-                                <Key class="h-5 w-5 text-amber-400" />
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 border border-cyan-500/20">
+                                    <Terminal class="h-5 w-5 text-cyan-400" />
+                                </div>
+                                <div>
+                                    <h2 class="font-medium text-foreground">Environment Variables</h2>
+                                    <p class="text-xs text-muted-foreground">
+                                        {#if envInfo?.path}
+                                            Stored in <code class="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">{envInfo.path}</code>
+                                        {:else}
+                                            API keys and configuration
+                                        {/if}
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <h2 class="font-medium text-foreground">License Key</h2>
-                                <p class="text-xs text-muted-foreground">Enables voice calls, SMS, and webhook routing</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="p-4">
-                        <div class="flex gap-2">
-                            <Input
-                                type="password"
-                                placeholder="Enter license key..."
-                                bind:value={licenseKey}
-                                class="font-mono bg-muted/50 border-border/50 focus:border-primary/50"
-                            />
-                            <Button onclick={handleSaveLicense} disabled={savingLicense} class="gap-2">
-                                {#if savingLicense}
+                            <Button onclick={handleSaveEnv} disabled={savingEnv || !envDirty} class="gap-2">
+                                {#if savingEnv}
                                     <Loader2 class="h-4 w-4 animate-spin" />
+                                {:else}
+                                    <Save class="h-4 w-4" />
                                 {/if}
                                 Save
                             </Button>
                         </div>
-                        {#if config?.tunnelUrl}
-                            <div class="mt-3 rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 flex items-center justify-between gap-2">
-                                <div class="min-w-0">
-                                    <span class="text-xs text-muted-foreground">Tunnel URL: </span>
-                                    <span class="font-mono text-xs text-primary break-all">{config.tunnelUrl}</span>
+                    </div>
+                    <div class="p-4 space-y-3">
+                        {#each envVarsMeta as env, i}
+                            <div
+                                class="rounded-lg bg-muted/30 border border-border/30 p-3 opacity-0 animate-[floatUp_0.3s_ease-out_forwards]"
+                                style="animation-delay: {i * 30}ms"
+                            >
+                                <div class="flex items-center gap-2 mb-2">
+                                    <code class="font-mono text-sm text-foreground">{env.name}</code>
+                                    {#if env.required}
+                                        <span class="rounded-full bg-red-500/20 border border-red-500/30 px-1.5 py-0.5 text-[10px] font-medium text-red-400 uppercase tracking-wide">
+                                            Required
+                                        </span>
+                                    {:else}
+                                        <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                                            Optional
+                                        </span>
+                                    {/if}
+                                    {#if envInfo?.env[env.name]?.isSet}
+                                        <Check class="h-3.5 w-3.5 text-green-400 ml-auto" />
+                                    {/if}
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    class="h-7 w-7 shrink-0 text-primary/70 hover:text-primary hover:bg-primary/10"
-                                    onclick={copyTunnelUrl}
-                                >
-                                    <Copy class="h-3.5 w-3.5" />
-                                </Button>
+                                <Input
+                                    type="password"
+                                    placeholder={envInfo?.env[env.name]?.isSet ? '••••••••  (leave blank to keep current)' : env.description}
+                                    value={envValues[env.name] || ''}
+                                    oninput={(e) => handleEnvChange(env.name, e.currentTarget.value)}
+                                    class="font-mono text-sm bg-background/50 border-border/50 focus:border-primary/50"
+                                />
+                            </div>
+                        {/each}
+                        {#if envDirty}
+                            <div class="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
+                                <p class="text-xs text-amber-400">
+                                    You have unsaved changes. Save and restart to apply.
+                                </p>
                             </div>
                         {/if}
                     </div>
@@ -239,6 +355,37 @@
                 <div
                     class="rounded-xl border border-border/50 bg-gradient-to-br from-card/80 to-card/40 overflow-hidden opacity-0 animate-[floatUp_0.4s_ease-out_forwards]"
                     style="animation-delay: 100ms"
+                >
+                    <div class="p-4 border-b border-border/30">
+                        <div class="flex items-center gap-3">
+                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-500/5 border border-blue-500/20">
+                                <Server class="h-5 w-5 text-blue-400" />
+                            </div>
+                            <div>
+                                <h2 class="font-medium text-foreground">Service Control</h2>
+                                <p class="text-xs text-muted-foreground">Restart Nero to apply configuration changes</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-4">
+                        <Button onclick={handleRestart} disabled={restarting} variant="outline" class="gap-2">
+                            {#if restarting}
+                                <Loader2 class="h-4 w-4 animate-spin" />
+                                Restarting...
+                            {:else}
+                                <RefreshCw class="h-4 w-4" />
+                                Restart Service
+                            {/if}
+                        </Button>
+                        <p class="mt-2 text-xs text-muted-foreground">
+                            Restart is required after changing environment variables.
+                        </p>
+                    </div>
+                </div>
+
+                <div
+                    class="rounded-xl border border-border/50 bg-gradient-to-br from-card/80 to-card/40 overflow-hidden opacity-0 animate-[floatUp_0.4s_ease-out_forwards]"
+                    style="animation-delay: 150ms"
                 >
                     <div class="p-4 border-b border-border/30">
                         <div class="flex items-center gap-3">
@@ -280,7 +427,7 @@
 
                 <div
                     class="rounded-xl border border-border/50 bg-gradient-to-br from-card/80 to-card/40 overflow-hidden opacity-0 animate-[floatUp_0.4s_ease-out_forwards]"
-                    style="animation-delay: 150ms"
+                    style="animation-delay: 200ms"
                 >
                     <div class="p-4 border-b border-border/30">
                         <div class="flex items-center gap-3">
@@ -307,7 +454,7 @@
                                 {#each allowedTools as tool, i}
                                     <div
                                         class="group flex items-center justify-between rounded-lg bg-muted/30 border border-border/30 px-3 py-2.5 transition-all hover:border-primary/30 hover:bg-muted/50 opacity-0 animate-[floatUp_0.3s_ease-out_forwards]"
-                                        style="animation-delay: {200 + i * 30}ms"
+                                        style="animation-delay: {250 + i * 30}ms"
                                     >
                                         <span class="font-mono text-sm text-foreground/90">{tool}</span>
                                         <Button

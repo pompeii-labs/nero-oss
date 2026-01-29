@@ -17,7 +17,7 @@ export type McpServersResponse = {
 
 export async function getMcpServers(): Promise<ServerResponse<McpServersResponse>> {
     try {
-        const response = await fetch(getServerUrl('/mcp/servers'));
+        const response = await fetch(getServerUrl('/api/mcp/servers'));
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         return buildServerResponse({ data });
@@ -31,7 +31,7 @@ export async function addMcpServer(
     config: McpServerConfig,
 ): Promise<ServerResponse<void>> {
     try {
-        const response = await fetch(getServerUrl('/mcp/servers'), {
+        const response = await fetch(getServerUrl('/api/mcp/servers'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, config }),
@@ -45,7 +45,7 @@ export async function addMcpServer(
 
 export async function removeMcpServer(name: string): Promise<ServerResponse<void>> {
     try {
-        const response = await fetch(getServerUrl(`/mcp/servers/${encodeURIComponent(name)}`), {
+        const response = await fetch(getServerUrl(`/api/mcp/servers/${encodeURIComponent(name)}`), {
             method: 'DELETE',
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -61,7 +61,7 @@ export async function toggleMcpServer(
 ): Promise<ServerResponse<void>> {
     try {
         const response = await fetch(
-            getServerUrl(`/mcp/servers/${encodeURIComponent(name)}/toggle`),
+            getServerUrl(`/api/mcp/servers/${encodeURIComponent(name)}/toggle`),
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

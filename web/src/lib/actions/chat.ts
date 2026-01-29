@@ -30,7 +30,7 @@ export async function streamChat(args: {
     callbacks: StreamCallbacks;
     signal?: AbortSignal;
 }): Promise<void> {
-    const url = getServerUrl('/chat');
+    const url = getServerUrl('/api/chat');
 
     const response = await fetch(url, {
         method: 'POST',
@@ -111,7 +111,7 @@ export async function respondToPermission(
     approved: boolean,
     alwaysAllow = false,
 ): Promise<boolean> {
-    const url = getServerUrl(`/permission/${id}`);
+    const url = getServerUrl(`/api/permission/${id}`);
 
     const response = await fetch(url, {
         method: 'POST',
@@ -123,7 +123,7 @@ export async function respondToPermission(
 }
 
 export async function addAlwaysAllowTool(tool: string): Promise<boolean> {
-    const url = getServerUrl('/permissions/allow');
+    const url = getServerUrl('/api/permissions/allow');
 
     const response = await fetch(url, {
         method: 'POST',
@@ -135,7 +135,7 @@ export async function addAlwaysAllowTool(tool: string): Promise<boolean> {
 }
 
 export async function getAllowedTools(): Promise<string[]> {
-    const url = getServerUrl('/permissions');
+    const url = getServerUrl('/api/permissions');
 
     const response = await fetch(url);
     if (!response.ok) return [];
@@ -145,7 +145,7 @@ export async function getAllowedTools(): Promise<string[]> {
 }
 
 export async function removeAllowedTool(tool: string): Promise<boolean> {
-    const url = getServerUrl(`/permissions/allow/${encodeURIComponent(tool)}`);
+    const url = getServerUrl(`/api/permissions/allow/${encodeURIComponent(tool)}`);
 
     const response = await fetch(url, { method: 'DELETE' });
 
@@ -153,7 +153,7 @@ export async function removeAllowedTool(tool: string): Promise<boolean> {
 }
 
 export async function compactContext(): Promise<{ success: boolean; summary?: string }> {
-    const url = getServerUrl('/compact');
+    const url = getServerUrl('/api/compact');
 
     const response = await fetch(url, { method: 'POST' });
 
@@ -166,7 +166,7 @@ export async function compactContext(): Promise<{ success: boolean; summary?: st
 }
 
 export async function clearHistory(): Promise<{ success: boolean }> {
-    const url = getServerUrl('/clear');
+    const url = getServerUrl('/api/clear');
 
     const response = await fetch(url, { method: 'POST' });
 
@@ -190,7 +190,7 @@ export async function streamThink(args: {
     callbacks: ThinkCallbacks;
     signal?: AbortSignal;
 }): Promise<void> {
-    const url = getServerUrl('/think');
+    const url = getServerUrl('/api/think');
 
     const response = await fetch(url, {
         method: 'POST',
