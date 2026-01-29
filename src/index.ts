@@ -21,6 +21,48 @@ import semver from 'semver';
 
 dotenv.config();
 
+const TUNNEL_STATE_FILE = join(homedir(), '.nero', 'tunnel.json');
+
+interface TunnelState {
+    pid: number;
+    url: string;
+    tool: 'cloudflared' | 'ngrok';
+    port: string;
+    startedAt: string;
+}
+
+async function saveTunnelState(state: TunnelState): Promise<void> {
+    const { mkdir, writeFile } = await import('fs/promises');
+    await mkdir(join(homedir(), '.nero'), { recursive: true });
+    await writeFile(TUNNEL_STATE_FILE, JSON.stringify(state, null, 2));
+}
+
+async function loadTunnelState(): Promise<TunnelState | null> {
+    const { readFile } = await import('fs/promises');
+    try {
+        const data = await readFile(TUNNEL_STATE_FILE, 'utf-8');
+        return JSON.parse(data);
+    } catch {
+        return null;
+    }
+}
+
+async function clearTunnelState(): Promise<void> {
+    const { unlink } = await import('fs/promises');
+    try {
+        await unlink(TUNNEL_STATE_FILE);
+    } catch {}
+}
+
+function isProcessRunning(pid: number): boolean {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 const program = new Command();
 
 program.name('nero').description('Open source AI companion').version(VERSION, '-v, --version');
@@ -161,6 +203,20 @@ program
         console.log(chalk.dim('\nConfig Path:'));
         console.log(`  ${getConfigPath()}`);
         console.log();
+    });
+
+program
+    .command('open [page]')
+    .description('Open Nero dashboard in browser')
+    .option('-p, --port <port>', 'Local port', '4848')
+    .action(async (page, options) => {
+        const baseUrl = `http://localhost:${options.port}`;
+        const validPages = ['voice', 'settings', 'mcp', 'memories', 'history'];
+        const path = page && validPages.includes(page) ? `/${page}` : '';
+        const url = `${baseUrl}${path}`;
+
+        console.log(chalk.dim(`Opening ${url}...`));
+        openBrowser(url);
     });
 
 const mcp = program.command('mcp').description('Manage MCP servers');
@@ -465,48 +521,6 @@ mcp.command('logout <name>')
 const tunnel = program
     .command('tunnel')
     .description('Manage tunnel to expose Nero to the internet');
-
-const TUNNEL_STATE_FILE = join(homedir(), '.nero', 'tunnel.json');
-
-interface TunnelState {
-    pid: number;
-    url: string;
-    tool: 'cloudflared' | 'ngrok';
-    port: string;
-    startedAt: string;
-}
-
-async function saveTunnelState(state: TunnelState): Promise<void> {
-    const { mkdir, writeFile } = await import('fs/promises');
-    await mkdir(join(homedir(), '.nero'), { recursive: true });
-    await writeFile(TUNNEL_STATE_FILE, JSON.stringify(state, null, 2));
-}
-
-async function loadTunnelState(): Promise<TunnelState | null> {
-    const { readFile } = await import('fs/promises');
-    try {
-        const data = await readFile(TUNNEL_STATE_FILE, 'utf-8');
-        return JSON.parse(data);
-    } catch {
-        return null;
-    }
-}
-
-async function clearTunnelState(): Promise<void> {
-    const { unlink } = await import('fs/promises');
-    try {
-        await unlink(TUNNEL_STATE_FILE);
-    } catch {}
-}
-
-function isProcessRunning(pid: number): boolean {
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch {
-        return false;
-    }
-}
 
 tunnel
     .command('start', { isDefault: true })
