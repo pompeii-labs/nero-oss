@@ -11,6 +11,7 @@
 <svelte:head>
     <title>Nero</title>
     <meta name="description" content="AI companion with terminal, voice, and SMS interfaces" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 </svelte:head>
 
 <div class="flex h-screen w-full bg-background">
