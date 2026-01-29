@@ -1095,6 +1095,132 @@ think
     });
 
 program
+    .command('setup')
+    .description('Set up Nero Docker configuration')
+    .option('-n, --name <name>', 'Container name', 'nero')
+    .option('-p, --port <port>', 'Port to expose', '4848')
+    .option('-c, --compose', 'Use Docker Compose (includes Postgres)')
+    .action(async (options) => {
+        const fs = await import('fs');
+        const { mkdir, writeFile } = await import('fs/promises');
+        const { execSync } = await import('child_process');
+        const neroDir = join(getNeroHome(), '.nero');
+        const envPath = join(neroDir, '.env');
+
+        await mkdir(neroDir, { recursive: true });
+
+        if (!fs.existsSync(envPath)) {
+            console.log(chalk.yellow('No .env file found at ~/.nero/.env'));
+            console.log(chalk.dim('Create one with your environment variables:'));
+            console.log(chalk.dim('  OPENROUTER_API_KEY=...'));
+            console.log(chalk.dim('\nThen run: nero setup'));
+            return;
+        }
+
+        if (options.compose) {
+            const composePath = join(neroDir, 'docker-compose.yml');
+
+            const composeFile = `services:
+  nero:
+    image: ghcr.io/pompeii-labs/nero-oss:latest
+    container_name: ${options.name}
+    restart: unless-stopped
+    ports:
+      - "${options.port}:4848"
+    environment:
+      - HOST_HOME=\${HOME}
+      - DATABASE_URL=postgresql://nero:nero@db:5432/nero
+    env_file:
+      - .env
+    volumes:
+      - \${HOME}/.nero:/host/home/.nero
+      - \${HOME}:/host/home
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    container_name: nero-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=nero
+      - POSTGRES_PASSWORD=nero
+      - POSTGRES_DB=nero
+    volumes:
+      - nero_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nero"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  nero_data:
+`;
+
+            await writeFile(composePath, composeFile);
+            console.log(chalk.green('Created ~/.nero/docker-compose.yml'));
+
+            const hasComposeV2 = (() => {
+                try {
+                    execSync('docker compose version', { stdio: 'ignore' });
+                    return true;
+                } catch {
+                    return false;
+                }
+            })();
+
+            const compose = hasComposeV2 ? 'docker compose' : 'docker-compose';
+
+            console.log(chalk.dim('\nPulling images...'));
+            execSync(`${compose} pull`, { cwd: neroDir, stdio: 'inherit' });
+
+            console.log(chalk.dim('Starting services...'));
+            execSync(`${compose} up -d`, { cwd: neroDir, stdio: 'inherit' });
+
+            console.log(chalk.green('\nNero is running with Postgres!'));
+            console.log(chalk.dim(`\nDashboard: http://localhost:${options.port}`));
+            console.log(chalk.dim('To update later: nero update'));
+        } else {
+            const dockerRunPath = join(neroDir, 'docker-run.sh');
+
+            const script = `#!/bin/bash
+docker run -d --name ${options.name} \\
+  --restart unless-stopped \\
+  -p ${options.port}:4848 \\
+  -v ~/.nero:/host/home/.nero \\
+  -v ~:/host/home \\
+  -e HOST_HOME=$HOME \\
+  --env-file ~/.nero/.env \\
+  ghcr.io/pompeii-labs/nero-oss:latest
+`;
+
+            await writeFile(dockerRunPath, script);
+            fs.chmodSync(dockerRunPath, '755');
+
+            console.log(chalk.green('Created ~/.nero/docker-run.sh'));
+
+            console.log(chalk.dim('\nPulling latest image...'));
+            execSync('docker pull ghcr.io/pompeii-labs/nero-oss:latest', { stdio: 'inherit' });
+
+            console.log(chalk.dim('Stopping any existing container...'));
+            try {
+                execSync(`docker stop ${options.name} && docker rm ${options.name}`, {
+                    stdio: 'pipe',
+                });
+            } catch {}
+
+            console.log(chalk.dim('Starting Nero...'));
+            execSync(`bash ${dockerRunPath}`, { stdio: 'inherit' });
+
+            console.log(chalk.green('\nNero is running!'));
+            console.log(chalk.dim(`\nDashboard: http://localhost:${options.port}`));
+            console.log(chalk.dim('To update later: nero update'));
+        }
+    });
+
+program
     .command('update')
     .description('Update Nero to the latest version')
     .option('--check', 'Check for updates without installing')
@@ -1130,13 +1256,16 @@ program
 
             console.log(chalk.dim('\nUpdating...'));
 
-            const isDockerCompose = await import('fs').then((fs) =>
-                fs.existsSync(join(getNeroHome(), '.nero', 'docker-compose.yml')),
-            );
+            const fs = await import('fs');
+            const neroDir = join(getNeroHome(), '.nero');
+            const dockerComposePath = join(neroDir, 'docker-compose.yml');
+            const dockerRunPath = join(neroDir, 'docker-run.sh');
+
+            const isDockerCompose = fs.existsSync(dockerComposePath);
+            const isDockerRun = fs.existsSync(dockerRunPath);
 
             if (isDockerCompose) {
                 console.log(chalk.dim('Detected Docker Compose installation'));
-                const neroDir = join(getNeroHome(), '.nero');
 
                 const hasComposeV2 = (() => {
                     try {
@@ -1157,6 +1286,25 @@ program
                 execSync(`${compose} up -d`, { cwd: neroDir, stdio: 'inherit' });
 
                 console.log(chalk.green('\nDocker containers updated!'));
+            } else if (isDockerRun) {
+                console.log(chalk.dim('Detected docker-run.sh installation'));
+
+                console.log(chalk.dim('Pulling latest image...'));
+                execSync('docker pull ghcr.io/pompeii-labs/nero-oss:latest', {
+                    stdio: 'inherit',
+                });
+
+                console.log(chalk.dim('Stopping current container...'));
+                try {
+                    execSync('docker stop nero && docker rm nero', { stdio: 'pipe' });
+                } catch {
+                    console.log(chalk.dim('No existing container to stop'));
+                }
+
+                console.log(chalk.dim('Starting new container...'));
+                execSync(`bash ${dockerRunPath}`, { stdio: 'inherit' });
+
+                console.log(chalk.green('\nDocker container updated!'));
             }
 
             console.log(chalk.dim('\nUpdating CLI binary...'));
