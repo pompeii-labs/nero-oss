@@ -5,11 +5,11 @@ WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
-COPY . .
-RUN bun run build
+COPY web/package.json web/bun.lock* ./web/
+RUN cd web && bun install --frozen-lockfile
 
-WORKDIR /app/web
-RUN bun install --frozen-lockfile && bun run build
+COPY . .
+RUN bun run build && cd web && bun run build
 
 FROM oven/bun:alpine
 
