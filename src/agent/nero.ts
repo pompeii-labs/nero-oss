@@ -547,7 +547,11 @@ ${recentMessagesText}
 ${memoriesText}
 
 ## Instructions
-You're running in the background while the user is away. Use your tools to check on things that might be relevant - git status, Linear issues, calendar, etc.
+You're running in the background while the user is away. Use your tools to check on things that might be relevant.
+
+**For git checks:** Your cwd is the user's home directory, NOT a git repo. To check git status, first use \`find ~/Desktop -maxdepth 3 -name .git -type d 2>/dev/null\` to locate project directories, then cd into specific projects before running git commands. Don't spam git status - pick 2-3 active projects max.
+
+**For other checks:** Linear issues, calendar, running services, etc.
 
 If you discover something the user should actually know about, use the note_for_user tool. Be very selective - most runs should result in zero notes.
 
