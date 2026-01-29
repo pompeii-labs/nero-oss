@@ -12,23 +12,30 @@ interface SlackMessage {
 }
 
 export async function handleSlack(req: Request, res: Response, agent: Nero): Promise<void> {
+    const retryNum = req.headers['x-slack-retry-num'];
+    if (retryNum) {
+        logger.debug(`Ignoring Slack retry #${retryNum}`);
+        res.status(200).json({ ok: true });
+        return;
+    }
+
+    res.status(200).json({ ok: true });
+
     try {
         const botToken = req.headers.authorization?.replace('Bearer ', '');
         if (!botToken) {
-            res.status(401).json({ error: 'Missing bot token' });
+            logger.error('Missing bot token');
             return;
         }
 
         const { text, channel, user } = req.body as SlackMessage;
 
         if (!text || !channel) {
-            res.status(400).json({ error: 'Missing text or channel' });
+            logger.error('Missing text or channel');
             return;
         }
 
         logger.info(`From ${user}: ${text.slice(0, 50)}${text.length > 50 ? '...' : ''}`);
-
-        res.status(200).json({ ok: true });
 
         agent.setMedium('slack');
         agent.setActivityCallback((activity) => logger.tool(activity));
@@ -45,9 +52,6 @@ export async function handleSlack(req: Request, res: Response, agent: Nero): Pro
         const err = error as Error;
         logger.error(err.message);
         agent.setActivityCallback(undefined);
-        if (!res.headersSent) {
-            res.status(500).json({ error: 'Something went wrong' });
-        }
     }
 }
 
