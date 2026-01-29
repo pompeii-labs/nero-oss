@@ -754,12 +754,23 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         this.emitActivity(activity);
 
         try {
-            const output = execSync(command, {
+            const env = { ...process.env };
+            if (process.env.HOST_HOME) {
+                env.HOME = '/host/home';
+            }
+
+            let output = execSync(command, {
                 encoding: 'utf-8',
                 timeout: 30000,
                 maxBuffer: 1024 * 1024 * 10,
                 cwd: this.currentCwd,
+                env,
             });
+
+            if (process.env.HOST_HOME) {
+                output = output.replace(/\/host\/home/g, process.env.HOST_HOME);
+            }
+
             activity.status = 'complete';
             activity.result = output.trim();
             this.emitActivity(activity);
