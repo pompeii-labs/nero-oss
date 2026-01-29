@@ -172,6 +172,7 @@ function wrapText(text: string, width: number): string {
 function getToolGlyph(status: string): string {
     if (status === 'complete') return '◆';
     if (status === 'error') return '◇';
+    if (status === 'skipped') return '⊘';
     if (status === 'running') return '○';
     return '○';
 }
@@ -204,6 +205,7 @@ function ToolLogDisplay({ toolData }: { toolData: ToolMessage }) {
     const glyph = getToolGlyph(toolData.status);
     const glyphColor = toolData.status === 'complete' ? NERO_BLUE :
                        toolData.status === 'error' ? 'red' :
+                       toolData.status === 'skipped' ? 'yellow' :
                        toolData.status === 'running' ? 'cyan' : 'gray';
     const toolName = formatToolName(toolData.tool);
 
@@ -222,7 +224,7 @@ function ToolLogDisplay({ toolData }: { toolData: ToolMessage }) {
     );
     const argPreview = mainArg ? formatArgValue(mainArg[1], 50) : '';
 
-    const prefix = toolData.status === 'complete' ? '░' : '▒';
+    const prefix = toolData.status === 'complete' ? '░' : toolData.status === 'skipped' ? '▓' : '▒';
 
     return (
         <Box flexDirection="column">
@@ -267,7 +269,7 @@ function ToolLogDisplay({ toolData }: { toolData: ToolMessage }) {
 
 interface ToolMessage {
     tool: string;
-    status: 'complete' | 'error' | 'denied' | 'running';
+    status: 'complete' | 'error' | 'denied' | 'skipped' | 'running';
     args: Record<string, unknown>;
     result?: string;
 }
@@ -693,6 +695,19 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
                         }
                         : item
                 );
+                setCurrentTurnItems(currentTurnItemsRef.current);
+            } else if (activity.status === 'skipped') {
+                const newItem: TurnItem = {
+                    id: `tool-${Date.now()}`,
+                    type: 'tool',
+                    toolData: {
+                        tool: activity.tool,
+                        args: activity.args,
+                        status: 'skipped',
+                        result: activity.skipReason,
+                    },
+                };
+                currentTurnItemsRef.current = [...currentTurnItemsRef.current, newItem];
                 setCurrentTurnItems(currentTurnItemsRef.current);
             }
         });

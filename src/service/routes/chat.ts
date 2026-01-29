@@ -5,7 +5,7 @@ import { Nero, ToolActivity } from '../../agent/nero.js';
 import { Logger } from '../../util/logger.js';
 import { db, isDbConnected } from '../../db/index.js';
 import { hostToContainer } from '../../util/paths.js';
-import { isToolAllowed } from '../../config.js';
+import { isToolAllowed, addAllowedTool, getAllowedTools, removeAllowedTool } from '../../config.js';
 
 interface ChatRequest {
     message: string;
@@ -43,7 +43,7 @@ export function createChatRouter(agent: Nero) {
 
     router.post('/permission/:id', (req: Request, res: Response) => {
         const id = req.params.id as string;
-        const { approved } = req.body as { approved: boolean };
+        const { approved, alwaysAllow } = req.body as { approved: boolean; alwaysAllow?: boolean };
 
         const pending = pendingPermissions.get(id);
         if (!pending) {
@@ -55,7 +55,32 @@ export function createChatRouter(agent: Nero) {
         pendingPermissions.delete(id);
         pending.resolve(approved);
 
-        logger.debug(`Permission ${id} ${approved ? 'approved' : 'denied'}`);
+        logger.debug(
+            `Permission ${id} ${approved ? 'approved' : 'denied'}${alwaysAllow ? ' (always)' : ''}`,
+        );
+        res.json({ success: true });
+    });
+
+    router.get('/permissions', async (req: Request, res: Response) => {
+        const allowed = getAllowedTools();
+        res.json({ allowed });
+    });
+
+    router.post('/permissions/allow', async (req: Request, res: Response) => {
+        const { tool } = req.body as { tool: string };
+        if (!tool) {
+            res.status(400).json({ error: 'Tool name is required' });
+            return;
+        }
+        await addAllowedTool(tool);
+        logger.info(`Added always-allow permission for tool: ${tool}`);
+        res.json({ success: true });
+    });
+
+    router.delete('/permissions/allow/:tool', async (req: Request, res: Response) => {
+        const tool = req.params.tool as string;
+        await removeAllowedTool(tool);
+        logger.info(`Removed always-allow permission for tool: ${tool}`);
         res.json({ success: true });
     });
 
@@ -197,6 +222,63 @@ export function createChatRouter(agent: Nero) {
             const err = error as Error;
             logger.error(`Clear failed: ${err.message}`);
             res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/think', async (req: Request, res: Response) => {
+        logger.info('Manual background thinking triggered');
+
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        const sendSSE = (msg: Record<string, unknown>) => {
+            if (res.closed || res.writableEnded) return;
+            try {
+                res.write(`data: ${JSON.stringify(msg)}\n\n`);
+            } catch {}
+        };
+
+        agent.setActivityCallback((activity) => {
+            if (activity.status === 'running') {
+                logger.debug(`[think] Tool: ${activity.tool}`);
+            } else if (activity.status === 'error') {
+                logger.warn(`[think] Tool error: ${activity.tool} - ${activity.error}`);
+            }
+            sendSSE({ type: 'activity', data: activity });
+        });
+
+        try {
+            const recentThoughts = await db.query(
+                `SELECT thought, created_at FROM thinking_runs ORDER BY created_at DESC LIMIT 20`,
+            );
+
+            sendSSE({ type: 'status', data: 'Starting background thinking...' });
+
+            const thought = await agent.runBackgroundThinking(recentThoughts.rows);
+
+            if (thought) {
+                const isUrgent = thought.startsWith('[URGENT]');
+                const cleanThought = isUrgent ? thought.replace('[URGENT]', '').trim() : thought;
+
+                await db.query('INSERT INTO thinking_runs (thought) VALUES ($1)', [cleanThought]);
+
+                sendSSE({
+                    type: 'done',
+                    data: { thought: cleanThought, urgent: isUrgent },
+                });
+            } else {
+                sendSSE({ type: 'done', data: { thought: null } });
+            }
+
+            res.end();
+        } catch (error) {
+            const err = error as Error;
+            logger.error(`Think failed: ${err.message}`);
+            sendSSE({ type: 'error', data: err.message });
+            res.end();
+        } finally {
+            agent.setActivityCallback(() => {});
         }
     });
 

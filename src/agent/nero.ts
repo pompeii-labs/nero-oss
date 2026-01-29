@@ -19,6 +19,8 @@ import { McpClient } from '../mcp/client.js';
 import { db, isDbConnected } from '../db/index.js';
 import { generateDiff } from '../util/diff.js';
 import { hostToContainer, containerToHost } from '../util/paths.js';
+import { ProactivityManager } from '../proactivity/index.js';
+import { isDestructiveToolCall } from '../proactivity/destructive.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -28,11 +30,13 @@ interface ChatResponse {
 }
 
 export interface ToolActivity {
+    id: string;
     tool: string;
     args: Record<string, any>;
-    status: 'pending' | 'approved' | 'denied' | 'running' | 'complete' | 'error';
+    status: 'pending' | 'approved' | 'denied' | 'skipped' | 'running' | 'complete' | 'error';
     result?: string;
     error?: string;
+    skipReason?: string;
 }
 
 export type PermissionCallback = (activity: ToolActivity) => Promise<boolean>;
@@ -58,6 +62,9 @@ export class Nero extends MagmaAgent {
     private actionsCache: Array<{ request: string; timestamp: string }> = [];
     private loadedMessages: LoadedMessage[] = [];
     private hasSummary: boolean = false;
+    private proactivity: ProactivityManager;
+    private pendingThoughts: Array<{ id: number; thought: string; created_at: string }> = [];
+    private backgroundMode: boolean = false;
 
     constructor(config: NeroConfig) {
         const client = new OpenAI({
@@ -72,12 +79,14 @@ export class Nero extends MagmaAgent {
             settings: {
                 temperature: 0.7,
             },
-            messageContext: 50,
+            messageContext: -1,
         });
 
         this.config = config;
         this.openaiClient = client;
         this.mcpClient = new McpClient(config.mcpServers);
+        this.proactivity = new ProactivityManager(config);
+        this.proactivity.setAgent(this);
     }
 
     async setup(): Promise<void> {
@@ -308,13 +317,17 @@ Be thorough - this summary will be the primary context for future conversations.
     }
 
     async cleanup(): Promise<void> {
+        this.proactivity.shutdown();
         await this.mcpClient.disconnect();
     }
 
     async reload(newConfig: NeroConfig): Promise<{ mcpTools: number }> {
+        this.proactivity.shutdown();
         await this.mcpClient.disconnect();
         this.config = newConfig;
         this.mcpClient = new McpClient(newConfig.mcpServers);
+        this.proactivity = new ProactivityManager(newConfig);
+        this.proactivity.setAgent(this);
         await this.mcpClient.connect();
         const mcpTools = await this.mcpClient.getTools();
         return { mcpTools: mcpTools.length };
@@ -345,6 +358,13 @@ Be thorough - this summary will be the primary context for future conversations.
 
         if (mcpToolsList.length > 0) {
             context.mcpTools = mcpToolsList;
+        }
+
+        if (this.pendingThoughts.length > 0) {
+            context.backgroundThoughts = this.pendingThoughts.map((t) => ({
+                thought: t.thought,
+                when: t.created_at,
+            }));
         }
 
         const contextPrompt = `## Current Context\n${toon(context)}`;
@@ -405,6 +425,8 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     }
 
     async chat(message: string, onChunk?: (chunk: string) => void): Promise<ChatResponse> {
+        this.proactivity.onUserActivity();
+
         this.onChunk = onChunk;
 
         if (onChunk) {
@@ -417,6 +439,14 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         } else {
             this.stream = false;
             this.onStreamChunk = () => {};
+        }
+
+        const unsurfacedThoughts = await this.proactivity.getUnsurfacedThoughts();
+        if (unsurfacedThoughts.length > 0) {
+            this.pendingThoughts = unsurfacedThoughts;
+            await this.proactivity.markThoughtsSurfaced(unsurfacedThoughts.map((t) => t.id));
+        } else {
+            this.pendingThoughts = [];
         }
 
         this.addMessage({ role: 'user', content: message });
@@ -436,6 +466,75 @@ You are responding via Slack DM. Use Slack-friendly formatting:
 
     clearHistory(): void {
         this.setMessages([]);
+    }
+
+    async runBackgroundThinking(
+        recentThoughts: Array<{ thought: string; created_at: string }>,
+    ): Promise<string | null> {
+        const savedMessages = this.getMessages();
+        this.backgroundMode = true;
+        this.stream = false;
+
+        try {
+            this.setMessages([]);
+
+            const recentThoughtsText =
+                recentThoughts.length > 0
+                    ? recentThoughts
+                          .map((t) => `- [${new Date(t.created_at).toLocaleString()}] ${t.thought}`)
+                          .join('\n')
+                    : '(none yet)';
+
+            const recentMessages = await this.getMessageHistory(10);
+            const recentMessagesText =
+                recentMessages.length > 0
+                    ? toon(
+                          recentMessages.map((m) => ({
+                              role: m.role,
+                              content: m.content.slice(0, 500),
+                          })),
+                      )
+                    : '(no recent messages)';
+
+            const memories = this.getCurrentMemories().slice(0, 10);
+            const memoriesText =
+                memories.length > 0 ? toon(memories.map((m) => m.body)) : '(no memories)';
+
+            const backgroundPrompt = `Run a background check. You have access to all your tools.
+
+## Your Recent Thoughts
+${recentThoughtsText}
+
+## Recent Conversation
+${recentMessagesText}
+
+## User Memories
+${memoriesText}
+
+## Instructions
+- Use your tools to check on things that might be relevant (git status, MCP tools, etc.)
+- Consider the recent conversation context and memories when deciding what to check
+- After checking, write a brief thought (1-3 sentences) summarizing what you found
+- Don't repeat what you've already noted in recent thoughts
+- If nothing new or notable, respond with just "Nothing notable."
+- If something is URGENT (deploy failed, service down, security issue), start your response with [URGENT]
+
+IMPORTANT: Your final response should ONLY be your thought - no headers, no markdown formatting, no "## " prefixes. Just plain text summarizing what you observed.`;
+
+            this.addMessage({ role: 'user', content: backgroundPrompt });
+
+            const response = await this.main();
+            const thought = response?.content?.trim();
+
+            if (!thought || thought === 'Nothing notable.' || thought === 'Nothing notable') {
+                return null;
+            }
+
+            return thought;
+        } finally {
+            this.setMessages(savedMessages);
+            this.backgroundMode = false;
+        }
     }
 
     @tool({ description: 'Schedule an action to run at a specific time or on a recurring basis' })
@@ -513,10 +612,15 @@ You are responding via Slack DM. Use Slack-friendly formatting:
             }
         }
 
-        const approved = await this.requestPermission(toolName, parsedArgs);
+        const approved = await this.requestPermission(toolName, parsedArgs, call.id);
         if (!approved) return 'Permission denied by user.';
 
-        const activity: ToolActivity = { tool: toolName, args: parsedArgs, status: 'running' };
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: toolName,
+            args: parsedArgs,
+            status: 'running',
+        };
         this.emitActivity(activity);
 
         try {
@@ -566,7 +670,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     }
 
     private async saveMessage(role: 'user' | 'assistant', content: string): Promise<void> {
-        if (!isDbConnected()) return;
+        if (!isDbConnected() || this.backgroundMode) return;
         try {
             await db.query(`INSERT INTO messages (role, content, medium) VALUES ($1, $2, $3)`, [
                 role,
@@ -624,9 +728,56 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         this.onActivity = cb;
     }
 
-    private async requestPermission(tool: string, args: Record<string, any>): Promise<boolean> {
+    private getCurrentBranch(): string | undefined {
+        try {
+            return execSync('git rev-parse --abbrev-ref HEAD', {
+                encoding: 'utf-8',
+                cwd: this.currentCwd,
+                timeout: 5000,
+            }).trim();
+        } catch {
+            return undefined;
+        }
+    }
+
+    private async requestPermission(
+        tool: string,
+        args: Record<string, any>,
+        callId: string,
+    ): Promise<boolean> {
+        if (this.backgroundMode) {
+            if (this.config.proactivity.destructive) {
+                return true;
+            }
+
+            const result = isDestructiveToolCall(
+                { tool, args },
+                this.config.proactivity.protectedBranches,
+                this.getCurrentBranch(),
+            );
+
+            if (result.isDestructive) {
+                console.log(
+                    chalk.dim(
+                        `[background] Skipping destructive action: ${tool} - ${result.reason}`,
+                    ),
+                );
+                const activity: ToolActivity = {
+                    id: callId,
+                    tool,
+                    args,
+                    status: 'skipped',
+                    skipReason: result.reason,
+                };
+                this.emitActivity(activity);
+                return false;
+            }
+
+            return true;
+        }
+
         if (!this.onPermissionRequest) return true;
-        const activity: ToolActivity = { tool, args, status: 'pending' };
+        const activity: ToolActivity = { id: callId, tool, args, status: 'pending' };
         this.onActivity?.(activity);
         const approved = await this.onPermissionRequest(activity);
         activity.status = approved ? 'approved' : 'denied';
@@ -653,10 +804,15 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     })
     async readFile(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { path, limit } = call.fn_args;
-        const approved = await this.requestPermission('read', { path, limit });
+        const approved = await this.requestPermission('read', { path, limit }, call.id);
         if (!approved) return 'Permission denied by user.';
 
-        const activity: ToolActivity = { tool: 'read', args: { path }, status: 'running' };
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'read',
+            args: { path },
+            status: 'running',
+        };
         this.emitActivity(activity);
 
         try {
@@ -699,15 +855,20 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         const diff = generateDiff(oldContent, content);
         const isNewFile = oldContent === null;
 
-        const approved = await this.requestPermission('write', {
-            path,
-            oldContent,
-            newContent: content,
-            isNewFile,
-        });
+        const approved = await this.requestPermission(
+            'write',
+            {
+                path,
+                oldContent,
+                newContent: content,
+                isNewFile,
+            },
+            call.id,
+        );
         if (!approved) return 'Permission denied by user.';
 
         const activity: ToolActivity = {
+            id: call.id,
             tool: 'write',
             args: {
                 path,
@@ -747,10 +908,15 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     })
     async runBash(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { command } = call.fn_args;
-        const approved = await this.requestPermission('bash', { command });
+        const approved = await this.requestPermission('bash', { command }, call.id);
         if (!approved) return 'Permission denied by user.';
 
-        const activity: ToolActivity = { tool: 'bash', args: { command }, status: 'running' };
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'bash',
+            args: { command },
+            status: 'running',
+        };
         this.emitActivity(activity);
 
         try {
@@ -809,14 +975,19 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         const { pattern, path, fileType } = call.fn_args;
         const searchPath = path ? this.resolvePath(path) : this.currentCwd;
         const displayPath = containerToHost(searchPath);
-        const approved = await this.requestPermission('grep', {
-            pattern,
-            path: displayPath,
-            fileType,
-        });
+        const approved = await this.requestPermission(
+            'grep',
+            {
+                pattern,
+                path: displayPath,
+                fileType,
+            },
+            call.id,
+        );
         if (!approved) return 'Permission denied by user.';
 
         const activity: ToolActivity = {
+            id: call.id,
             tool: 'grep',
             args: { pattern, path: displayPath },
             status: 'running',
@@ -853,10 +1024,11 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         const { path } = call.fn_args;
         const dirPath = path ? this.resolvePath(path) : this.currentCwd;
         const displayPath = containerToHost(dirPath);
-        const approved = await this.requestPermission('ls', { path: displayPath });
+        const approved = await this.requestPermission('ls', { path: displayPath }, call.id);
         if (!approved) return 'Permission denied by user.';
 
         const activity: ToolActivity = {
+            id: call.id,
             tool: 'ls',
             args: { path: displayPath },
             status: 'running',
@@ -897,10 +1069,15 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         const { pattern, path } = call.fn_args;
         const searchPath = path ? this.resolvePath(path) : this.currentCwd;
         const displayPath = containerToHost(searchPath);
-        const approved = await this.requestPermission('find', { pattern, path: displayPath });
+        const approved = await this.requestPermission(
+            'find',
+            { pattern, path: displayPath },
+            call.id,
+        );
         if (!approved) return 'Permission denied by user.';
 
         const activity: ToolActivity = {
+            id: call.id,
             tool: 'find',
             args: { pattern, path: displayPath },
             status: 'running',
@@ -942,6 +1119,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         }
 
         const activity: ToolActivity = {
+            id: call.id,
             tool: 'memory',
             args: { content: content.slice(0, 50) + '...' },
             status: 'running',
@@ -999,6 +1177,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         }
 
         const activity: ToolActivity = {
+            id: call.id,
             tool: 'search_history',
             args: { query },
             status: 'running',
@@ -1062,10 +1241,15 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     @toolparam({ key: 'query', type: 'string', required: true, description: 'The search query' })
     async webSearch(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { query } = call.fn_args;
-        const approved = await this.requestPermission('web_search', { query });
+        const approved = await this.requestPermission('web_search', { query }, call.id);
         if (!approved) return 'Permission denied by user.';
 
-        const activity: ToolActivity = { tool: 'web_search', args: { query }, status: 'running' };
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'web_search',
+            args: { query },
+            status: 'running',
+        };
         this.emitActivity(activity);
 
         const tavilyKey = process.env.TAVILY_API_KEY;
@@ -1142,6 +1326,7 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
         const { text, blocks } = call.fn_args;
 
         const activity: ToolActivity = {
+            id: call.id,
             tool: 'slack_message',
             args: { text: text.slice(0, 50) + '...' },
             status: 'running',
@@ -1202,6 +1387,7 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
         const { message } = call.fn_args;
 
         const activity: ToolActivity = {
+            id: call.id,
             tool: 'sms_message',
             args: { message: message.slice(0, 50) + '...' },
             status: 'running',
@@ -1252,7 +1438,12 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
     async callUser(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { reason } = call.fn_args;
 
-        const activity: ToolActivity = { tool: 'voice_call', args: { reason }, status: 'running' };
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'voice_call',
+            args: { reason },
+            status: 'running',
+        };
         this.emitActivity(activity);
 
         try {
@@ -1293,10 +1484,15 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
     })
     async fetchUrl(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { url, format = 'text' } = call.fn_args;
-        const approved = await this.requestPermission('fetch', { url });
+        const approved = await this.requestPermission('fetch', { url }, call.id);
         if (!approved) return 'Permission denied by user.';
 
-        const activity: ToolActivity = { tool: 'fetch', args: { url }, status: 'running' };
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'fetch',
+            args: { url },
+            status: 'running',
+        };
         this.emitActivity(activity);
 
         try {

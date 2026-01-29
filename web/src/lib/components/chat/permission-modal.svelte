@@ -2,9 +2,10 @@
     import * as Dialog from '$lib/components/ui/dialog';
     import { Button } from '$lib/components/ui/button';
     import type { ToolActivity } from '$lib/actions/chat';
-    import { respondToPermission } from '$lib/actions/chat';
+    import { respondToPermission, addAlwaysAllowTool } from '$lib/actions/chat';
     import ShieldAlert from '@lucide/svelte/icons/shield-alert';
     import Zap from '@lucide/svelte/icons/zap';
+    import ShieldCheck from '@lucide/svelte/icons/shield-check';
 
     type Props = {
         open: boolean;
@@ -17,10 +18,13 @@
     let responding = $state(false);
     let responded = $state(false);
 
-    async function handleResponse(approved: boolean) {
+    async function handleResponse(approved: boolean, alwaysAllow = false) {
         responding = true;
         responded = true;
-        await respondToPermission(permissionId, approved);
+        if (alwaysAllow && approved) {
+            await addAlwaysAllowTool(activity.tool);
+        }
+        await respondToPermission(permissionId, approved, alwaysAllow);
         responding = false;
         open = false;
         onResponse();
@@ -58,7 +62,7 @@
             </div>
         </div>
 
-        <Dialog.Footer class="flex gap-3 sm:justify-end">
+        <Dialog.Footer class="flex gap-2 sm:justify-end flex-wrap">
             <Button
                 variant="outline"
                 onclick={() => handleResponse(false)}
@@ -66,6 +70,15 @@
                 class="border-border/50 hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-400"
             >
                 Deny
+            </Button>
+            <Button
+                variant="outline"
+                onclick={() => handleResponse(true, true)}
+                disabled={responding}
+                class="border-border/50 hover:border-green-500/50 hover:bg-green-500/10 hover:text-green-400"
+            >
+                <ShieldCheck class="h-4 w-4 mr-2" />
+                Always Allow
             </Button>
             <Button
                 onclick={() => handleResponse(true)}

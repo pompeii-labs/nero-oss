@@ -12,11 +12,13 @@ export interface ChatResponse {
 }
 
 export interface ActivityEvent {
+    id: string;
     tool: string;
     args: Record<string, unknown>;
-    status: 'pending' | 'approved' | 'denied' | 'running' | 'complete' | 'error';
+    status: 'pending' | 'approved' | 'denied' | 'skipped' | 'running' | 'complete' | 'error';
     result?: string;
     error?: string;
+    skipReason?: string;
 }
 
 export type PermissionHandler = (id: string, activity: ActivityEvent) => void;
@@ -215,5 +217,67 @@ export class NeroClient {
             const error = await response.json().catch(() => ({ error: 'Unknown error' }));
             throw new Error(error.error || `HTTP ${response.status}`);
         }
+    }
+
+    async think(
+        onActivity?: (activity: ActivityEvent) => void,
+        onStatus?: (status: string) => void,
+    ): Promise<{ thought: string | null; urgent: boolean }> {
+        const response = await fetch(`${this.baseUrl}/think`, {
+            method: 'POST',
+            headers: this.getHeaders({ Accept: 'text/event-stream' }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(error.error || `HTTP ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+            throw new Error('No response body');
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let result: { thought: string | null; urgent: boolean } = { thought: null, urgent: false };
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+
+                const data = line.slice(6);
+                if (data === '{}') continue;
+
+                try {
+                    const parsed = JSON.parse(data);
+
+                    if (parsed.type === 'activity' && parsed.data) {
+                        onActivity?.(parsed.data as ActivityEvent);
+                    } else if (parsed.type === 'status' && parsed.data) {
+                        onStatus?.(parsed.data);
+                    } else if (parsed.type === 'done' && parsed.data) {
+                        result = {
+                            thought: parsed.data.thought,
+                            urgent: parsed.data.urgent || false,
+                        };
+                    } else if (parsed.type === 'error') {
+                        throw new Error(parsed.data);
+                    }
+                } catch (e) {
+                    if (e instanceof SyntaxError) continue;
+                    throw e;
+                }
+            }
+        }
+
+        return result;
     }
 }

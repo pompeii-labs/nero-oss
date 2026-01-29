@@ -4,9 +4,10 @@ import { NERO_BLUE } from '../cli/theme.js';
 interface ToolActivity {
     tool: string;
     args: Record<string, any>;
-    status: 'pending' | 'approved' | 'denied' | 'running' | 'complete' | 'error';
+    status: 'pending' | 'approved' | 'denied' | 'skipped' | 'running' | 'complete' | 'error';
     result?: string;
     error?: string;
+    skipReason?: string;
 }
 
 export enum LogLevel {

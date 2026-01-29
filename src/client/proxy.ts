@@ -62,6 +62,7 @@ export class NeroProxy {
             }
 
             const toolActivity: ToolActivity = {
+                id: activity.id,
                 tool: activity.tool,
                 args: activity.args as Record<string, any>,
                 status: activity.status,
@@ -139,5 +140,11 @@ export class NeroProxy {
 
     getContextUsage(): { tokens: number; limit: number; percentage: number } {
         return this.cachedContext;
+    }
+
+    async runThink(
+        onStatus?: (status: string) => void,
+    ): Promise<{ thought: string | null; urgent: boolean }> {
+        return this.client.think((activity) => this.activityCallback?.(activity), onStatus);
     }
 }

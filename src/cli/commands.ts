@@ -570,6 +570,38 @@ export const commands: SlashCommand[] = [
         },
     },
     {
+        name: 'think',
+        aliases: ['bg', 'background'],
+        description: 'Manually trigger a background thinking run',
+        execute: async (_, ctx) => {
+            ctx.setLoading('Running background thinking');
+
+            try {
+                const result = await ctx.nero.runThink((status) => {
+                    ctx.log(chalk.dim(`[think] ${status}`));
+                });
+
+                ctx.setLoading(null);
+
+                if (!result.thought) {
+                    return { message: chalk.dim('Nothing notable found.') };
+                }
+
+                let output = `\n${chalk.bold('Background Thought')}\n\n`;
+                if (result.urgent) {
+                    output += chalk.red('[URGENT] ');
+                }
+                output += result.thought + '\n';
+
+                return { message: output };
+            } catch (error) {
+                ctx.setLoading(null);
+                const err = error as Error;
+                return { error: `Think failed: ${err.message}` };
+            }
+        },
+    },
+    {
         name: 'revoke',
         aliases: [],
         description: 'Revoke always-allowed tool permissions',

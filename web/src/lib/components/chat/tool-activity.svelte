@@ -9,6 +9,7 @@
     import AlertCircle from '@lucide/svelte/icons/alert-circle';
     import Clock from '@lucide/svelte/icons/clock';
     import Zap from '@lucide/svelte/icons/zap';
+    import ShieldOff from '@lucide/svelte/icons/shield-off';
 
     type Props = {
         activity: ToolActivity;
@@ -21,6 +22,7 @@
         pending: { icon: Clock, color: 'text-amber-400', bg: 'from-amber-500/20 to-amber-500/5', border: 'border-amber-500/30' },
         approved: { icon: Check, color: 'text-green-400', bg: 'from-green-500/20 to-green-500/5', border: 'border-green-500/30' },
         denied: { icon: X, color: 'text-red-400', bg: 'from-red-500/20 to-red-500/5', border: 'border-red-500/30' },
+        skipped: { icon: ShieldOff, color: 'text-orange-400', bg: 'from-orange-500/20 to-orange-500/5', border: 'border-orange-500/30' },
         running: { icon: Loader2, color: 'text-primary', bg: 'from-primary/20 to-primary/5', border: 'border-primary/30' },
         complete: { icon: Check, color: 'text-green-400', bg: 'from-green-500/20 to-green-500/5', border: 'border-green-500/30' },
         error: { icon: AlertCircle, color: 'text-red-400', bg: 'from-red-500/20 to-red-500/5', border: 'border-red-500/30' }
@@ -85,6 +87,13 @@
                 <div>
                     <span class="text-xs text-red-400 uppercase tracking-wide">Error</span>
                     <pre class="mt-2 overflow-x-auto rounded-lg bg-red-500/10 border border-red-500/20 p-3 font-mono text-xs text-red-400 whitespace-pre-wrap break-all">{activity.error}</pre>
+                </div>
+            {/if}
+
+            {#if activity.skipReason}
+                <div>
+                    <span class="text-xs text-orange-400 uppercase tracking-wide">Skipped</span>
+                    <pre class="mt-2 overflow-x-auto rounded-lg bg-orange-500/10 border border-orange-500/20 p-3 font-mono text-xs text-orange-400 whitespace-pre-wrap break-all">{activity.skipReason}</pre>
                 </div>
             {/if}
         </div>

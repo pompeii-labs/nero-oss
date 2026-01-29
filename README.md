@@ -180,6 +180,37 @@ nero migrate              # Run database migrations
 | `/memory` | Show stored memories |
 | `/usage` | Show API usage stats |
 | `/install-slack` | Connect Nero to Slack (requires license) |
+| `/think` | Run background thinking manually |
+
+## Background Thinking
+
+Nero can think in the background while you're away, checking on things and surfacing insights when you return.
+
+```bash
+nero think on              # Enable background thinking
+nero think off             # Disable background thinking
+nero think status          # Show current settings
+nero think notify on       # Enable urgent notifications (Slack/SMS)
+nero think destructive on  # Allow destructive actions (off by default)
+nero think protect dev     # Add branch to protected list
+nero think unprotect dev   # Remove branch from protected list
+```
+
+When enabled, Nero will:
+- Wait 5 minutes after your last message
+- Run a thinking loop every 10 minutes while idle
+- Check git status, logs, MCP tools, etc.
+- Store thoughts for when you return
+- Optionally notify you immediately for urgent issues (if `notify` is on)
+
+**Destructive Action Protection:**
+By default, Nero blocks destructive actions during background thinking (rm, kill, git reset --hard, etc.). Git push is allowed to feature branches but blocked to protected branches (default: main, master).
+
+- `destructive off` (default): Only safe actions are executed
+- `destructive on`: All actions allowed (use with caution)
+- Protected branches can be customized with `protect`/`unprotect`
+
+Background thinking is **off by default**. Enable it with `nero think on`.
 
 ## MCP Servers
 

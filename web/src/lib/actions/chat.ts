@@ -1,11 +1,13 @@
 import { getServerUrl } from './helpers';
 
 export type ToolActivity = {
+    id: string;
     tool: string;
     args: Record<string, unknown>;
-    status: 'pending' | 'approved' | 'denied' | 'running' | 'complete' | 'error';
+    status: 'pending' | 'approved' | 'denied' | 'skipped' | 'running' | 'complete' | 'error';
     result?: string;
     error?: string;
+    skipReason?: string;
 };
 
 export type ChatSSEEvent =
@@ -104,14 +106,48 @@ export async function streamChat(args: {
     }
 }
 
-export async function respondToPermission(id: string, approved: boolean): Promise<boolean> {
+export async function respondToPermission(
+    id: string,
+    approved: boolean,
+    alwaysAllow = false,
+): Promise<boolean> {
     const url = getServerUrl(`/permission/${id}`);
 
     const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approved }),
+        body: JSON.stringify({ approved, alwaysAllow }),
     });
+
+    return response.ok;
+}
+
+export async function addAlwaysAllowTool(tool: string): Promise<boolean> {
+    const url = getServerUrl('/permissions/allow');
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tool }),
+    });
+
+    return response.ok;
+}
+
+export async function getAllowedTools(): Promise<string[]> {
+    const url = getServerUrl('/permissions');
+
+    const response = await fetch(url);
+    if (!response.ok) return [];
+
+    const data = await response.json();
+    return data.allowed || [];
+}
+
+export async function removeAllowedTool(tool: string): Promise<boolean> {
+    const url = getServerUrl(`/permissions/allow/${encodeURIComponent(tool)}`);
+
+    const response = await fetch(url, { method: 'DELETE' });
 
     return response.ok;
 }
@@ -135,4 +171,92 @@ export async function clearHistory(): Promise<{ success: boolean }> {
     const response = await fetch(url, { method: 'POST' });
 
     return { success: response.ok };
+}
+
+export type ThinkSSEEvent =
+    | { type: 'activity'; data: ToolActivity }
+    | { type: 'status'; data: string }
+    | { type: 'done'; data: { thought: string | null; urgent: boolean } }
+    | { type: 'error'; data: string };
+
+export type ThinkCallbacks = {
+    onActivity?: (activity: ToolActivity) => void;
+    onStatus?: (status: string) => void;
+    onDone?: (thought: string | null, urgent: boolean) => void;
+    onError?: (error: string) => void;
+};
+
+export async function streamThink(args: {
+    callbacks: ThinkCallbacks;
+    signal?: AbortSignal;
+}): Promise<void> {
+    const url = getServerUrl('/think');
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            Accept: 'text/event-stream',
+        },
+        signal: args.signal,
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        args.callbacks.onError?.(errorText || `HTTP ${response.status}`);
+        return;
+    }
+
+    if (!response.body) {
+        args.callbacks.onError?.('No response body');
+        return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (!line.trim() || line.startsWith(':')) continue;
+
+                if (line.startsWith('data: ')) {
+                    const jsonStr = line.slice(6);
+                    if (!jsonStr || jsonStr === '{}') continue;
+
+                    try {
+                        const event = JSON.parse(jsonStr) as ThinkSSEEvent;
+
+                        switch (event.type) {
+                            case 'activity':
+                                args.callbacks.onActivity?.(event.data);
+                                break;
+                            case 'status':
+                                args.callbacks.onStatus?.(event.data);
+                                break;
+                            case 'done':
+                                args.callbacks.onDone?.(event.data.thought, event.data.urgent);
+                                break;
+                            case 'error':
+                                args.callbacks.onError?.(event.data);
+                                break;
+                        }
+                    } catch {
+                        console.error('Failed to parse SSE event:', jsonStr);
+                    }
+                }
+            }
+        }
+    } finally {
+        reader.releaseLock();
+    }
 }

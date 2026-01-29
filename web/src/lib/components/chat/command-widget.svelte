@@ -91,4 +91,34 @@
             {/if}
         </div>
     </div>
+{:else if widget.type === 'think'}
+    {@const { activities, thought, urgent } = widget.data}
+    <div class="message-appear">
+        <div class={cn(
+            'glass-panel rounded-xl p-4 space-y-3 max-w-lg',
+            urgent ? 'border-amber-400/30 bg-amber-400/[0.02]' : ''
+        )}>
+            <div class="flex items-center gap-2">
+                <div class={cn(
+                    'w-2 h-2 rounded-full',
+                    urgent ? 'bg-amber-400 animate-pulse' : 'bg-green-400'
+                )}></div>
+                <span class="text-sm text-muted-foreground">Thought Complete</span>
+                {#if urgent}
+                    <span class="text-[10px] uppercase tracking-wider text-amber-400 font-medium px-1.5 py-0.5 rounded bg-amber-400/10 border border-amber-400/20">Urgent</span>
+                {/if}
+                {#if activities.length > 0}
+                    <span class="text-[10px] text-muted-foreground/60 ml-auto">{activities.length} tool{activities.length === 1 ? '' : 's'} used</span>
+                {/if}
+            </div>
+
+            {#if thought}
+                <p class={cn('text-sm leading-relaxed', urgent ? 'text-foreground' : 'text-foreground/90')}>
+                    {thought}
+                </p>
+            {:else}
+                <p class="text-sm text-muted-foreground italic">Nothing notable to report.</p>
+            {/if}
+        </div>
+    </div>
 {/if}

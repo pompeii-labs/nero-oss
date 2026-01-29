@@ -25,6 +25,13 @@ export interface NeroSettings {
     historyLimit: number;
 }
 
+export interface ProactivityConfig {
+    enabled: boolean;
+    notify: boolean;
+    destructive: boolean;
+    protectedBranches: string[];
+}
+
 export interface NeroConfig {
     mcpServers: Record<string, McpServerConfig>;
     licenseKey: string | null;
@@ -39,6 +46,7 @@ export interface NeroConfig {
     };
     settings: NeroSettings;
     allowedTools?: string[];
+    proactivity: ProactivityConfig;
 }
 
 const defaultSettings: NeroSettings = {
@@ -47,6 +55,13 @@ const defaultSettings: NeroSettings = {
     theme: 'dark',
     verbose: false,
     historyLimit: 20,
+};
+
+const defaultProactivity: ProactivityConfig = {
+    enabled: false,
+    notify: false,
+    destructive: false,
+    protectedBranches: ['main', 'master'],
 };
 
 const defaultConfig: NeroConfig = {
@@ -60,6 +75,7 @@ const defaultConfig: NeroConfig = {
         enabled: true,
     },
     settings: defaultSettings,
+    proactivity: defaultProactivity,
 };
 
 let cachedConfig: NeroConfig | null = null;
@@ -114,6 +130,7 @@ export async function loadConfig(forceReload = false): Promise<NeroConfig> {
                     licenseKey: process.env.NERO_LICENSE_KEY || userConfig.licenseKey || null,
                     tunnelUrl: tunnelUrl || userConfig.tunnelUrl,
                     settings: { ...defaultSettings, ...userConfig.settings },
+                    proactivity: { ...defaultProactivity, ...userConfig.proactivity },
                 };
                 cachedConfig = merged;
                 return merged;

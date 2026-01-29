@@ -39,6 +39,9 @@
     let pendingPermissionId = $state('');
     let pendingActivity: ToolActivity | null = $state(null);
 
+    let thinkingMode = $state(false);
+    let thinkingActivities: ToolActivity[] = $state([]);
+
     const SCROLL_THRESHOLD = 100;
 
     onMount(async () => {
@@ -99,6 +102,21 @@
         },
         navigateTo: (path) => {
             goto(path);
+        },
+        addActivity: (activity: ToolActivity) => {
+            if (thinkingMode) {
+                const existingIndex = thinkingActivities.findIndex(a => a.id === activity.id);
+                if (existingIndex >= 0) {
+                    thinkingActivities = [
+                        ...thinkingActivities.slice(0, existingIndex),
+                        activity,
+                        ...thinkingActivities.slice(existingIndex + 1)
+                    ];
+                } else {
+                    thinkingActivities = [...thinkingActivities, activity];
+                }
+                scrollToBottom();
+            }
         }
     };
 
@@ -113,7 +131,18 @@
         }];
         scrollToBottom();
 
+        const isThinkCommand = input.toLowerCase().trim() === '/think';
+        if (isThinkCommand) {
+            thinkingMode = true;
+            thinkingActivities = [];
+        }
+
         const result = await executeCommand(input, commandContext);
+
+        if (isThinkCommand) {
+            thinkingMode = false;
+            thinkingActivities = [];
+        }
 
         if (result.shouldClear) {
             return;
@@ -186,19 +215,18 @@
                         streamingContent = '';
                     }
 
-                    const activityId = `${activity.tool}-${JSON.stringify(activity.args)}`;
                     const existingIndex = timeline.findIndex(
-                        item => item.type === 'activity' && item.id === activityId
+                        item => item.type === 'activity' && item.id === activity.id
                     );
 
                     if (existingIndex >= 0) {
                         timeline = [
                             ...timeline.slice(0, existingIndex),
-                            { type: 'activity', data: activity, id: activityId },
+                            { type: 'activity', data: activity, id: activity.id },
                             ...timeline.slice(existingIndex + 1)
                         ];
                     } else {
-                        timeline = [...timeline, { type: 'activity', data: activity, id: activityId }];
+                        timeline = [...timeline, { type: 'activity', data: activity, id: activity.id }];
                     }
 
                     if (isAtBottom) scrollToBottom();
@@ -350,7 +378,28 @@
                 <ChatMessage role="assistant" content={streamingContent} isStreaming={true} />
             {/if}
 
-            {#if loading && !streamingContent}
+            {#if thinkingMode}
+                <div class="message-appear">
+                    <div class="thinking-container glass-panel rounded-xl p-4 border-primary/20 bg-primary/[0.02]">
+                        <div class="flex items-center gap-2 mb-3 pb-3 border-b border-primary/10">
+                            <div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+                            <span class="text-xs uppercase tracking-wider text-primary/70 font-medium">Background Thinking</span>
+                        </div>
+
+                        {#if loading}
+                            <GlitchLoader text={loadingText} />
+                        {/if}
+
+                        {#if thinkingActivities.length > 0}
+                            <div class="mt-3 space-y-2">
+                                {#each thinkingActivities as activity}
+                                    <ToolActivityComponent {activity} />
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+                </div>
+            {:else if loading && !streamingContent}
                 <div class="message-appear">
                     <GlitchLoader text={loadingText} />
                 </div>

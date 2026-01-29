@@ -3,7 +3,7 @@ import { getAllowedTools, revokeAllowedTool } from './actions/settings';
 import { getMemories } from './actions/memories';
 import { getMcpServers } from './actions/mcp';
 import { getSettings, updateSettings, validateModel } from './actions/settings';
-import { compactContext } from './actions/chat';
+import { compactContext, streamThink, type ToolActivity } from './actions/chat';
 
 export interface SlashCommand {
     name: string;
@@ -17,11 +17,23 @@ export interface CommandContext {
     setLoading: (message: string | null) => void;
     log: (message: string) => void;
     navigateTo: (path: string) => void;
+    addActivity?: (activity: ToolActivity) => void;
+    addAssistantMessage?: (content: string) => void;
 }
+
+export type ThinkActivity = {
+    tool: string;
+    status: 'running' | 'complete' | 'error';
+    error?: string;
+};
 
 export type CommandWidget =
     | { type: 'context'; data: { tokens: number; limit: number; percentage: number } }
-    | { type: 'usage'; data: { limit: number | null; usage: number; remaining: number } };
+    | { type: 'usage'; data: { limit: number | null; usage: number; remaining: number } }
+    | {
+          type: 'think';
+          data: { activities: ThinkActivity[]; thought: string | null; urgent: boolean };
+      };
 
 export interface CommandResult {
     message?: string;
@@ -410,6 +422,79 @@ export const commands: SlashCommand[] = [
             }
 
             return { message: `Revoked always-allow for "${tool}".` };
+        },
+    },
+    {
+        name: 'think',
+        aliases: [],
+        description: 'Run background thinking loop manually',
+        execute: async (_, ctx) => {
+            ctx.setLoading('Thinking');
+
+            const activities: ThinkActivity[] = [];
+            let thought: string | null = null;
+            let urgent = false;
+            let error: string | null = null;
+
+            await new Promise<void>((resolve) => {
+                streamThink({
+                    callbacks: {
+                        onActivity: (activity: ToolActivity) => {
+                            if (ctx.addActivity) {
+                                ctx.addActivity(activity);
+                            }
+
+                            if (activity.status === 'running') {
+                                ctx.setLoading(`Running ${activity.tool}`);
+                                activities.push({
+                                    tool: activity.tool,
+                                    status: 'running',
+                                });
+                            } else if (activity.status === 'complete') {
+                                const existing = activities.find(
+                                    (a) => a.tool === activity.tool && a.status === 'running',
+                                );
+                                if (existing) {
+                                    existing.status = 'complete';
+                                }
+                            } else if (activity.status === 'error') {
+                                const existing = activities.find(
+                                    (a) => a.tool === activity.tool && a.status === 'running',
+                                );
+                                if (existing) {
+                                    existing.status = 'error';
+                                    existing.error = activity.error;
+                                }
+                            }
+                        },
+                        onStatus: (status: string) => {
+                            ctx.setLoading(status);
+                        },
+                        onDone: (t: string | null, u: boolean) => {
+                            thought = t;
+                            urgent = u;
+                            resolve();
+                        },
+                        onError: (err: string) => {
+                            error = err;
+                            resolve();
+                        },
+                    },
+                });
+            });
+
+            ctx.setLoading(null);
+
+            if (error) {
+                return { error: `Thinking failed: ${error}` };
+            }
+
+            return {
+                widget: {
+                    type: 'think',
+                    data: { activities, thought, urgent },
+                },
+            };
         },
     },
 ];
