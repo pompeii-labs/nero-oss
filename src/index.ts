@@ -6,7 +6,13 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { startRepl } from './cli/repl.js';
 import { initDb, migrateDb } from './db/index.js';
-import { loadConfig, getConfigPath, saveConfig, updateMcpServerOAuth } from './config.js';
+import {
+    loadConfig,
+    getConfigPath,
+    saveConfig,
+    updateMcpServerOAuth,
+    getNeroHome,
+} from './config.js';
 import {
     discoverOAuthMetadata,
     registerClient,
@@ -21,7 +27,7 @@ import semver from 'semver';
 
 dotenv.config();
 
-const TUNNEL_STATE_FILE = join(homedir(), '.nero', 'tunnel.json');
+const TUNNEL_STATE_FILE = join(getNeroHome(), '.nero', 'tunnel.json');
 
 interface TunnelState {
     pid: number;
@@ -33,7 +39,7 @@ interface TunnelState {
 
 async function saveTunnelState(state: TunnelState): Promise<void> {
     const { mkdir, writeFile } = await import('fs/promises');
-    await mkdir(join(homedir(), '.nero'), { recursive: true });
+    await mkdir(join(getNeroHome(), '.nero'), { recursive: true });
     await writeFile(TUNNEL_STATE_FILE, JSON.stringify(state, null, 2));
 }
 
@@ -596,8 +602,8 @@ tunnel
 
         console.log(chalk.dim(`Starting ${tool} tunnel on port ${port}...`));
 
-        const TUNNEL_LOG_FILE = join(homedir(), '.nero', 'tunnel.log');
-        await mkdir(join(homedir(), '.nero'), { recursive: true });
+        const TUNNEL_LOG_FILE = join(getNeroHome(), '.nero', 'tunnel.log');
+        await mkdir(join(getNeroHome(), '.nero'), { recursive: true });
 
         if (daemon) {
             await writeFile(TUNNEL_LOG_FILE, '');
@@ -1125,12 +1131,12 @@ program
             console.log(chalk.dim('\nUpdating...'));
 
             const isDockerCompose = await import('fs').then((fs) =>
-                fs.existsSync(join(homedir(), '.nero', 'docker-compose.yml')),
+                fs.existsSync(join(getNeroHome(), '.nero', 'docker-compose.yml')),
             );
 
             if (isDockerCompose) {
                 console.log(chalk.dim('Detected Docker Compose installation'));
-                const neroDir = join(homedir(), '.nero');
+                const neroDir = join(getNeroHome(), '.nero');
 
                 const hasComposeV2 = (() => {
                     try {

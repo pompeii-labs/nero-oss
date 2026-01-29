@@ -9,7 +9,10 @@ import OpenAI from 'openai';
 import chalk from 'chalk';
 import { readFile, writeFile, readdir } from 'fs/promises';
 import { existsSync } from 'fs';
-import { execSync } from 'child_process';
+import { execSync, exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
@@ -344,8 +347,18 @@ Be thorough - this summary will be the primary context for future conversations.
         const actions = this.getCurrentActions();
         const mcpToolsList = this.mcpClient.getToolNames();
 
+        const isDocker = !!process.env.HOST_HOME;
+        const homeDir = isDocker ? '/host/home' : homedir();
+        const isGitRepo = existsSync(join(this.currentCwd, '.git'));
+
         const context: Record<string, any> = {
             time: new Date().toISOString(),
+            environment: {
+                runtime: isDocker ? 'Docker container' : 'local',
+                home: homeDir,
+                cwd: this.currentCwd,
+                gitRepo: isGitRepo,
+            },
         };
 
         if (memories.length > 0) {
@@ -943,9 +956,13 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
         description: 'The bash command to execute',
     })
     async runBash(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { command } = call.fn_args;
+        let { command } = call.fn_args;
         const approved = await this.requestPermission('bash', { command }, call.id);
         if (!approved) return 'Permission denied by user.';
+
+        if (process.env.HOST_HOME) {
+            command = command.replace(new RegExp(process.env.HOST_HOME, 'g'), '/host/home');
+        }
 
         const activity: ToolActivity = {
             id: call.id,
@@ -961,13 +978,28 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
                 env.HOME = '/host/home';
             }
 
-            let output = execSync(command, {
-                encoding: 'utf-8',
-                timeout: 30000,
-                maxBuffer: 1024 * 1024 * 10,
-                cwd: this.currentCwd,
-                env,
-            });
+            const timeout = this.backgroundMode ? 10000 : 30000;
+            let output: string;
+
+            if (this.backgroundMode) {
+                const result = await execAsync(command, {
+                    encoding: 'utf-8',
+                    timeout,
+                    maxBuffer: 1024 * 1024 * 10,
+                    cwd: this.currentCwd,
+                    env,
+                });
+                output = result.stdout;
+            } else {
+                output = execSync(command, {
+                    encoding: 'utf-8',
+                    timeout,
+                    maxBuffer: 1024 * 1024 * 10,
+                    cwd: this.currentCwd,
+                    env,
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                });
+            }
 
             if (process.env.HOST_HOME) {
                 output = output.replace(/\/host\/home/g, process.env.HOST_HOME);

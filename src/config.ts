@@ -81,12 +81,15 @@ const defaultConfig: NeroConfig = {
 let cachedConfig: NeroConfig | null = null;
 let configPath: string | null = null;
 
-export function getConfigDir(): string {
-    const localDir = join(process.cwd(), '.nero');
-    if (existsSync(localDir)) {
-        return localDir;
+export function getNeroHome(): string {
+    if (process.env.HOST_HOME) {
+        return '/host/home';
     }
-    return join(homedir(), '.nero');
+    return homedir();
+}
+
+export function getConfigDir(): string {
+    return join(getNeroHome(), '.nero');
 }
 
 export function getConfigPath(): string {
@@ -95,7 +98,7 @@ export function getConfigPath(): string {
 }
 
 async function loadTunnelUrl(): Promise<string | undefined> {
-    const tunnelStatePath = join(homedir(), '.nero', 'tunnel.json');
+    const tunnelStatePath = join(getNeroHome(), '.nero', 'tunnel.json');
     if (existsSync(tunnelStatePath)) {
         try {
             const content = await readFile(tunnelStatePath, 'utf-8');
@@ -111,33 +114,27 @@ async function loadTunnelUrl(): Promise<string | undefined> {
 export async function loadConfig(forceReload = false): Promise<NeroConfig> {
     if (cachedConfig && !forceReload) return cachedConfig;
 
-    const configPaths = [
-        join(process.cwd(), '.nero', 'config.json'),
-        join(homedir(), '.nero', 'config.json'),
-    ];
-
     const tunnelUrl = await loadTunnelUrl();
+    const path = getConfigPath();
 
-    for (const path of configPaths) {
-        if (existsSync(path)) {
-            try {
-                const content = await readFile(path, 'utf-8');
-                const userConfig = JSON.parse(content);
-                configPath = path;
-                const merged: NeroConfig = {
-                    ...defaultConfig,
-                    ...userConfig,
-                    licenseKey: process.env.NERO_LICENSE_KEY || userConfig.licenseKey || null,
-                    tunnelUrl: tunnelUrl || userConfig.tunnelUrl,
-                    settings: { ...defaultSettings, ...userConfig.settings },
-                    proactivity: { ...defaultProactivity, ...userConfig.proactivity },
-                };
-                cachedConfig = merged;
-                return merged;
-            } catch (error) {
-                const err = error as Error;
-                console.warn(chalk.yellow(`Failed to parse ${path}: ${err.message}`));
-            }
+    if (existsSync(path)) {
+        try {
+            const content = await readFile(path, 'utf-8');
+            const userConfig = JSON.parse(content);
+            configPath = path;
+            const merged: NeroConfig = {
+                ...defaultConfig,
+                ...userConfig,
+                licenseKey: process.env.NERO_LICENSE_KEY || userConfig.licenseKey || null,
+                tunnelUrl: tunnelUrl || userConfig.tunnelUrl,
+                settings: { ...defaultSettings, ...userConfig.settings },
+                proactivity: { ...defaultProactivity, ...userConfig.proactivity },
+            };
+            cachedConfig = merged;
+            return merged;
+        } catch (error) {
+            const err = error as Error;
+            console.warn(chalk.yellow(`Failed to parse ${path}: ${err.message}`));
         }
     }
 
