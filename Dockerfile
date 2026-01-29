@@ -13,6 +13,8 @@ RUN bun run build && cd web && bun run build
 
 FROM oven/bun:alpine
 
+RUN apk add --no-cache git curl procps
+
 WORKDIR /app
 
 COPY package.json bun.lock ./
