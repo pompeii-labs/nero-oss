@@ -18,11 +18,33 @@
     let responding = $state(false);
     let responded = $state(false);
 
+    function extractBashPattern(command: string): string {
+        const parts = command.trim().split(/\s+/);
+        if (parts.length === 0) return command;
+
+        const base = parts[0] || '';
+        const subcommandTools = ['npm', 'bun', 'yarn', 'pnpm', 'git', 'docker', 'make'];
+
+        if (subcommandTools.includes(base) && parts.length >= 2) {
+            return `${parts[0]} ${parts[1]} *`;
+        }
+
+        return `${base} *`;
+    }
+
+    function getToolPattern(): string {
+        if (activity.tool === 'bash' && activity.args?.command) {
+            const command = String(activity.args.command).trim();
+            return `bash:${extractBashPattern(command)}`;
+        }
+        return activity.tool;
+    }
+
     async function handleResponse(approved: boolean, alwaysAllow = false) {
         responding = true;
         responded = true;
         if (alwaysAllow && approved) {
-            await addAlwaysAllowTool(activity.tool);
+            await addAlwaysAllowTool(getToolPattern());
         }
         await respondToPermission(permissionId, approved, alwaysAllow);
         responding = false;
@@ -51,15 +73,21 @@
                 <span>Permission Required</span>
             </Dialog.Title>
             <Dialog.Description class="pt-2">
-                Nero wants to use the <span class="font-mono font-semibold text-primary">{activity.tool}</span> tool
+                {#if activity.tool === 'bash' && activity.args?.command}
+                    Nero wants to run <span class="font-mono font-semibold text-primary">{activity.args.command}</span>
+                {:else}
+                    Nero wants to use the <span class="font-mono font-semibold text-primary">{activity.tool}</span> tool
+                {/if}
             </Dialog.Description>
         </Dialog.Header>
 
         <div class="space-y-3 py-4">
+            {#if activity.tool !== 'bash' || !activity.args?.command}
             <div>
                 <span class="text-xs text-muted-foreground uppercase tracking-wide">Arguments</span>
                 <pre class="mt-2 max-h-64 overflow-auto rounded-xl bg-background/50 border border-border/30 p-4 font-mono text-xs text-foreground/80 whitespace-pre-wrap break-all">{JSON.stringify(activity.args, null, 2)}</pre>
             </div>
+            {/if}
         </div>
 
         <Dialog.Footer class="flex gap-2 sm:justify-end flex-wrap">
@@ -76,9 +104,14 @@
                 onclick={() => handleResponse(true, true)}
                 disabled={responding}
                 class="border-border/50 hover:border-green-500/50 hover:bg-green-500/10 hover:text-green-400"
+                title={`Allow pattern: ${getToolPattern()}`}
             >
                 <ShieldCheck class="h-4 w-4 mr-2" />
-                Always Allow
+                {#if activity.tool === 'bash' && activity.args?.command}
+                    Allow {extractBashPattern(String(activity.args.command))}
+                {:else}
+                    Always Allow
+                {/if}
             </Button>
             <Button
                 onclick={() => handleResponse(true)}

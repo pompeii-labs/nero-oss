@@ -144,7 +144,7 @@ export function createChatRouter(agent: Nero) {
         });
 
         agent.setPermissionCallback(async (activity: ToolActivity) => {
-            if (isToolAllowed(activity.tool)) {
+            if (isToolAllowed(activity.tool, activity.args)) {
                 return true;
             }
 

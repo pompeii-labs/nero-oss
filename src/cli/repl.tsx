@@ -38,6 +38,20 @@ function findWordBoundaryRight(text: string, cursor: number): number {
     return pos;
 }
 
+function extractBashPattern(command: string): string {
+    const parts = command.trim().split(/\s+/);
+    if (parts.length === 0) return command;
+
+    const base = parts[0] || '';
+    const subcommandTools = ['npm', 'bun', 'yarn', 'pnpm', 'git', 'docker', 'make'];
+
+    if (subcommandTools.includes(base) && parts.length >= 2) {
+        return `${parts[0]} ${parts[1]} *`;
+    }
+
+    return `${base} *`;
+}
+
 function NeroInput({ value, onChange, onSubmit, onCtrlC, placeholder = '', focus = true }: NeroInputProps) {
     const [cursor, setCursor] = useState(value.length);
 
@@ -435,7 +449,7 @@ function PermissionPrompt({
 }: {
     activity: ToolActivity;
     onRespond: (approved: boolean) => void;
-    onAlwaysAllow: (tool: string) => void;
+    onAlwaysAllow: (activity: ToolActivity) => void;
 }) {
     useInput((input, key) => {
         if (input === 'y' || input === 'Y' || key.return) {
@@ -443,7 +457,7 @@ function PermissionPrompt({
         } else if (input === 'n' || input === 'N' || key.escape) {
             onRespond(false);
         } else if (input === 'a' || input === 'A') {
-            onAlwaysAllow(activity.tool);
+            onAlwaysAllow(activity);
             onRespond(true);
         }
     });
@@ -713,7 +727,7 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
         });
 
         nero.setPermissionCallback(async (activity) => {
-            if (isToolAllowed(activity.tool)) {
+            if (isToolAllowed(activity.tool, activity.args)) {
                 return true;
             }
             return new Promise((resolve) => {
@@ -731,8 +745,14 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
         setPendingPermission(null);
     }, []);
 
-    const handleAlwaysAllow = useCallback(async (tool: string) => {
-        await addAllowedTool(tool);
+    const handleAlwaysAllow = useCallback(async (activity: ToolActivity) => {
+        if (activity.tool === 'bash' && activity.args?.command) {
+            const command = String(activity.args.command).trim();
+            const pattern = extractBashPattern(command);
+            await addAllowedTool(`bash:${pattern}`);
+        } else {
+            await addAllowedTool(activity.tool);
+        }
     }, []);
 
     const clearMessages = useCallback(() => {

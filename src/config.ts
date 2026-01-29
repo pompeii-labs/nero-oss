@@ -188,9 +188,37 @@ export async function getMcpServerOAuth(serverName: string): Promise<StoredOAuth
     return config.mcpServers[serverName]?.oauth;
 }
 
-export function isToolAllowed(tool: string): boolean {
+export function isToolAllowed(tool: string, args?: Record<string, unknown>): boolean {
     const config = getConfig();
-    return config.allowedTools?.includes(tool) ?? false;
+    if (!config.allowedTools) return false;
+
+    if (config.allowedTools.includes(tool)) return true;
+
+    if (tool === 'bash' && args?.command) {
+        const command = String(args.command).trim();
+        for (const allowed of config.allowedTools) {
+            if (allowed.startsWith('bash:')) {
+                const pattern = allowed.slice('bash:'.length);
+                if (matchCommandPattern(command, pattern)) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+function matchCommandPattern(command: string, pattern: string): boolean {
+    if (pattern.endsWith(' *')) {
+        const base = pattern.slice(0, -2);
+        return command === base || command.startsWith(base + ' ');
+    }
+    if (pattern.endsWith('*')) {
+        const prefix = pattern.slice(0, -1);
+        return command.startsWith(prefix);
+    }
+    return command === pattern;
 }
 
 export async function addAllowedTool(tool: string): Promise<void> {
