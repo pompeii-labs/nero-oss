@@ -796,6 +796,15 @@ const license = program
     .description('Manage Nero license for voice/SMS features');
 
 const BACKEND_API = process.env.BACKEND_URL || 'https://api.magmadeploy.com';
+const LICENSE_URL = 'https://nero.pompeiilabs.com/account';
+
+license
+    .command('get', { isDefault: true })
+    .description('Open the license page to get or manage your license')
+    .action(async () => {
+        console.log(chalk.dim(`Opening ${LICENSE_URL}...`));
+        openBrowser(LICENSE_URL);
+    });
 
 license
     .command('register')
