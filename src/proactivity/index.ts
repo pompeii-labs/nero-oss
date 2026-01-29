@@ -14,6 +14,13 @@ interface ThinkingRun {
     created_at: string;
 }
 
+export interface Note {
+    id: number;
+    content: string;
+    category: string | null;
+    created_at: string;
+}
+
 export class ProactivityManager {
     private config: NeroConfig;
     private agent: Nero | null = null;
@@ -156,6 +163,32 @@ export class ProactivityManager {
         );
 
         return result.rows;
+    }
+
+    async getUnsurfacedNotes(): Promise<Note[]> {
+        if (!isDbConnected()) return [];
+
+        const result = await db.query(
+            `SELECT id, content, category, created_at FROM notes
+             WHERE surfaced = FALSE
+             ORDER BY created_at ASC`,
+        );
+
+        return result.rows;
+    }
+
+    async markNotesSurfaced(ids: number[]): Promise<void> {
+        if (!isDbConnected() || ids.length === 0) return;
+
+        await db.query('UPDATE notes SET surfaced = TRUE WHERE id = ANY($1)', [ids]);
+    }
+
+    async cleanupOldNotes(): Promise<void> {
+        if (!isDbConnected()) return;
+
+        await db.query(
+            `DELETE FROM notes WHERE created_at < NOW() - INTERVAL '${RETENTION_DAYS} days'`,
+        );
     }
 
     shutdown(): void {

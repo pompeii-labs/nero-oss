@@ -64,6 +64,12 @@ export class Nero extends MagmaAgent {
     private hasSummary: boolean = false;
     private proactivity: ProactivityManager;
     private pendingThoughts: Array<{ id: number; thought: string; created_at: string }> = [];
+    private pendingNotes: Array<{
+        id: number;
+        content: string;
+        category: string | null;
+        created_at: string;
+    }> = [];
     private backgroundMode: boolean = false;
 
     constructor(config: NeroConfig) {
@@ -191,7 +197,7 @@ export class Nero extends MagmaAgent {
     }
 
     estimateTokens(): number {
-        const messages = this.getMessages();
+        const messages = this.getMessages(-1);
         let total = 0;
         for (const msg of messages) {
             if (typeof msg.content === 'string') {
@@ -237,7 +243,7 @@ Be thorough - this summary will be the primary context for future conversations.
             summaryPrompt += `\n\n---\nPrevious conversation history (incorporate relevant details):\n${previousSummary}`;
         }
 
-        const currentMessages = this.getMessages();
+        const currentMessages = this.getMessages(-1);
         const conversationText = currentMessages
             .filter((m) => m.role === 'user' || m.role === 'assistant')
             .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
@@ -367,6 +373,14 @@ Be thorough - this summary will be the primary context for future conversations.
             }));
         }
 
+        if (this.pendingNotes.length > 0) {
+            context.notesForUser = this.pendingNotes.map((n) => ({
+                content: n.content,
+                category: n.category,
+                when: n.created_at,
+            }));
+        }
+
         const contextPrompt = `## Current Context\n${toon(context)}`;
 
         const messages: { role: 'system'; content: string }[] = [
@@ -449,6 +463,14 @@ You are responding via Slack DM. Use Slack-friendly formatting:
             this.pendingThoughts = [];
         }
 
+        const unsurfacedNotes = await this.proactivity.getUnsurfacedNotes();
+        if (unsurfacedNotes.length > 0) {
+            this.pendingNotes = unsurfacedNotes;
+            await this.proactivity.markNotesSurfaced(unsurfacedNotes.map((n) => n.id));
+        } else {
+            this.pendingNotes = [];
+        }
+
         this.addMessage({ role: 'user', content: message });
 
         const response = await this.main();
@@ -502,7 +524,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
 
             const backgroundPrompt = `Run a background check. You have access to all your tools.
 
-## Your Recent Thoughts
+## Recent Notes You've Left
 ${recentThoughtsText}
 
 ## Recent Conversation
@@ -512,14 +534,28 @@ ${recentMessagesText}
 ${memoriesText}
 
 ## Instructions
-- Use your tools to check on things that might be relevant (git status, MCP tools, etc.)
-- Consider the recent conversation context and memories when deciding what to check
-- After checking, write a brief thought (1-3 sentences) summarizing what you found
-- Don't repeat what you've already noted in recent thoughts
-- If nothing new or notable, respond with just "Nothing notable."
-- If something is URGENT (deploy failed, service down, security issue), start your response with [URGENT]
+You're running in the background while the user is away. Use your tools to check on things that might be relevant - git status, Linear issues, calendar, etc.
 
-IMPORTANT: Your final response should ONLY be your thought - no headers, no markdown formatting, no "## " prefixes. Just plain text summarizing what you observed.`;
+If you discover something the user should actually know about, use the note_for_user tool. Be very selective - most runs should result in zero notes.
+
+**Save a note ONLY if:**
+- You found a specific problem or bug
+- You completed an action (created branch, fixed something, filed issue)
+- Something changed that requires user attention (meeting moved, deploy failed)
+- You discovered something unexpected they'd want to know
+
+**DO NOT save notes about:**
+- "All systems healthy" or "everything running fine" (don't report normalcy)
+- "Checked X, no issues" (don't report what you checked)
+- "Database running for X hours" (they don't care)
+- "X active connections/studies/processes" (status updates are noise)
+- General summaries of system state
+
+The test: If you walked into a colleague's office to tell them this, would they thank you or wonder why you're wasting their time?
+
+Your final response is for internal logging so future runs don't duplicate work. Write in plain text only - no markdown, no headers, no **bold**, no bullet points. Just sentences describing what you checked and found.
+
+If something is URGENT (deploy failed, service down), start with [URGENT].`;
 
             this.addMessage({ role: 'user', content: backgroundPrompt });
 
@@ -1138,6 +1174,55 @@ IMPORTANT: Your final response should ONLY be your thought - no headers, no mark
             activity.error = (error as Error).message;
             this.emitActivity(activity);
             return `Error storing memory: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description:
+            'Add a note to surface to the user in their next briefing. Use this during background thinking to flag important discoveries, completed actions, or things the user should know about. Only use for genuinely useful information - not status updates or activity logs.',
+    })
+    @toolparam({
+        key: 'note',
+        type: 'string',
+        required: true,
+        description:
+            'The note to surface to the user. Should be actionable or informative, e.g. "Found the auth bug in token refresh logic - created fix branch" not "Checked git status"',
+    })
+    @toolparam({
+        key: 'category',
+        type: 'string',
+        required: false,
+        description: 'Optional category: code, calendar, research, alert',
+    })
+    async noteForUser(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { note, category } = call.fn_args;
+
+        if (!isDbConnected()) {
+            return 'Cannot store note: database not connected';
+        }
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'note_for_user',
+            args: { note: note.slice(0, 80) + (note.length > 80 ? '...' : '') },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            await db.query(`INSERT INTO notes (content, category) VALUES ($1, $2)`, [
+                note,
+                category || null,
+            ]);
+            activity.status = 'complete';
+            activity.result = 'Note saved';
+            this.emitActivity(activity);
+            return 'Note saved. Will be surfaced when user returns.';
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Error saving note: ${activity.error}`;
         }
     }
 
