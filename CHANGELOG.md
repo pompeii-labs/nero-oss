@@ -2,6 +2,13 @@
 
 All notable changes to Nero are documented here.
 
+## 1.12.0 (2026-01-30)
+
+### Changes
+- Add `updateFile` tool for surgical file edits (find/replace instead of full rewrite)
+- Add diff viewer for file changes in permission modal and activity timeline
+- Collapsible sidebar with persistent state
+
 ## 1.11.1 (2026-01-30)
 
 ### Fixes
