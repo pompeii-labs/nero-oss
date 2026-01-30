@@ -11,11 +11,11 @@ export interface WorkspaceData {
 }
 
 export class Workspace extends Model<WorkspaceData> implements WorkspaceData {
-    name!: string;
-    path!: string;
-    detected_from!: string | null;
-    last_accessed!: Date;
-    created_at!: Date;
+    declare name: string;
+    declare path: string;
+    declare detected_from: string | null;
+    declare last_accessed: Date;
+    declare created_at: Date;
 
     static override tableName = 'workspaces';
 

@@ -10,10 +10,10 @@ export interface NoteData {
 }
 
 export class Note extends Model<NoteData> implements NoteData {
-    content!: string;
-    category!: string | null;
-    surfaced!: boolean;
-    created_at!: Date;
+    declare content: string;
+    declare category: string | null;
+    declare surfaced: boolean;
+    declare created_at: Date;
 
     static override tableName = 'notes';
 

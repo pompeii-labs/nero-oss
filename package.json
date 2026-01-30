@@ -33,7 +33,6 @@
     "cli": "bun src/index.ts",
     "repl": "bun src/index.ts chat",
     "service": "bun src/service/entrypoint.ts",
-    "db:migrate": "bun src/db/migrate.ts",
     "lint": "eslint . --ext .ts --fix",
     "lint:check": "eslint . --ext .ts --max-warnings=0",
     "format": "prettier --write \"**/*.ts\"",

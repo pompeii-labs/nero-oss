@@ -45,7 +45,7 @@ export function createWebRouter(agent: Nero) {
         }
 
         try {
-            const memory = await Memory.create({ body, related_to: [] });
+            const memory = await Memory.create({ body, related_to: [], category: null });
             res.json(memory);
         } catch (error) {
             logger.error(`Failed to create memory: ${(error as Error).message}`);

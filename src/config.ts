@@ -17,12 +17,21 @@ export interface McpServerConfig {
     disabled?: boolean;
 }
 
+export interface SessionSettings {
+    enabled: boolean;
+    gapThresholdMinutes: number;
+    autoSummarize: boolean;
+    autoExtractMemories: boolean;
+    maxSessionSummaries: number;
+}
+
 export interface NeroSettings {
     streaming: boolean;
     model: string;
     theme: 'dark' | 'light';
     verbose: boolean;
     historyLimit: number;
+    sessions: SessionSettings;
 }
 
 export interface ProactivityConfig {
@@ -49,12 +58,21 @@ export interface NeroConfig {
     proactivity: ProactivityConfig;
 }
 
+const defaultSessionSettings: SessionSettings = {
+    enabled: true,
+    gapThresholdMinutes: 30,
+    autoSummarize: true,
+    autoExtractMemories: true,
+    maxSessionSummaries: 5,
+};
+
 const defaultSettings: NeroSettings = {
     streaming: true,
-    model: 'anthropic/claude-sonnet-4.5',
+    model: 'anthropic/claude-opus-4.5',
     theme: 'dark',
     verbose: false,
     historyLimit: 20,
+    sessions: defaultSessionSettings,
 };
 
 const defaultProactivity: ProactivityConfig = {
@@ -127,7 +145,11 @@ export async function loadConfig(forceReload = false): Promise<NeroConfig> {
                 ...userConfig,
                 licenseKey: process.env.NERO_LICENSE_KEY || userConfig.licenseKey || null,
                 tunnelUrl: tunnelUrl || userConfig.tunnelUrl,
-                settings: { ...defaultSettings, ...userConfig.settings },
+                settings: {
+                    ...defaultSettings,
+                    ...userConfig.settings,
+                    sessions: { ...defaultSessionSettings, ...userConfig.settings?.sessions },
+                },
                 proactivity: { ...defaultProactivity, ...userConfig.proactivity },
             };
             cachedConfig = merged;

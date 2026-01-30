@@ -9,9 +9,9 @@ export interface ThinkingRunData {
 }
 
 export class ThinkingRun extends Model<ThinkingRunData> implements ThinkingRunData {
-    thought!: string;
-    surfaced!: boolean;
-    created_at!: Date;
+    declare thought: string;
+    declare surfaced: boolean;
+    declare created_at: Date;
 
     static override tableName = 'thinking_runs';
 

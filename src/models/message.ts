@@ -14,19 +14,23 @@ export interface MessageData {
 }
 
 export class Message extends Model<MessageData> implements MessageData {
-    role!: MessageRole;
-    content!: string;
-    medium!: MessageMedium;
-    compacted!: boolean;
-    created_at!: Date;
+    declare role: MessageRole;
+    declare content: string;
+    declare medium: MessageMedium;
+    declare compacted: boolean;
+    declare created_at: Date;
 
     static override tableName = 'messages';
 
     static async getRecent(limit: number): Promise<Message[]> {
-        return Message.list({
-            orderBy: { column: 'created_at', direction: 'DESC' },
-            limit,
-        });
+        if (!isDbConnected()) return [];
+
+        const { rows } = await db.query(
+            `SELECT * FROM messages WHERE compacted = FALSE ORDER BY created_at DESC LIMIT $1`,
+            [limit],
+        );
+
+        return rows.map((row) => new Message(row));
     }
 
     static async getUncompacted(): Promise<Message[]> {
@@ -43,7 +47,7 @@ export class Message extends Model<MessageData> implements MessageData {
         if (!isDbConnected()) return [];
 
         const { rows } = await db.query(
-            `SELECT * FROM messages WHERE created_at > $1 AND compacted = FALSE ORDER BY created_at ASC LIMIT $2`,
+            `SELECT * FROM messages WHERE created_at > $1 AND compacted = FALSE ORDER BY created_at DESC LIMIT $2`,
             [timestamp, limit],
         );
 

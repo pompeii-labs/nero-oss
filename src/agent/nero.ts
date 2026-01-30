@@ -23,8 +23,10 @@ import { db, isDbConnected } from '../db/index.js';
 import { Message, Memory, Action, Summary, Note } from '../models/index.js';
 import { generateDiff } from '../util/diff.js';
 import { hostToContainer, containerToHost } from '../util/paths.js';
+import { formatSessionAge } from '../util/temporal.js';
 import { ProactivityManager } from '../proactivity/index.js';
 import { isDestructiveToolCall } from '../proactivity/destructive.js';
+import { SessionManager } from '../services/session-manager.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -76,6 +78,7 @@ export class Nero extends MagmaAgent {
         created_at: Date;
     }> = [];
     private backgroundMode: boolean = false;
+    private sessionManager: SessionManager | null = null;
 
     constructor(config: NeroConfig) {
         const client = new OpenAI({
@@ -85,7 +88,7 @@ export class Nero extends MagmaAgent {
 
         super({
             provider: 'openai',
-            model: 'anthropic/claude-sonnet-4',
+            model: 'anthropic/claude-opus-4.5',
             client,
             settings: {
                 temperature: 0.7,
@@ -98,6 +101,18 @@ export class Nero extends MagmaAgent {
         this.mcpClient = new McpClient(config.mcpServers);
         this.proactivity = new ProactivityManager(config);
         this.proactivity.setAgent(this);
+        this.initSessionManager();
+    }
+
+    private initSessionManager(): void {
+        if (this.config.settings.sessions?.enabled) {
+            this.sessionManager = new SessionManager({
+                openaiClient: this.openaiClient,
+                model: this.config.settings.model,
+                settings: this.config.settings.sessions,
+                verbose: this.config.settings.verbose,
+            });
+        }
     }
 
     async setup(): Promise<void> {
@@ -115,7 +130,11 @@ export class Nero extends MagmaAgent {
         const mcpTools = await this.mcpClient.getTools();
         console.log(chalk.dim(`[setup] Loaded ${mcpTools.length} MCP tools`));
 
-        await this.loadRecentMessages(this.config.settings.historyLimit);
+        if (this.sessionManager && this.config.settings.sessions.enabled) {
+            await this.loadSessionAwareHistory();
+        } else {
+            await this.loadRecentMessages(this.config.settings.historyLimit);
+        }
         await this.refreshMemoriesCache();
         await this.refreshActionsCache();
         if (this.memoriesCache.length > 0) {
@@ -137,8 +156,9 @@ export class Nero extends MagmaAgent {
                 });
 
                 const messages = await Message.getSince(summary.covers_until, limit);
+                const reversed = messages.reverse();
 
-                this.loadedMessages = messages
+                this.loadedMessages = reversed
                     .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
                     .map((msg) => ({
                         role: msg.role as 'user' | 'assistant',
@@ -148,13 +168,13 @@ export class Nero extends MagmaAgent {
                         isHistory: true,
                     }));
 
-                for (const msg of messages) {
+                for (const msg of reversed) {
                     if (msg.role === 'user' || msg.role === 'assistant') {
                         this.addMessage({ role: msg.role, content: msg.content });
                     }
                 }
 
-                console.log(chalk.dim(`[setup] Loaded summary + ${messages.length} messages`));
+                console.log(chalk.dim(`[setup] Loaded summary + ${reversed.length} messages`));
             } else {
                 const messages = await Message.getRecent(limit);
                 const reversed = messages.reverse();
@@ -181,6 +201,94 @@ export class Nero extends MagmaAgent {
             }
         } catch (error) {
             console.error(chalk.dim(`[db] Failed to load messages: ${(error as Error).message}`));
+        }
+    }
+
+    private async loadSessionAwareHistory(): Promise<void> {
+        if (!isDbConnected() || !this.sessionManager) return;
+
+        try {
+            const sessionService = this.sessionManager.getSessionService();
+            const sessionInfo = await sessionService.detectSession();
+
+            const sessionSummaries = await Summary.getRecentSessionSummaries(
+                this.config.settings.sessions.maxSessionSummaries,
+            );
+
+            const latestManualSummary = await Summary.getLatestNonSession();
+            if (latestManualSummary) {
+                const newerThanAllSessions =
+                    sessionSummaries.length === 0 ||
+                    latestManualSummary.created_at > sessionSummaries[0].created_at;
+
+                if (newerThanAllSessions) {
+                    const age = formatSessionAge(latestManualSummary.created_at);
+                    this.addMessage({
+                        role: 'system',
+                        content: `[Conversation summary, ${age}]: ${latestManualSummary.content}`,
+                    });
+                    this.hasSummary = true;
+                    console.log(chalk.dim(`[setup] Loaded manual summary`));
+                }
+            }
+
+            for (const summary of sessionSummaries.reverse()) {
+                const age = formatSessionAge(summary.created_at);
+                const msgCount = summary.message_count
+                    ? ` (${summary.message_count} messages)`
+                    : '';
+                this.addMessage({
+                    role: 'system',
+                    content: `[Previous session${msgCount}, ${age}]: ${summary.content}`,
+                });
+                this.hasSummary = true;
+            }
+
+            if (sessionSummaries.length > 0) {
+                console.log(
+                    chalk.dim(`[setup] Loaded ${sessionSummaries.length} session summaries`),
+                );
+            }
+
+            let messages: Message[] = [];
+            if (sessionInfo.currentSessionStart) {
+                messages = await sessionService.getMessagesSinceSessionStart(
+                    sessionInfo.currentSessionStart,
+                    this.config.settings.historyLimit,
+                );
+            }
+
+            if (messages.length === 0 && sessionSummaries.length === 0 && !latestManualSummary) {
+                const fallback = await Message.getRecent(this.config.settings.historyLimit);
+                messages = fallback.reverse();
+            }
+
+            this.loadedMessages = messages
+                .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
+                .map((msg) => ({
+                    role: msg.role as 'user' | 'assistant',
+                    content: msg.content,
+                    created_at: String(msg.created_at),
+                    medium: msg.medium,
+                    isHistory: true,
+                }));
+
+            for (const msg of messages) {
+                if (msg.role === 'user' || msg.role === 'assistant') {
+                    this.addMessage({ role: msg.role, content: msg.content });
+                }
+            }
+
+            if (messages.length > 0) {
+                console.log(
+                    chalk.dim(`[setup] Loaded ${messages.length} current session messages`),
+                );
+            }
+        } catch (error) {
+            console.error(
+                chalk.dim(`[sessions] Failed to load history: ${(error as Error).message}`),
+            );
+            await this.loadRecentMessages(this.config.settings.historyLimit);
         }
     }
 
@@ -263,6 +371,9 @@ Be thorough - this summary will be the primary context for future conversations.
             content: summaryContent,
             covers_until: new Date(),
             token_estimate: tokenEstimate,
+            session_start: null,
+            is_session_summary: false,
+            message_count: null,
         });
 
         await Message.markAllCompacted();
@@ -295,8 +406,13 @@ Be thorough - this summary will be the primary context for future conversations.
     private async refreshMemoriesCache(): Promise<void> {
         if (!isDbConnected()) return;
         try {
-            const memories = await Memory.getRecent(20);
-            this.memoriesCache = memories.map((m) => ({
+            const coreMemories = await Memory.getCore();
+            const recentMemories = await Memory.getRecentNonCore(15);
+
+            const coreIds = new Set(coreMemories.map((m) => m.id));
+            const combined = [...coreMemories, ...recentMemories.filter((m) => !coreIds.has(m.id))];
+
+            this.memoriesCache = combined.map((m) => ({
                 body: m.body,
                 created_at: String(m.created_at),
             }));
@@ -342,6 +458,7 @@ Be thorough - this summary will be the primary context for future conversations.
         this.mcpClient = new McpClient(newConfig.mcpServers);
         this.proactivity = new ProactivityManager(newConfig);
         this.proactivity.setAgent(this);
+        this.initSessionManager();
         await this.loadUserInstructions();
         await this.mcpClient.connect();
         const mcpTools = await this.mcpClient.getTools();
@@ -467,6 +584,8 @@ You are responding via Slack DM. Use Slack-friendly formatting:
 
     async chat(message: string, onChunk?: (chunk: string) => void): Promise<ChatResponse> {
         this.proactivity.onUserActivity();
+
+        this.sessionManager?.onUserMessage();
 
         this.onChunk = onChunk;
 
@@ -761,8 +880,13 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
     }
 
     async getMemories(): Promise<Array<{ body: string; created_at: string }>> {
-        const memories = await Memory.getRecent(20);
-        return memories.map((m) => ({
+        const coreMemories = await Memory.getCore();
+        const recentMemories = await Memory.getRecentNonCore(15);
+
+        const coreIds = new Set(coreMemories.map((m) => m.id));
+        const combined = [...coreMemories, ...recentMemories.filter((m) => !coreIds.has(m.id))];
+
+        return combined.map((m) => ({
             body: m.body,
             created_at: String(m.created_at),
         }));
@@ -1202,8 +1326,15 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
         required: true,
         description: 'The information to remember',
     })
+    @toolparam({
+        key: 'core',
+        type: 'boolean',
+        required: false,
+        description:
+            'Set true for essential facts that should ALWAYS be in context (user identity, strong preferences). Use sparingly. Default: false',
+    })
     async storeMemory(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { content } = call.fn_args;
+        const { content, core } = call.fn_args;
 
         if (!isDbConnected()) {
             return 'Cannot store memory: database not connected';
@@ -1212,18 +1343,20 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
         const activity: ToolActivity = {
             id: call.id,
             tool: 'memory',
-            args: { content: content.slice(0, 50) + '...' },
+            args: { content: content.slice(0, 50) + '...', core },
             status: 'running',
         };
         this.emitActivity(activity);
 
         try {
-            await Memory.create({ body: content, related_to: [] });
+            await Memory.create({ body: content, related_to: [], category: core ? 'core' : null });
             await this.refreshMemoriesCache();
             activity.status = 'complete';
-            activity.result = 'Memory stored';
+            activity.result = core ? 'Core memory stored' : 'Memory stored';
             this.emitActivity(activity);
-            return 'Memory stored successfully.';
+            return core
+                ? 'Core memory stored (will always be in context).'
+                : 'Memory stored successfully.';
         } catch (error) {
             activity.status = 'error';
             activity.error = (error as Error).message;

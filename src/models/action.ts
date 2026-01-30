@@ -11,11 +11,11 @@ export interface ActionData {
 }
 
 export class Action extends Model<ActionData> implements ActionData {
-    request!: string;
-    timestamp!: Date;
-    recurrence!: string | null;
-    steps!: string[];
-    created_at!: Date;
+    declare request: string;
+    declare timestamp: Date;
+    declare recurrence: string | null;
+    declare steps: string[];
+    declare created_at: Date;
 
     static override tableName = 'actions';
 
