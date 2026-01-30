@@ -13,18 +13,57 @@ mkdir -p ~/.nero
 echo "OPENROUTER_API_KEY=your_key" > ~/.nero/.env
 
 # Setup and start Docker
-nero setup
+nero setup --compose
 ```
 
 That's it. Nero is running at `http://localhost:4848`.
 
-**With Postgres** (recommended for persistence):
+## Installation Modes
+
+Nero supports two installation modes that control how much access it has to your host system:
+
+### Integrated Mode (Default)
+
+Full access to your host system. Use this for maximum capability.
 
 ```bash
-nero setup --compose
+nero setup --compose --integrated
 ```
 
-This creates a docker-compose.yml with Nero + Postgres.
+| Capability | Description |
+|------------|-------------|
+| Host Filesystem | Read/write access to `~/` via `/host/home` |
+| Docker | Can run docker commands on your host |
+| Network | Uses host network for localhost access |
+
+### Contained Mode
+
+Sandboxed with no host access. Use this for untrusted tasks or demos.
+
+```bash
+nero setup --compose --contained
+```
+
+| Capability | Description |
+|------------|-------------|
+| Filesystem | Container-only, isolated volume |
+| Docker | No access |
+| Network | Isolated, port-mapped |
+
+### Switching Modes
+
+Re-run setup with the desired mode flag:
+
+```bash
+nero setup --compose --contained   # Switch to contained
+nero setup --compose --integrated  # Switch to integrated
+```
+
+### Check Current Mode
+
+```bash
+nero status
+```
 
 ## Update
 
@@ -90,7 +129,10 @@ nero mcp remove filesystem
 nero                      # Start interactive REPL
 nero -m "message"         # One-shot message
 nero config               # Show current configuration
+nero status               # Show installation status and mode
 nero setup                # Setup Docker container
+nero setup --integrated   # Setup with full host access (default)
+nero setup --contained    # Setup sandboxed, no host access
 nero update               # Update to latest version
 nero update --check       # Check for updates
 nero reload               # Reload MCP servers

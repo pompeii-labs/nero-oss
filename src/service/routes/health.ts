@@ -46,7 +46,8 @@ export function createHealthRouter(agent: Nero) {
     });
 
     router.get('/history', async (req: Request, res: Response) => {
-        const messages = await agent.getMessageHistory();
+        const config = await loadConfig();
+        const messages = await agent.getMessageHistory(config.settings.historyLimit);
         res.json({
             messages,
             hasSummary: agent.hasPreviousSummary(),

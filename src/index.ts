@@ -1100,12 +1100,15 @@ program
     .option('-n, --name <name>', 'Container name', 'nero')
     .option('-p, --port <port>', 'Port to expose', '4848')
     .option('-c, --compose', 'Use Docker Compose (includes Postgres)')
+    .option('--integrated', 'Full host access: filesystem, docker, network (default)')
+    .option('--contained', 'Sandboxed mode: no host access')
     .action(async (options) => {
         const fs = await import('fs');
-        const { mkdir, writeFile } = await import('fs/promises');
+        const { mkdir, writeFile, readFile } = await import('fs/promises');
         const { execSync } = await import('child_process');
         const neroDir = join(getNeroHome(), '.nero');
         const envPath = join(neroDir, '.env');
+        const setupStatePath = join(neroDir, 'setup.json');
 
         await mkdir(neroDir, { recursive: true });
 
@@ -1117,33 +1120,65 @@ program
             return;
         }
 
+        const mode = options.contained ? 'contained' : 'integrated';
+        const isIntegrated = mode === 'integrated';
+
+        console.log(chalk.dim(`Setting up Nero in ${chalk.cyan(mode)} mode...`));
+        if (isIntegrated) {
+            console.log(chalk.dim('  - Full host filesystem access'));
+            console.log(chalk.dim('  - Docker daemon access'));
+            console.log(chalk.dim('  - Host network mode'));
+        } else {
+            console.log(chalk.dim('  - Container-only filesystem'));
+            console.log(chalk.dim('  - No docker access'));
+            console.log(chalk.dim('  - Isolated network'));
+        }
+        console.log();
+
+        const setupState = {
+            mode,
+            compose: !!options.compose,
+            name: options.name,
+            port: options.port,
+            createdAt: new Date().toISOString(),
+        };
+        await writeFile(setupStatePath, JSON.stringify(setupState, null, 2));
+
         if (options.compose) {
             const composePath = join(neroDir, 'docker-compose.yml');
+
+            const integratedVolumes = `      - \${HOME}/.nero:/host/home/.nero
+      - \${HOME}:/host/home
+      - /var/run/docker.sock:/var/run/docker.sock`;
+
+            const containedVolumes = `      - nero_config:/app/config`;
 
             const composeFile = `services:
   nero:
     image: ghcr.io/pompeii-labs/nero-oss:latest
     container_name: ${options.name}
-    restart: unless-stopped
-    ports:
-      - "${options.port}:4848"
+    restart: unless-stopped${isIntegrated ? '\n    network_mode: host' : `\n    ports:\n      - "${options.port}:4848"`}
     environment:
-      - HOST_HOME=\${HOME}
-      - DATABASE_URL=postgresql://nero:nero@db:5432/nero
+      - HOST_HOME=${isIntegrated ? '${HOME}' : ''}
+      - DATABASE_URL=postgresql://nero:nero@${isIntegrated ? 'localhost' : 'db'}:5432/nero
       - GIT_DISCOVERY_ACROSS_FILESYSTEM=1
+      - NERO_MODE=${mode}
     env_file:
       - .env
     volumes:
-      - \${HOME}/.nero:/host/home/.nero
-      - \${HOME}:/host/home
+${isIntegrated ? integratedVolumes : containedVolumes}${
+                isIntegrated
+                    ? ''
+                    : `
     depends_on:
       db:
-        condition: service_healthy
+        condition: service_healthy`
+            }
 
   db:
     image: postgres:16-alpine
     container_name: nero-db
-    restart: unless-stopped
+    restart: unless-stopped${isIntegrated ? '\n    network_mode: host' : ''}
     environment:
       - POSTGRES_USER=nero
       - POSTGRES_PASSWORD=nero
@@ -1157,7 +1192,7 @@ program
       retries: 5
 
 volumes:
-  nero_data:
+  nero_data:${isIntegrated ? '' : '\n  nero_config:'}
 `;
 
             await writeFile(composePath, composeFile);
@@ -1180,23 +1215,42 @@ volumes:
             console.log(chalk.dim('Starting services...'));
             execSync(`${compose} up -d`, { cwd: neroDir, stdio: 'inherit' });
 
-            console.log(chalk.green('\nNero is running with Postgres!'));
+            console.log(chalk.green(`\nNero is running in ${mode} mode with Postgres!`));
             console.log(chalk.dim(`\nDashboard: http://localhost:${options.port}`));
-            console.log(chalk.dim('To update later: nero update'));
+            console.log(chalk.dim('To update: nero update'));
+            console.log(
+                chalk.dim(
+                    `To switch modes: nero setup --compose --${mode === 'integrated' ? 'contained' : 'integrated'}`,
+                ),
+            );
         } else {
             const dockerRunPath = join(neroDir, 'docker-run.sh');
 
-            const script = `#!/bin/bash
+            const integratedScript = `#!/bin/bash
 docker run -d --name ${options.name} \\
   --restart unless-stopped \\
-  -p ${options.port}:4848 \\
+  --network host \\
   -v ~/.nero:/host/home/.nero \\
   -v ~:/host/home \\
+  -v /var/run/docker.sock:/var/run/docker.sock \\
   -e HOST_HOME=$HOME \\
   -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 \\
+  -e NERO_MODE=integrated \\
   --env-file ~/.nero/.env \\
   ghcr.io/pompeii-labs/nero-oss:latest
 `;
+
+            const containedScript = `#!/bin/bash
+docker run -d --name ${options.name} \\
+  --restart unless-stopped \\
+  -p ${options.port}:4848 \\
+  -v nero_config:/app/config \\
+  -e NERO_MODE=contained \\
+  --env-file ~/.nero/.env \\
+  ghcr.io/pompeii-labs/nero-oss:latest
+`;
+
+            const script = isIntegrated ? integratedScript : containedScript;
 
             await writeFile(dockerRunPath, script);
             fs.chmodSync(dockerRunPath, '755');
@@ -1216,9 +1270,14 @@ docker run -d --name ${options.name} \\
             console.log(chalk.dim('Starting Nero...'));
             execSync(`bash ${dockerRunPath}`, { stdio: 'inherit' });
 
-            console.log(chalk.green('\nNero is running!'));
+            console.log(chalk.green(`\nNero is running in ${mode} mode!`));
             console.log(chalk.dim(`\nDashboard: http://localhost:${options.port}`));
-            console.log(chalk.dim('To update later: nero update'));
+            console.log(chalk.dim('To update: nero update'));
+            console.log(
+                chalk.dim(
+                    `To switch modes: nero setup --${mode === 'integrated' ? 'contained' : 'integrated'}`,
+                ),
+            );
         }
     });
 
@@ -1227,9 +1286,22 @@ program
     .description('Update Nero to the latest version')
     .option('--check', 'Check for updates without installing')
     .action(async (options) => {
-        const { execSync, spawn } = await import('child_process');
+        const { execSync } = await import('child_process');
+        const fs = await import('fs');
+        const { readFile } = await import('fs/promises');
 
         const REPO = 'pompeii-labs/nero-oss';
+        const neroDir = join(getNeroHome(), '.nero');
+        const setupStatePath = join(neroDir, 'setup.json');
+
+        let setupState: { mode?: string; compose?: boolean; name?: string; port?: string } = {};
+        try {
+            const content = await readFile(setupStatePath, 'utf-8');
+            setupState = JSON.parse(content);
+        } catch {}
+
+        const containerName = setupState.name || 'nero';
+        const mode = setupState.mode || 'integrated';
 
         console.log(chalk.dim('Checking for updates...'));
 
@@ -1241,6 +1313,7 @@ program
 
             console.log(`Current: ${chalk.cyan(VERSION)}`);
             console.log(`Latest:  ${chalk.cyan(latestVersion)}`);
+            console.log(`Mode:    ${chalk.cyan(mode)}`);
 
             if (!semver.gt(latestVersion, VERSION)) {
                 console.log(chalk.green('\nYou are on the latest version!'));
@@ -1258,8 +1331,6 @@ program
 
             console.log(chalk.dim('\nUpdating...'));
 
-            const fs = await import('fs');
-            const neroDir = join(getNeroHome(), '.nero');
             const dockerComposePath = join(neroDir, 'docker-compose.yml');
             const dockerRunPath = join(neroDir, 'docker-run.sh');
 
@@ -1267,7 +1338,7 @@ program
             const isDockerRun = fs.existsSync(dockerRunPath);
 
             if (isDockerCompose) {
-                console.log(chalk.dim('Detected Docker Compose installation'));
+                console.log(chalk.dim(`Detected Docker Compose installation (${mode} mode)`));
 
                 const hasComposeV2 = (() => {
                     try {
@@ -1289,7 +1360,7 @@ program
 
                 console.log(chalk.green('\nDocker containers updated!'));
             } else if (isDockerRun) {
-                console.log(chalk.dim('Detected docker-run.sh installation'));
+                console.log(chalk.dim(`Detected docker-run.sh installation (${mode} mode)`));
 
                 console.log(chalk.dim('Pulling latest image...'));
                 execSync('docker pull ghcr.io/pompeii-labs/nero-oss:latest', {
@@ -1298,7 +1369,9 @@ program
 
                 console.log(chalk.dim('Stopping current container...'));
                 try {
-                    execSync('docker stop nero && docker rm nero', { stdio: 'pipe' });
+                    execSync(`docker stop ${containerName} && docker rm ${containerName}`, {
+                        stdio: 'pipe',
+                    });
                 } catch {
                     console.log(chalk.dim('No existing container to stop'));
                 }
@@ -1307,6 +1380,8 @@ program
                 execSync(`bash ${dockerRunPath}`, { stdio: 'inherit' });
 
                 console.log(chalk.green('\nDocker container updated!'));
+            } else {
+                console.log(chalk.yellow('No Docker installation detected. Updating CLI only.'));
             }
 
             console.log(chalk.dim('\nUpdating CLI binary...'));
@@ -1345,6 +1420,128 @@ program
             console.error(chalk.red(`Update failed: ${err.message}`));
             process.exit(1);
         }
+    });
+
+program
+    .command('status')
+    .description('Show Nero installation status')
+    .action(async () => {
+        const fs = await import('fs');
+        const { readFile } = await import('fs/promises');
+        const { execSync } = await import('child_process');
+
+        const neroDir = join(getNeroHome(), '.nero');
+        const setupStatePath = join(neroDir, 'setup.json');
+        const dockerComposePath = join(neroDir, 'docker-compose.yml');
+        const dockerRunPath = join(neroDir, 'docker-run.sh');
+
+        console.log(chalk.bold('\nNero Status\n'));
+
+        console.log(`CLI Version: ${chalk.cyan(VERSION)}`);
+
+        let setupState: {
+            mode?: string;
+            compose?: boolean;
+            name?: string;
+            port?: string;
+            createdAt?: string;
+        } = {};
+        try {
+            const content = await readFile(setupStatePath, 'utf-8');
+            setupState = JSON.parse(content);
+        } catch {}
+
+        const containerName = setupState.name || 'nero';
+        const mode = setupState.mode || 'unknown';
+        const installType = fs.existsSync(dockerComposePath)
+            ? 'Docker Compose'
+            : fs.existsSync(dockerRunPath)
+              ? 'Docker Run'
+              : 'Not installed';
+
+        console.log(`Install Type: ${chalk.cyan(installType)}`);
+        console.log(
+            `Mode: ${chalk.cyan(mode)}${mode === 'integrated' ? chalk.dim(' (full host access)') : mode === 'contained' ? chalk.dim(' (sandboxed)') : ''}`,
+        );
+        console.log(`Container: ${chalk.cyan(containerName)}`);
+        if (setupState.port) {
+            console.log(`Port: ${chalk.cyan(setupState.port)}`);
+        }
+        if (setupState.createdAt) {
+            console.log(
+                `Setup Date: ${chalk.dim(new Date(setupState.createdAt).toLocaleString())}`,
+            );
+        }
+
+        console.log();
+
+        try {
+            const containerStatus = execSync(
+                `docker inspect --format='{{.State.Status}}' ${containerName} 2>/dev/null`,
+                { encoding: 'utf-8' },
+            ).trim();
+            const containerHealth = execSync(
+                `docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no healthcheck{{end}}' ${containerName} 2>/dev/null`,
+                { encoding: 'utf-8' },
+            ).trim();
+            const containerUptime = execSync(
+                `docker inspect --format='{{.State.StartedAt}}' ${containerName} 2>/dev/null`,
+                { encoding: 'utf-8' },
+            ).trim();
+
+            const statusColor = containerStatus === 'running' ? chalk.green : chalk.red;
+            console.log(`Container Status: ${statusColor(containerStatus)}`);
+            if (containerHealth !== 'no healthcheck') {
+                const healthColor =
+                    containerHealth === 'healthy'
+                        ? chalk.green
+                        : containerHealth === 'unhealthy'
+                          ? chalk.red
+                          : chalk.yellow;
+                console.log(`Health: ${healthColor(containerHealth)}`);
+            }
+            if (containerUptime) {
+                const startedAt = new Date(containerUptime);
+                const uptime = Date.now() - startedAt.getTime();
+                const hours = Math.floor(uptime / (1000 * 60 * 60));
+                const minutes = Math.floor((uptime % (1000 * 60 * 60)) / (1000 * 60));
+                console.log(`Uptime: ${chalk.dim(`${hours}h ${minutes}m`)}`);
+            }
+        } catch {
+            console.log(`Container Status: ${chalk.yellow('not running')}`);
+        }
+
+        if (fs.existsSync(dockerComposePath)) {
+            try {
+                const dbStatus = execSync(
+                    `docker inspect --format='{{.State.Status}}' nero-db 2>/dev/null`,
+                    { encoding: 'utf-8' },
+                ).trim();
+                const dbColor = dbStatus === 'running' ? chalk.green : chalk.red;
+                console.log(`Database: ${dbColor(dbStatus)}`);
+            } catch {
+                console.log(`Database: ${chalk.yellow('not running')}`);
+            }
+        }
+
+        console.log();
+
+        if (mode === 'integrated') {
+            console.log(chalk.dim('Capabilities:'));
+            console.log(chalk.dim('  - Host filesystem access (/host/home)'));
+            console.log(chalk.dim('  - Docker daemon access'));
+            console.log(chalk.dim('  - Host network'));
+        } else if (mode === 'contained') {
+            console.log(chalk.dim('Capabilities:'));
+            console.log(chalk.dim('  - Container-only filesystem'));
+            console.log(chalk.dim('  - No docker access'));
+            console.log(chalk.dim('  - Isolated network'));
+        }
+
+        console.log();
+        console.log(chalk.dim(`Config: ${getConfigPath()}`));
+        console.log(chalk.dim(`Dashboard: http://localhost:${setupState.port || '4848'}`));
+        console.log();
     });
 
 async function main() {
