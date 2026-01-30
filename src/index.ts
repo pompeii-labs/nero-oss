@@ -1321,13 +1321,23 @@ program
 
             const binaryUrl = `https://github.com/${REPO}/releases/download/${latestTag}/${binary}`;
 
+            let currentBinaryPath: string;
+            try {
+                currentBinaryPath = execSync('which nero', { encoding: 'utf-8' }).trim();
+            } catch {
+                currentBinaryPath = '/usr/local/bin/nero';
+            }
+
+            const needsSudo = currentBinaryPath.startsWith('/usr/local');
+
             console.log(chalk.dim(`Downloading ${binary}...`));
-            execSync(
-                `curl -fsSL "${binaryUrl}" -o /tmp/nero && chmod +x /tmp/nero && sudo mv /tmp/nero /usr/local/bin/nero`,
-                {
-                    stdio: 'inherit',
-                },
-            );
+            console.log(chalk.dim(`Installing to ${currentBinaryPath}`));
+
+            const installCmd = needsSudo
+                ? `curl -fsSL "${binaryUrl}" -o /tmp/nero && chmod +x /tmp/nero && sudo mv /tmp/nero "${currentBinaryPath}"`
+                : `curl -fsSL "${binaryUrl}" -o /tmp/nero && chmod +x /tmp/nero && mv /tmp/nero "${currentBinaryPath}"`;
+
+            execSync(installCmd, { stdio: 'inherit' });
 
             console.log(chalk.green(`\nNero updated to ${latestVersion}!`));
         } catch (error) {
