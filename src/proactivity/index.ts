@@ -1,25 +1,12 @@
 import chalk from 'chalk';
-import { db, isDbConnected } from '../db/index.js';
+import { isDbConnected } from '../db/index.js';
+import { ThinkingRun, Note, type ThinkingRunData, type NoteData } from '../models/index.js';
 import type { NeroConfig } from '../config.js';
 import type { Nero } from '../agent/nero.js';
 
 const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
 const BACKGROUND_INTERVAL_MS = 10 * 60 * 1000;
 const RETENTION_DAYS = 7;
-
-interface ThinkingRun {
-    id: number;
-    thought: string;
-    surfaced: boolean;
-    created_at: string;
-}
-
-export interface Note {
-    id: number;
-    content: string;
-    category: string | null;
-    created_at: string;
-}
 
 export class ProactivityManager {
     private config: NeroConfig;
@@ -126,69 +113,35 @@ export class ProactivityManager {
     }
 
     private async storeThought(thought: string): Promise<void> {
-        await db.query('INSERT INTO thinking_runs (thought) VALUES ($1)', [thought]);
+        await ThinkingRun.create({ thought, surfaced: false });
     }
 
     private async cleanupOldThoughts(): Promise<void> {
-        await db.query(
-            `DELETE FROM thinking_runs WHERE created_at < NOW() - INTERVAL '${RETENTION_DAYS} days'`,
-        );
+        await ThinkingRun.deleteOlderThan(RETENTION_DAYS);
     }
 
-    async getUnsurfacedThoughts(): Promise<ThinkingRun[]> {
-        if (!isDbConnected()) return [];
-
-        const result = await db.query(
-            `SELECT id, thought, surfaced, created_at FROM thinking_runs
-             WHERE surfaced = FALSE
-             ORDER BY created_at ASC`,
-        );
-
-        return result.rows;
+    async getUnsurfacedThoughts(): Promise<ThinkingRunData[]> {
+        return ThinkingRun.getUnsurfaced();
     }
 
     async markThoughtsSurfaced(ids: number[]): Promise<void> {
-        if (!isDbConnected() || ids.length === 0) return;
-
-        await db.query('UPDATE thinking_runs SET surfaced = TRUE WHERE id = ANY($1)', [ids]);
+        await ThinkingRun.markSurfaced(ids);
     }
 
-    async getRecentThoughts(limit = 10): Promise<ThinkingRun[]> {
-        if (!isDbConnected()) return [];
-
-        const result = await db.query(
-            `SELECT id, thought, surfaced, created_at FROM thinking_runs
-             ORDER BY created_at DESC LIMIT $1`,
-            [limit],
-        );
-
-        return result.rows;
+    async getRecentThoughts(limit = 10): Promise<ThinkingRunData[]> {
+        return ThinkingRun.getRecent(limit);
     }
 
-    async getUnsurfacedNotes(): Promise<Note[]> {
-        if (!isDbConnected()) return [];
-
-        const result = await db.query(
-            `SELECT id, content, category, created_at FROM notes
-             WHERE surfaced = FALSE
-             ORDER BY created_at ASC`,
-        );
-
-        return result.rows;
+    async getUnsurfacedNotes(): Promise<NoteData[]> {
+        return Note.getUnsurfaced();
     }
 
     async markNotesSurfaced(ids: number[]): Promise<void> {
-        if (!isDbConnected() || ids.length === 0) return;
-
-        await db.query('UPDATE notes SET surfaced = TRUE WHERE id = ANY($1)', [ids]);
+        await Note.markSurfaced(ids);
     }
 
     async cleanupOldNotes(): Promise<void> {
-        if (!isDbConnected()) return;
-
-        await db.query(
-            `DELETE FROM notes WHERE created_at < NOW() - INTERVAL '${RETENTION_DAYS} days'`,
-        );
+        await Note.deleteOlderThan(RETENTION_DAYS);
     }
 
     shutdown(): void {

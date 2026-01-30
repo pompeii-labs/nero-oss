@@ -3,7 +3,8 @@ import path from 'path';
 import crypto from 'crypto';
 import { Nero, ToolActivity } from '../../agent/nero.js';
 import { Logger } from '../../util/logger.js';
-import { db, isDbConnected } from '../../db/index.js';
+import { isDbConnected } from '../../db/index.js';
+import { Workspace, ThinkingRun } from '../../models/index.js';
 import { hostToContainer } from '../../util/paths.js';
 import { isToolAllowed, addAllowedTool, getAllowedTools, removeAllowedTool } from '../../config.js';
 
@@ -23,18 +24,8 @@ const pendingPermissions = new Map<string, PendingPermission>();
 async function registerWorkspace(cwdPath: string, detectedFrom: string): Promise<void> {
     if (!isDbConnected()) return;
 
-    const existing = await db.query('SELECT id FROM workspaces WHERE path = $1', [cwdPath]);
-    if (existing.rows.length > 0) {
-        await db.query('UPDATE workspaces SET last_accessed = NOW() WHERE path = $1', [cwdPath]);
-        return;
-    }
-
     const name = path.basename(cwdPath);
-    await db.query('INSERT INTO workspaces (name, path, detected_from) VALUES ($1, $2, $3)', [
-        name,
-        cwdPath,
-        detectedFrom,
-    ]);
+    await Workspace.upsert(cwdPath, name, detectedFrom);
 }
 
 export function createChatRouter(agent: Nero) {
@@ -249,19 +240,19 @@ export function createChatRouter(agent: Nero) {
         });
 
         try {
-            const recentThoughts = await db.query(
-                `SELECT thought, created_at FROM thinking_runs ORDER BY created_at DESC LIMIT 20`,
-            );
+            const recentThoughts = await ThinkingRun.getRecent(20);
 
             sendSSE({ type: 'status', data: 'Starting background thinking...' });
 
-            const thought = await agent.runBackgroundThinking(recentThoughts.rows);
+            const thought = await agent.runBackgroundThinking(
+                recentThoughts.map((t) => ({ thought: t.thought, created_at: t.created_at })),
+            );
 
             if (thought) {
                 const isUrgent = thought.startsWith('[URGENT]');
                 const cleanThought = isUrgent ? thought.replace('[URGENT]', '').trim() : thought;
 
-                await db.query('INSERT INTO thinking_runs (thought) VALUES ($1)', [cleanThought]);
+                await ThinkingRun.create({ thought: cleanThought, surfaced: false });
 
                 sendSSE({
                     type: 'done',

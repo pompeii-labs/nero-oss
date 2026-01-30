@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { initDb, db, migrateDb, closeDb, isDbConnected } from './src/db/index.js';
+import { Message, Memory, Action } from './src/models/index.js';
 
 await initDb();
 
@@ -86,30 +87,30 @@ async function stats() {
 async function clearMessages() {
     if (!isDbConnected()) return 'Database not connected';
 
-    await db.query('DELETE FROM messages');
+    await Message.deleteAll();
     return 'Cleared all messages';
 }
 
 async function clearMemories() {
     if (!isDbConnected()) return 'Database not connected';
 
-    await db.query('DELETE FROM memories');
+    await Memory.deleteAll();
     return 'Cleared all memories';
 }
 
 async function clearActions() {
     if (!isDbConnected()) return 'Database not connected';
 
-    await db.query('DELETE FROM actions');
+    await Action.deleteAll();
     return 'Cleared all actions';
 }
 
 async function clearAll() {
     if (!isDbConnected()) return 'Database not connected';
 
-    await db.query('DELETE FROM messages');
-    await db.query('DELETE FROM memories');
-    await db.query('DELETE FROM actions');
+    await Message.deleteAll();
+    await Memory.deleteAll();
+    await Action.deleteAll();
     return 'Cleared messages, memories, and actions';
 }
 

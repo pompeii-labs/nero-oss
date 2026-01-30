@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { Nero } from '../../agent/nero.js';
 import { Logger } from '../../util/logger.js';
-import { db, isDbConnected } from '../../db/index.js';
+import { isDbConnected } from '../../db/index.js';
+import { Memory } from '../../models/index.js';
 import {
     loadConfig,
     saveConfig,
@@ -23,10 +24,8 @@ export function createWebRouter(agent: Nero) {
         }
 
         try {
-            const result = await db.query(
-                `SELECT id, body, created_at FROM memories ORDER BY created_at DESC LIMIT 100`,
-            );
-            res.json(result.rows);
+            const memories = await Memory.getRecent(100);
+            res.json(memories);
         } catch (error) {
             logger.error(`Failed to get memories: ${(error as Error).message}`);
             res.status(500).json({ error: 'Failed to get memories' });
@@ -46,11 +45,8 @@ export function createWebRouter(agent: Nero) {
         }
 
         try {
-            const result = await db.query(
-                `INSERT INTO memories (body) VALUES ($1) RETURNING id, body, created_at`,
-                [body],
-            );
-            res.json(result.rows[0]);
+            const memory = await Memory.create({ body, related_to: [] });
+            res.json(memory);
         } catch (error) {
             logger.error(`Failed to create memory: ${(error as Error).message}`);
             res.status(500).json({ error: 'Failed to create memory' });
@@ -71,7 +67,10 @@ export function createWebRouter(agent: Nero) {
         }
 
         try {
-            await db.query(`DELETE FROM memories WHERE id = $1`, [id]);
+            const memory = await Memory.get(id);
+            if (memory) {
+                await memory.delete();
+            }
             res.json({ success: true });
         } catch (error) {
             logger.error(`Failed to delete memory: ${(error as Error).message}`);

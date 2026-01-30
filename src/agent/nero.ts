@@ -20,6 +20,7 @@ import { encode as toon } from '@toon-format/toon';
 import { NeroConfig } from '../config.js';
 import { McpClient } from '../mcp/client.js';
 import { db, isDbConnected } from '../db/index.js';
+import { Message, Memory, Action, Summary, Note } from '../models/index.js';
 import { generateDiff } from '../util/diff.js';
 import { hostToContainer, containerToHost } from '../util/paths.js';
 import { ProactivityManager } from '../proactivity/index.js';
@@ -49,7 +50,7 @@ export interface LoadedMessage {
     role: 'user' | 'assistant';
     content: string;
     created_at: string;
-    medium?: 'cli' | 'api' | 'voice' | 'sms' | 'slack';
+    medium?: 'terminal' | 'voice' | 'sms' | 'web' | 'cli' | 'api' | 'slack';
     isHistory?: boolean;
 }
 
@@ -66,12 +67,12 @@ export class Nero extends MagmaAgent {
     private loadedMessages: LoadedMessage[] = [];
     private hasSummary: boolean = false;
     private proactivity: ProactivityManager;
-    private pendingThoughts: Array<{ id: number; thought: string; created_at: string }> = [];
+    private pendingThoughts: Array<{ id: number; thought: string; created_at: Date }> = [];
     private pendingNotes: Array<{
         id: number;
         content: string;
         category: string | null;
-        created_at: string;
+        created_at: Date;
     }> = [];
     private backgroundMode: boolean = false;
 
@@ -124,66 +125,56 @@ export class Nero extends MagmaAgent {
         if (!isDbConnected()) return;
 
         try {
-            const summaryResult = await db.query(
-                `SELECT content, covers_until FROM summaries ORDER BY created_at DESC LIMIT 1`,
-            );
+            const summary = await Summary.getLatest();
 
-            if (summaryResult.rows.length > 0) {
-                const summary = summaryResult.rows[0];
+            if (summary) {
                 this.hasSummary = true;
                 this.addMessage({
                     role: 'system',
                     content: `[Previous conversation summary]: ${summary.content}`,
                 });
 
-                const messagesResult = await db.query(
-                    `SELECT role, content, created_at, medium FROM messages
-                     WHERE created_at > $1 AND compacted = FALSE
-                     ORDER BY created_at ASC LIMIT $2`,
-                    [summary.covers_until, limit],
-                );
+                const messages = await Message.getSince(summary.covers_until, limit);
 
-                this.loadedMessages = messagesResult.rows.map((row) => ({
-                    role: row.role,
-                    content: row.content,
-                    created_at: row.created_at,
-                    medium: row.medium,
-                    isHistory: true,
-                }));
+                this.loadedMessages = messages
+                    .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
+                    .map((msg) => ({
+                        role: msg.role as 'user' | 'assistant',
+                        content: msg.content,
+                        created_at: String(msg.created_at),
+                        medium: msg.medium,
+                        isHistory: true,
+                    }));
 
-                for (const row of messagesResult.rows) {
-                    if (row.role === 'user' || row.role === 'assistant') {
-                        this.addMessage({ role: row.role, content: row.content });
+                for (const msg of messages) {
+                    if (msg.role === 'user' || msg.role === 'assistant') {
+                        this.addMessage({ role: msg.role, content: msg.content });
                     }
                 }
 
-                console.log(
-                    chalk.dim(`[setup] Loaded summary + ${messagesResult.rows.length} messages`),
-                );
+                console.log(chalk.dim(`[setup] Loaded summary + ${messages.length} messages`));
             } else {
-                const messagesResult = await db.query(
-                    `SELECT role, content, created_at, medium FROM messages
-                     ORDER BY created_at DESC LIMIT $1`,
-                    [limit],
-                );
+                const messages = await Message.getRecent(limit);
+                const reversed = messages.reverse();
 
-                const messages = messagesResult.rows.reverse();
-                this.loadedMessages = messages.map((row) => ({
-                    role: row.role,
-                    content: row.content,
-                    created_at: row.created_at,
-                    medium: row.medium,
-                    isHistory: true,
-                }));
+                this.loadedMessages = reversed
+                    .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
+                    .map((msg) => ({
+                        role: msg.role as 'user' | 'assistant',
+                        content: msg.content,
+                        created_at: String(msg.created_at),
+                        medium: msg.medium,
+                        isHistory: true,
+                    }));
 
-                for (const row of messages) {
-                    if (row.role === 'user' || row.role === 'assistant') {
-                        this.addMessage({ role: row.role, content: row.content });
+                for (const msg of reversed) {
+                    if (msg.role === 'user' || msg.role === 'assistant') {
+                        this.addMessage({ role: msg.role, content: msg.content });
                     }
                 }
 
-                if (messages.length > 0) {
-                    console.log(chalk.dim(`[setup] Loaded ${messages.length} previous messages`));
+                if (reversed.length > 0) {
+                    console.log(chalk.dim(`[setup] Loaded ${reversed.length} previous messages`));
                 }
             }
         } catch (error) {
@@ -225,10 +216,8 @@ export class Nero extends MagmaAgent {
             throw new Error('Database not connected');
         }
 
-        const previousSummaryResult = await db.query(
-            `SELECT content FROM summaries ORDER BY created_at DESC LIMIT 1`,
-        );
-        const previousSummary = previousSummaryResult.rows[0]?.content;
+        const previousSummaryObj = await Summary.getLatest();
+        const previousSummary = previousSummaryObj?.content;
 
         let summaryPrompt = `Create a comprehensive summary of the following conversation that preserves important context for future sessions.
 
@@ -265,26 +254,26 @@ Be thorough - this summary will be the primary context for future conversations.
             max_tokens: 2500,
         });
 
-        const summary = response.choices[0]?.message?.content || '';
+        const summaryContent = response.choices[0]?.message?.content || '';
         const tokenEstimate = this.estimateTokens();
 
-        await db.query(
-            `INSERT INTO summaries (content, covers_until, token_estimate)
-             VALUES ($1, NOW(), $2)`,
-            [summary, tokenEstimate],
-        );
+        await Summary.create({
+            content: summaryContent,
+            covers_until: new Date(),
+            token_estimate: tokenEstimate,
+        });
 
-        await db.query(`UPDATE messages SET compacted = TRUE WHERE compacted = FALSE`);
+        await Message.markAllCompacted();
 
         this.clearHistory();
         this.addMessage({
             role: 'system',
-            content: `[Previous conversation summary]: ${summary}`,
+            content: `[Previous conversation summary]: ${summaryContent}`,
         });
         this.hasSummary = true;
         this.loadedMessages = [];
 
-        return summary;
+        return summaryContent;
     }
 
     async getMessageHistory(
@@ -292,22 +281,23 @@ Be thorough - this summary will be the primary context for future conversations.
     ): Promise<Array<{ role: string; content: string; created_at: string; medium?: string }>> {
         if (!isDbConnected()) return [];
 
-        const result = await db.query(
-            `SELECT role, content, created_at, medium FROM messages
-             ORDER BY created_at DESC LIMIT $1`,
-            [limit],
-        );
-
-        return result.rows.reverse();
+        const messages = await Message.getRecent(limit);
+        return messages.reverse().map((m) => ({
+            role: m.role,
+            content: m.content,
+            created_at: String(m.created_at),
+            medium: m.medium,
+        }));
     }
 
     private async refreshMemoriesCache(): Promise<void> {
         if (!isDbConnected()) return;
         try {
-            const result = await db.query(
-                `SELECT body, created_at FROM memories ORDER BY created_at DESC LIMIT 20`,
-            );
-            this.memoriesCache = result.rows;
+            const memories = await Memory.getRecent(20);
+            this.memoriesCache = memories.map((m) => ({
+                body: m.body,
+                created_at: String(m.created_at),
+            }));
         } catch (error) {
             console.error(chalk.dim(`[db] Failed to load memories`));
         }
@@ -316,10 +306,11 @@ Be thorough - this summary will be the primary context for future conversations.
     private async refreshActionsCache(): Promise<void> {
         if (!isDbConnected()) return;
         try {
-            const result = await db.query(
-                `SELECT request, timestamp FROM actions WHERE timestamp > NOW() ORDER BY timestamp ASC`,
-            );
-            this.actionsCache = result.rows;
+            const actions = await Action.getUpcoming();
+            this.actionsCache = actions.map((a) => ({
+                request: a.request,
+                timestamp: String(a.timestamp),
+            }));
         } catch (error) {
             console.error(chalk.dim(`[db] Failed to load actions`));
         }
@@ -382,7 +373,7 @@ Be thorough - this summary will be the primary context for future conversations.
         if (this.pendingThoughts.length > 0) {
             context.backgroundThoughts = this.pendingThoughts.map((t) => ({
                 thought: t.thought,
-                when: t.created_at,
+                when: t.created_at.toISOString(),
             }));
         }
 
@@ -390,7 +381,7 @@ Be thorough - this summary will be the primary context for future conversations.
             context.notesForUser = this.pendingNotes.map((n) => ({
                 content: n.content,
                 category: n.category,
-                when: n.created_at,
+                when: n.created_at.toISOString(),
             }));
         }
 
@@ -504,7 +495,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     }
 
     async runBackgroundThinking(
-        recentThoughts: Array<{ thought: string; created_at: string }>,
+        recentThoughts: Array<{ thought: string; created_at: Date | string }>,
     ): Promise<string | null> {
         const savedMessages = this.getMessages();
         this.backgroundMode = true;
@@ -612,11 +603,12 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
     async scheduleAction(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const { request, timestamp, recurrence } = call.fn_args;
 
-        await db.query(`INSERT INTO actions (request, timestamp, recurrence) VALUES ($1, $2, $3)`, [
+        await Action.create({
             request,
-            timestamp,
-            recurrence || null,
-        ]);
+            timestamp: new Date(timestamp),
+            recurrence: recurrence || null,
+            steps: [],
+        });
         await this.refreshActionsCache();
 
         return `Action scheduled for ${timestamp}${recurrence ? ` (${recurrence})` : ''}`;
@@ -725,11 +717,12 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
     private async saveMessage(role: 'user' | 'assistant', content: string): Promise<void> {
         if (!isDbConnected() || this.backgroundMode) return;
         try {
-            await db.query(`INSERT INTO messages (role, content, medium) VALUES ($1, $2, $3)`, [
+            await Message.create({
                 role,
                 content,
-                this.currentMedium,
-            ]);
+                medium: this.currentMedium,
+                compacted: false,
+            });
         } catch (error) {
             const err = error as Error;
             console.error(chalk.dim(`[db] Failed to save message: ${err.message}`));
@@ -745,17 +738,19 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
     }
 
     async getMemories(): Promise<Array<{ body: string; created_at: string }>> {
-        const result = await db.query(
-            `SELECT body, created_at FROM memories ORDER BY created_at DESC LIMIT 20`,
-        );
-        return result.rows;
+        const memories = await Memory.getRecent(20);
+        return memories.map((m) => ({
+            body: m.body,
+            created_at: String(m.created_at),
+        }));
     }
 
     async getActions(): Promise<Array<{ request: string; timestamp: string }>> {
-        const result = await db.query(
-            `SELECT request, timestamp FROM actions WHERE timestamp > NOW() ORDER BY timestamp ASC`,
-        );
-        return result.rows;
+        const actions = await Action.getUpcoming();
+        return actions.map((a) => ({
+            request: a.request,
+            timestamp: String(a.timestamp),
+        }));
     }
 
     getMcpToolNames(): string[] {
@@ -1199,7 +1194,7 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
         this.emitActivity(activity);
 
         try {
-            await db.query(`INSERT INTO memories (body) VALUES ($1)`, [content]);
+            await Memory.create({ body: content, related_to: [] });
             await this.refreshMemoriesCache();
             activity.status = 'complete';
             activity.result = 'Memory stored';
@@ -1246,10 +1241,11 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
         this.emitActivity(activity);
 
         try {
-            await db.query(`INSERT INTO notes (content, category) VALUES ($1, $2)`, [
-                note,
-                category || null,
-            ]);
+            await Note.create({
+                content: note,
+                category: category || null,
+                surfaced: false,
+            });
             activity.status = 'complete';
             activity.result = 'Note saved';
             this.emitActivity(activity);

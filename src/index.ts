@@ -24,6 +24,14 @@ import {
 import { createServer } from 'http';
 import { VERSION } from './util/version.js';
 import semver from 'semver';
+import {
+    generateComposeYaml,
+    generateRunScript,
+    docker,
+    compose,
+    DEFAULT_IMAGE,
+    type DockerConfig,
+} from './docker/index.js';
 
 dotenv.config();
 
@@ -1147,73 +1155,22 @@ program
         if (options.compose) {
             const composePath = join(neroDir, 'docker-compose.yml');
 
-            const integratedVolumes = `      - \${HOME}/.nero:/host/home/.nero
-      - \${HOME}:/host/home
-      - /var/run/docker.sock:/var/run/docker.sock`;
+            const dockerConfig: DockerConfig = {
+                name: options.name,
+                port: options.port,
+                mode,
+                image: DEFAULT_IMAGE,
+            };
 
-            const containedVolumes = `      - nero_config:/app/config`;
-
-            const composeFile = `services:
-  nero:
-    image: ghcr.io/pompeii-labs/nero-oss:latest
-    container_name: ${options.name}
-    restart: unless-stopped${isIntegrated ? '\n    network_mode: host' : `\n    ports:\n      - "${options.port}:4848"`}
-    environment:
-      - HOST_HOME=${isIntegrated ? '${HOME}' : ''}
-      - DATABASE_URL=postgresql://nero:nero@${isIntegrated ? 'localhost' : 'db'}:5432/nero
-      - GIT_DISCOVERY_ACROSS_FILESYSTEM=1
-      - NERO_MODE=${mode}
-    env_file:
-      - .env
-    volumes:
-${isIntegrated ? integratedVolumes : containedVolumes}${
-                isIntegrated
-                    ? ''
-                    : `
-    depends_on:
-      db:
-        condition: service_healthy`
-            }
-
-  db:
-    image: postgres:16-alpine
-    container_name: nero-db
-    restart: unless-stopped${isIntegrated ? '\n    network_mode: host' : ''}
-    environment:
-      - POSTGRES_USER=nero
-      - POSTGRES_PASSWORD=nero
-      - POSTGRES_DB=nero
-    volumes:
-      - nero_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nero"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  nero_data:${isIntegrated ? '' : '\n  nero_config:'}
-`;
-
+            const composeFile = generateComposeYaml(dockerConfig);
             await writeFile(composePath, composeFile);
             console.log(chalk.green('Created ~/.nero/docker-compose.yml'));
 
-            const hasComposeV2 = (() => {
-                try {
-                    execSync('docker compose version', { stdio: 'ignore' });
-                    return true;
-                } catch {
-                    return false;
-                }
-            })();
-
-            const compose = hasComposeV2 ? 'docker compose' : 'docker-compose';
-
             console.log(chalk.dim('\nPulling images...'));
-            execSync(`${compose} pull`, { cwd: neroDir, stdio: 'inherit' });
+            compose.pull(neroDir);
 
             console.log(chalk.dim('Starting services...'));
-            execSync(`${compose} up -d`, { cwd: neroDir, stdio: 'inherit' });
+            compose.up(neroDir);
 
             console.log(chalk.green(`\nNero is running in ${mode} mode with Postgres!`));
             console.log(chalk.dim(`\nDashboard: http://localhost:${options.port}`));
@@ -1226,46 +1183,24 @@ volumes:
         } else {
             const dockerRunPath = join(neroDir, 'docker-run.sh');
 
-            const integratedScript = `#!/bin/bash
-docker run -d --name ${options.name} \\
-  --restart unless-stopped \\
-  --network host \\
-  -v ~/.nero:/host/home/.nero \\
-  -v ~:/host/home \\
-  -v /var/run/docker.sock:/var/run/docker.sock \\
-  -e HOST_HOME=$HOME \\
-  -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 \\
-  -e NERO_MODE=integrated \\
-  --env-file ~/.nero/.env \\
-  ghcr.io/pompeii-labs/nero-oss:latest
-`;
+            const dockerConfig: DockerConfig = {
+                name: options.name,
+                port: options.port,
+                mode,
+                image: DEFAULT_IMAGE,
+            };
 
-            const containedScript = `#!/bin/bash
-docker run -d --name ${options.name} \\
-  --restart unless-stopped \\
-  -p ${options.port}:4848 \\
-  -v nero_config:/app/config \\
-  -e NERO_MODE=contained \\
-  --env-file ~/.nero/.env \\
-  ghcr.io/pompeii-labs/nero-oss:latest
-`;
-
-            const script = isIntegrated ? integratedScript : containedScript;
-
+            const script = generateRunScript(dockerConfig);
             await writeFile(dockerRunPath, script);
             fs.chmodSync(dockerRunPath, '755');
 
             console.log(chalk.green('Created ~/.nero/docker-run.sh'));
 
             console.log(chalk.dim('\nPulling latest image...'));
-            execSync('docker pull ghcr.io/pompeii-labs/nero-oss:latest', { stdio: 'inherit' });
+            docker.pull();
 
             console.log(chalk.dim('Stopping any existing container...'));
-            try {
-                execSync(`docker stop ${options.name} && docker rm ${options.name}`, {
-                    stdio: 'pipe',
-                });
-            } catch {}
+            docker.stopAndRemove(options.name);
 
             console.log(chalk.dim('Starting Nero...'));
             execSync(`bash ${dockerRunPath}`, { stdio: 'inherit' });
@@ -1340,39 +1275,21 @@ program
             if (isDockerCompose) {
                 console.log(chalk.dim(`Detected Docker Compose installation (${mode} mode)`));
 
-                const hasComposeV2 = (() => {
-                    try {
-                        execSync('docker compose version', { stdio: 'ignore' });
-                        return true;
-                    } catch {
-                        return false;
-                    }
-                })();
-
-                const compose = hasComposeV2 ? 'docker compose' : 'docker-compose';
-
                 console.log(chalk.dim('Pulling latest image...'));
-                execSync(`${compose} pull`, { cwd: neroDir, stdio: 'inherit' });
+                compose.pull(neroDir);
 
                 console.log(chalk.dim('Restarting containers...'));
-                execSync(`${compose} down`, { cwd: neroDir, stdio: 'inherit' });
-                execSync(`${compose} up -d`, { cwd: neroDir, stdio: 'inherit' });
+                compose.restart(neroDir);
 
                 console.log(chalk.green('\nDocker containers updated!'));
             } else if (isDockerRun) {
                 console.log(chalk.dim(`Detected docker-run.sh installation (${mode} mode)`));
 
                 console.log(chalk.dim('Pulling latest image...'));
-                execSync('docker pull ghcr.io/pompeii-labs/nero-oss:latest', {
-                    stdio: 'inherit',
-                });
+                docker.pull();
 
                 console.log(chalk.dim('Stopping current container...'));
-                try {
-                    execSync(`docker stop ${containerName} && docker rm ${containerName}`, {
-                        stdio: 'pipe',
-                    });
-                } catch {
+                if (!docker.stopAndRemove(containerName)) {
                     console.log(chalk.dim('No existing container to stop'));
                 }
 
@@ -1409,8 +1326,8 @@ program
             console.log(chalk.dim(`Installing to ${currentBinaryPath}`));
 
             const installCmd = needsSudo
-                ? `curl -fsSL "${binaryUrl}" -o /tmp/nero && chmod +x /tmp/nero && sudo mv /tmp/nero "${currentBinaryPath}"`
-                : `curl -fsSL "${binaryUrl}" -o /tmp/nero && chmod +x /tmp/nero && mv /tmp/nero "${currentBinaryPath}"`;
+                ? `curl -fsSL -o /tmp/nero "${binaryUrl}" && chmod +x /tmp/nero && sudo mv /tmp/nero "${currentBinaryPath}"`
+                : `curl -fsSL -o /tmp/nero "${binaryUrl}" && chmod +x /tmp/nero && mv /tmp/nero "${currentBinaryPath}"`;
 
             execSync(installCmd, { stdio: 'inherit' });
 
