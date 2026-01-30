@@ -2,6 +2,11 @@
 
 All notable changes to Nero are documented here.
 
+## 1.12.1 (2026-01-30)
+
+### Fixes
+- Fix database connection race condition in docker-compose setup
+
 ## 1.12.0 (2026-01-30)
 
 ### Changes
