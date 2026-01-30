@@ -76,7 +76,7 @@
                 {#if activity.tool === 'bash' && activity.args?.command}
                     Nero wants to run <span class="font-mono font-semibold text-primary">{activity.args.command}</span>
                 {:else}
-                    Nero wants to use the <span class="font-mono font-semibold text-primary">{activity.tool}</span> tool
+                    Nero wants to use the <span class="font-mono font-semibold text-primary">{activity.displayName || activity.tool}</span> tool
                 {/if}
             </Dialog.Description>
         </Dialog.Header>

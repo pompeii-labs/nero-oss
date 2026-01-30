@@ -47,7 +47,7 @@
         </div>
 
         <div class="flex-1 min-w-0">
-            <span class="font-mono text-sm text-foreground/90">{activity.tool}</span>
+            <span class="font-mono text-sm text-foreground/90">{activity.displayName || activity.tool}</span>
             <div class="flex items-center gap-2 mt-0.5">
                 <span class={cn('text-xs capitalize', config.color)}>{activity.status}</span>
             </div>

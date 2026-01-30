@@ -24,9 +24,11 @@ import { Message, Memory, Action, Summary, Note } from '../models/index.js';
 import { generateDiff } from '../util/diff.js';
 import { hostToContainer, containerToHost } from '../util/paths.js';
 import { formatSessionAge } from '../util/temporal.js';
+import { Logger, formatToolName } from '../util/logger.js';
 import { ProactivityManager } from '../proactivity/index.js';
 import { isDestructiveToolCall } from '../proactivity/destructive.js';
 import { SessionManager } from '../services/session-manager.js';
+import { processManager } from '../services/process-manager.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -38,6 +40,7 @@ interface ChatResponse {
 export interface ToolActivity {
     id: string;
     tool: string;
+    displayName?: string;
     args: Record<string, any>;
     status: 'pending' | 'approved' | 'denied' | 'skipped' | 'running' | 'complete' | 'error';
     result?: string;
@@ -436,6 +439,7 @@ Be thorough - this summary will be the primary context for future conversations.
 
     async cleanup(): Promise<void> {
         this.proactivity.shutdown();
+        processManager.cleanup();
         await this.mcpClient.disconnect();
     }
 
@@ -981,6 +985,10 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
     }
 
     private emitActivity(activity: ToolActivity): void {
+        if (!activity.displayName) {
+            activity.displayName = formatToolName(activity.tool);
+        }
+        Logger.main.tool(activity);
         this.onActivity?.(activity);
     }
 
@@ -1805,5 +1813,203 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
             this.emitActivity(activity);
             return `Fetch error: ${activity.error}`;
         }
+    }
+
+    @tool({
+        description: `Start a long-running background process. Use for commands that stream indefinitely (docker logs -f, tail -f, watch).
+
+IMPORTANT: After starting, use getProcessOutput to check output and stopBackgroundProcess to stop it. Do NOT use bash to kill - use stopBackgroundProcess with the returned ID.`,
+    })
+    @toolparam({
+        key: 'command',
+        type: 'string',
+        required: true,
+        description: 'The command to run in the background',
+    })
+    @toolparam({
+        key: 'timeout',
+        type: 'number',
+        required: false,
+        description: 'Auto-kill after this many milliseconds (default: no timeout)',
+    })
+    async startBackgroundProcess(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { command, timeout } = call.fn_args;
+        const approved = await this.requestPermission('background_process', { command }, call.id);
+        if (!approved) return 'Permission denied by user.';
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'startBackgroundProcess',
+            args: { command },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            const procId = processManager.startProcess(command, {
+                timeout,
+                cwd: this.currentCwd,
+            });
+
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
+            const proc = processManager.getProcess(procId);
+            if (proc?.status === 'error') {
+                const output = processManager.getOutput(procId);
+                activity.status = 'error';
+                activity.error = 'Process failed to start';
+                this.emitActivity(activity);
+                return `Process failed to start:\n${output.join('\n')}`;
+            }
+
+            activity.status = 'complete';
+            activity.result = `Started process ${procId}`;
+            this.emitActivity(activity);
+
+            const initialOutput = processManager.getOutput(procId, 10);
+            const outputPreview =
+                initialOutput.length > 0 ? `\n\nInitial output:\n${initialOutput.join('\n')}` : '';
+
+            return `Process started: ${procId}${outputPreview}\n\nUse getProcessOutput("${procId}") to see more output, stopBackgroundProcess("${procId}") to stop.`;
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Error starting process: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description:
+            'Get output from a background process started with startBackgroundProcess. Call this to check on long-running commands.',
+    })
+    @toolparam({
+        key: 'processId',
+        type: 'string',
+        required: true,
+        description: 'The process ID (e.g. "proc_1") returned by startBackgroundProcess',
+    })
+    @toolparam({
+        key: 'lines',
+        type: 'number',
+        required: false,
+        description: 'Number of lines to return (default: 50)',
+    })
+    async getProcessOutput(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { processId, lines = 50 } = call.fn_args;
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'getProcessOutput',
+            args: { processId, lines },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        const proc = processManager.getProcess(processId);
+        if (!proc) {
+            activity.status = 'error';
+            activity.error = `Process ${processId} not found`;
+            this.emitActivity(activity);
+            return `Process ${processId} not found.`;
+        }
+
+        const output = processManager.getOutput(processId, lines);
+        const status = proc.status;
+        const exitInfo = proc.exitCode !== null ? ` (exit code: ${proc.exitCode})` : '';
+
+        activity.status = 'complete';
+        activity.result = `${status}${exitInfo}, ${output.length} lines`;
+        this.emitActivity(activity);
+
+        return `Process ${processId} [${status}${exitInfo}]:\n${output.join('\n') || '(no output yet)'}`;
+    }
+
+    @tool({
+        description:
+            'Stop a background process started with startBackgroundProcess. Use this instead of bash kill commands.',
+    })
+    @toolparam({
+        key: 'processId',
+        type: 'string',
+        required: true,
+        description: 'The process ID (e.g. "proc_1") to stop',
+    })
+    async stopBackgroundProcess(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { processId } = call.fn_args;
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'stopBackgroundProcess',
+            args: { processId },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        const proc = processManager.getProcess(processId);
+        if (!proc) {
+            activity.status = 'error';
+            activity.error = `Process ${processId} not found`;
+            this.emitActivity(activity);
+            return `Process ${processId} not found.`;
+        }
+
+        if (proc.status !== 'running') {
+            activity.status = 'complete';
+            activity.result = `Already ${proc.status}`;
+            this.emitActivity(activity);
+            return `Process ${processId} is not running (status: ${proc.status}).`;
+        }
+
+        const stopped = processManager.stopProcess(processId);
+        if (stopped) {
+            activity.status = 'complete';
+            activity.result = 'Process stopped';
+            this.emitActivity(activity);
+            return `Process ${processId} stopped.`;
+        } else {
+            activity.status = 'error';
+            activity.error = 'Failed to stop';
+            this.emitActivity(activity);
+            return `Failed to stop process ${processId}.`;
+        }
+    }
+
+    @tool({
+        description:
+            'List all background processes started with startBackgroundProcess, showing their status and runtime.',
+    })
+    async listBackgroundProcesses(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'listBackgroundProcesses',
+            args: {},
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        const processes = processManager.listProcesses();
+
+        if (processes.length === 0) {
+            activity.status = 'complete';
+            activity.result = 'No processes';
+            this.emitActivity(activity);
+            return 'No background processes.';
+        }
+
+        const running = processes.filter((p) => p.status === 'running').length;
+        activity.status = 'complete';
+        activity.result = `${processes.length} processes (${running} running)`;
+        this.emitActivity(activity);
+
+        const lines = processes.map((p) => {
+            const runtime = p.stoppedAt
+                ? `ran for ${Math.round((p.stoppedAt.getTime() - p.startedAt.getTime()) / 1000)}s`
+                : `running for ${Math.round((Date.now() - p.startedAt.getTime()) / 1000)}s`;
+            const exitInfo = p.exitCode !== null ? ` (exit: ${p.exitCode})` : '';
+            return `${p.id} [${p.status}${exitInfo}] ${runtime}\n  ${p.command}`;
+        });
+
+        return lines.join('\n\n');
     }
 }

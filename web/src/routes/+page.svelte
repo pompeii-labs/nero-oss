@@ -205,7 +205,7 @@
                     if (isAtBottom) scrollToBottom();
                 },
                 onActivity: (activity) => {
-                    loadingText = `Calling ${activity.tool}`;
+                    loadingText = `Calling ${activity.displayName || activity.tool}`;
 
                     if (streamingContent.trim()) {
                         timeline = [...timeline, {

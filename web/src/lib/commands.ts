@@ -445,7 +445,7 @@ export const commands: SlashCommand[] = [
                             }
 
                             if (activity.status === 'running') {
-                                ctx.setLoading(`Running ${activity.tool}`);
+                                ctx.setLoading(`Running ${activity.displayName || activity.tool}`);
                                 activities.push({
                                     tool: activity.tool,
                                     status: 'running',

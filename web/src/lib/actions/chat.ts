@@ -3,6 +3,7 @@ import { getServerUrl } from './helpers';
 export type ToolActivity = {
     id: string;
     tool: string;
+    displayName?: string;
     args: Record<string, unknown>;
     status: 'pending' | 'approved' | 'denied' | 'skipped' | 'running' | 'complete' | 'error';
     result?: string;

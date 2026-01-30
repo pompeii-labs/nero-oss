@@ -1,13 +1,24 @@
 import chalk from 'chalk';
 import { NERO_BLUE } from '../cli/theme.js';
 
-interface ToolActivity {
+export interface ToolActivity {
     tool: string;
+    displayName?: string;
     args: Record<string, any>;
     status: 'pending' | 'approved' | 'denied' | 'skipped' | 'running' | 'complete' | 'error';
     result?: string;
     error?: string;
     skipReason?: string;
+}
+
+export function formatToolName(tool: string): string {
+    const name = tool.includes(':') ? tool.split(':')[1] : tool;
+    return name!
+        .replace(/_/g, ' ')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .split(' ')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
 }
 
 export enum LogLevel {
@@ -67,7 +78,7 @@ export class Logger {
     }
 
     tool(activity: ToolActivity) {
-        const toolName = this.formatToolName(activity.tool);
+        const toolName = activity.displayName || formatToolName(activity.tool);
         const argPreview = this.getArgPreview(activity.args);
 
         if (activity.status === 'running') {
@@ -87,17 +98,11 @@ export class Logger {
             console.log(
                 `[${chalk.hex(NERO_BLUE).bold('Nero')}][${chalk.red('FAIL')}] ${toolName} ${chalk.red(activity.error || 'Unknown error')}`,
             );
+        } else if (activity.status === 'skipped') {
+            console.log(
+                `[${chalk.hex(NERO_BLUE).bold('Nero')}][${chalk.yellow('SKIP')}] ${toolName} ${chalk.yellow(activity.skipReason || '')}`,
+            );
         }
-    }
-
-    private formatToolName(tool: string): string {
-        const name = tool.includes(':') ? tool.split(':')[1] : tool;
-        return name!
-            .replace(/_/g, ' ')
-            .replace(/([a-z])([A-Z])/g, '$1 $2')
-            .split(' ')
-            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
     }
 
     private getArgPreview(args: Record<string, any>): string {

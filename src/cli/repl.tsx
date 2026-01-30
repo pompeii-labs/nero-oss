@@ -7,7 +7,7 @@ import { NeroConfig, loadConfig, isToolAllowed, addAllowedTool } from '../config
 import { ToolActivity, LoadedMessage } from '../agent/nero.js';
 import { NeroClient } from '../client/index.js';
 import { NeroProxy } from '../client/proxy.js';
-import { Logger } from '../util/logger.js';
+import { Logger, formatToolName } from '../util/logger.js';
 import { VERSION } from '../util/version.js';
 import { commands, getCommandSuggestions, executeCommand, CommandContext } from './commands.js';
 import { NERO_BLUE, GLITCH_CHARS } from './theme.js';
@@ -146,15 +146,6 @@ function getGlitchChar(): string {
     return GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
 }
 
-function formatToolName(tool: string): string {
-    const name = tool.includes(':') ? tool.split(':')[1] : tool;
-    return name
-        .replace(/_/g, ' ')
-        .replace(/([a-z])([A-Z])/g, '$1 $2')
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
-}
 
 function formatArgValue(value: unknown, maxLen = 60): string {
     if (typeof value === 'string') {
@@ -221,7 +212,7 @@ function ToolLogDisplay({ toolData }: { toolData: ToolMessage }) {
                        toolData.status === 'error' ? 'red' :
                        toolData.status === 'skipped' ? 'yellow' :
                        toolData.status === 'running' ? 'cyan' : 'gray';
-    const toolName = formatToolName(toolData.tool);
+    const toolName = toolData.displayName || formatToolName(toolData.tool);
 
     const isWrite = toolData.tool === 'write';
     const hasWriteDiff = isWrite && 'newContent' in toolData.args;
@@ -283,6 +274,7 @@ function ToolLogDisplay({ toolData }: { toolData: ToolMessage }) {
 
 interface ToolMessage {
     tool: string;
+    displayName?: string;
     status: 'complete' | 'error' | 'denied' | 'skipped' | 'running';
     args: Record<string, unknown>;
     result?: string;
@@ -462,7 +454,7 @@ function PermissionPrompt({
         }
     });
 
-    const toolName = formatToolName(activity.tool);
+    const toolName = activity.displayName || formatToolName(activity.tool);
     const args = activity.args;
     const isWriteWithDiff = activity.tool === 'write' && 'newContent' in args;
 
