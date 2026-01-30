@@ -17,7 +17,7 @@ import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import { encode as toon } from '@toon-format/toon';
-import { NeroConfig } from '../config.js';
+import { NeroConfig, getConfigDir } from '../config.js';
 import { McpClient } from '../mcp/client.js';
 import { db, isDbConnected } from '../db/index.js';
 import { Message, Memory, Action, Summary, Note } from '../models/index.js';
@@ -59,6 +59,7 @@ export class Nero extends MagmaAgent {
     private mcpClient: McpClient;
     private openaiClient: OpenAI;
     private systemPrompt: string = '';
+    private userInstructions: string = '';
     private onChunk?: (chunk: string) => void;
     private onPermissionRequest?: PermissionCallback;
     private onActivity?: ActivityCallback;
@@ -108,6 +109,7 @@ export class Nero extends MagmaAgent {
             this.systemPrompt = await readFile(altPath, 'utf-8');
         }
 
+        await this.loadUserInstructions();
         await this.mcpClient.connect();
 
         const mcpTools = await this.mcpClient.getTools();
@@ -321,6 +323,18 @@ Be thorough - this summary will be the primary context for future conversations.
         await this.mcpClient.disconnect();
     }
 
+    private async loadUserInstructions(): Promise<void> {
+        const neroMdPath = join(getConfigDir(), 'NERO.md');
+        try {
+            if (existsSync(neroMdPath)) {
+                this.userInstructions = await readFile(neroMdPath, 'utf-8');
+                console.log(chalk.dim(`[setup] Loaded NERO.md`));
+            }
+        } catch (error) {
+            console.error(chalk.dim(`[setup] Failed to load NERO.md: ${(error as Error).message}`));
+        }
+    }
+
     async reload(newConfig: NeroConfig): Promise<{ mcpTools: number }> {
         this.proactivity.shutdown();
         await this.mcpClient.disconnect();
@@ -328,6 +342,7 @@ Be thorough - this summary will be the primary context for future conversations.
         this.mcpClient = new McpClient(newConfig.mcpServers);
         this.proactivity = new ProactivityManager(newConfig);
         this.proactivity.setAgent(this);
+        await this.loadUserInstructions();
         await this.mcpClient.connect();
         const mcpTools = await this.mcpClient.getTools();
         return { mcpTools: mcpTools.length };
@@ -389,8 +404,16 @@ Be thorough - this summary will be the primary context for future conversations.
 
         const messages: { role: 'system'; content: string }[] = [
             { role: 'system', content: this.systemPrompt },
-            { role: 'system', content: contextPrompt },
         ];
+
+        if (this.userInstructions) {
+            messages.push({
+                role: 'system',
+                content: `## User Instructions (from NERO.md)\n${this.userInstructions}`,
+            });
+        }
+
+        messages.push({ role: 'system', content: contextPrompt });
 
         if (this.currentMedium === 'voice') {
             messages.push({

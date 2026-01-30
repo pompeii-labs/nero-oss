@@ -57,7 +57,7 @@ export function createHealthRouter(agent: Nero) {
     router.post('/reload', async (req: Request, res: Response) => {
         try {
             logger.info('Reloading configuration...');
-            const newConfig = await loadConfig();
+            const newConfig = await loadConfig(true);
             const result = await agent.reload(newConfig);
             logger.success(`Reloaded with ${result.mcpTools} MCP tools`);
             res.json({

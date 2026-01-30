@@ -219,6 +219,17 @@ export class NeroClient {
         }
     }
 
+    async restart(): Promise<void> {
+        const response = await fetch(`${this.baseUrl}/admin/restart`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(error.error || `HTTP ${response.status}`);
+        }
+    }
+
     async think(
         onActivity?: (activity: ActivityEvent) => void,
         onStatus?: (status: string) => void,

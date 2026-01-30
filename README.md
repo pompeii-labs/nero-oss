@@ -123,6 +123,21 @@ nero mcp list
 nero mcp remove filesystem
 ```
 
+## User Instructions (NERO.md)
+
+Create `~/.nero/NERO.md` to customize Nero's behavior with persistent instructions:
+
+```bash
+echo "Always be concise. Prefer TypeScript over JavaScript." > ~/.nero/NERO.md
+```
+
+The file is loaded on startup and reloaded with `nero reload`. Use it for:
+
+- Code style preferences
+- Project context
+- Response formatting rules
+- Any persistent instructions
+
 ## CLI Commands
 
 ```bash
@@ -135,7 +150,8 @@ nero setup --integrated   # Setup with full host access (default)
 nero setup --contained    # Setup sandboxed, no host access
 nero update               # Update to latest version
 nero update --check       # Check for updates
-nero reload               # Reload MCP servers
+nero reload               # Reload MCP servers and NERO.md
+nero restart              # Restart the service container
 nero migrate              # Run database migrations
 ```
 

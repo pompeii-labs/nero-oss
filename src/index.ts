@@ -178,6 +178,39 @@ program
     });
 
 program
+    .command('restart')
+    .description('Restart the Nero service (container will restart)')
+    .action(async () => {
+        const { NeroClient } = await import('./client/index.js');
+        const config = await loadConfig();
+
+        const serviceUrl = process.env.NERO_SERVICE_URL || 'http://localhost:4848';
+        const serviceRunning = await NeroClient.checkServiceRunning(serviceUrl);
+
+        if (!serviceRunning) {
+            console.error(chalk.red('Nero service not running'));
+            console.log(chalk.dim('\nStart the service with:'));
+            console.log(chalk.cyan('  docker-compose up -d\n'));
+            process.exit(1);
+        }
+
+        console.log(chalk.dim('Restarting service...'));
+        const client = new NeroClient({ baseUrl: serviceUrl, licenseKey: config.licenseKey });
+
+        try {
+            await client.restart();
+            console.log(chalk.green('Restart initiated'));
+            console.log(chalk.dim('Container will restart momentarily'));
+        } catch (error) {
+            const err = error as Error;
+            console.error(chalk.red(`Restart failed: ${err.message}`));
+            process.exit(1);
+        }
+
+        process.exit(0);
+    });
+
+program
     .command('config')
     .description('Show current configuration')
     .action(async () => {
@@ -240,7 +273,6 @@ mcp.command('add <name> [url]')
     .option('-t, --transport <transport>', 'Transport type: stdio or http', 'stdio')
     .option('-e, --env <env...>', 'Environment variables (KEY=VALUE)')
     .option('-H, --header <header...>', 'HTTP headers (KEY=VALUE) for http transport')
-    .option('-s, --scope <scope>', 'Config scope: user or project', 'user')
     .allowUnknownOption()
     .action(async (name, url, options, command) => {
         const config = await loadConfig();
