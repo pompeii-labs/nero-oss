@@ -40,6 +40,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "release": "./scripts/release.sh",
+    "release:prep": "./scripts/release-prep.sh",
     "build:binary": "bun build --compile src/index.ts --outfile dist/nero",
     "build:binaries": "./scripts/build-binaries.sh",
     "prepare": "husky"
