@@ -1209,6 +1209,87 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
 
     @tool({
         description:
+            'Make a surgical edit to a file by replacing a specific string. More efficient than rewriting the entire file. The old_string must match exactly (including whitespace/indentation).',
+    })
+    @toolparam({ key: 'path', type: 'string', required: true, description: 'Path to the file' })
+    @toolparam({
+        key: 'old_string',
+        type: 'string',
+        required: true,
+        description: 'The exact text to find and replace',
+    })
+    @toolparam({
+        key: 'new_string',
+        type: 'string',
+        required: true,
+        description: 'The text to replace it with',
+    })
+    async updateFile(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { path, old_string, new_string } = call.fn_args;
+        const filePath = this.resolvePath(path);
+
+        let oldContent: string;
+        try {
+            oldContent = await readFile(filePath, 'utf-8');
+        } catch (error) {
+            return `Error: Could not read file: ${(error as Error).message}`;
+        }
+
+        if (!oldContent.includes(old_string)) {
+            return `Error: Could not find the specified text in ${path}. Make sure old_string matches exactly, including whitespace and indentation.`;
+        }
+
+        const occurrences = oldContent.split(old_string).length - 1;
+        if (occurrences > 1) {
+            return `Error: Found ${occurrences} occurrences of the text. old_string must be unique. Add more surrounding context to make it unique.`;
+        }
+
+        const newContent = oldContent.replace(old_string, new_string);
+        const diff = generateDiff(oldContent, newContent);
+
+        const approved = await this.requestPermission(
+            'update',
+            {
+                path,
+                old_string,
+                new_string,
+                oldContent,
+                newContent,
+            },
+            call.id,
+        );
+        if (!approved) return 'Permission denied by user.';
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'update',
+            args: {
+                path,
+                old_string: old_string.slice(0, 100) + (old_string.length > 100 ? '...' : ''),
+                new_string: new_string.slice(0, 100) + (new_string.length > 100 ? '...' : ''),
+                linesAdded: diff.linesAdded,
+                linesRemoved: diff.linesRemoved,
+            },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            await writeFile(filePath, newContent, 'utf-8');
+            activity.status = 'complete';
+            activity.result = `Updated ${path} (+${diff.linesAdded}/-${diff.linesRemoved} lines)`;
+            this.emitActivity(activity);
+            return activity.result;
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Error: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description:
             'Execute a bash command in the shell. Commands run in the current working directory. Use relative paths when possible.',
     })
     @toolparam({

@@ -6,6 +6,7 @@
     import ShieldAlert from '@lucide/svelte/icons/shield-alert';
     import Zap from '@lucide/svelte/icons/zap';
     import ShieldCheck from '@lucide/svelte/icons/shield-check';
+    import DiffViewer from './diff-viewer.svelte';
 
     type Props = {
         open: boolean;
@@ -64,7 +65,7 @@
 </script>
 
 <Dialog.Root bind:open onOpenChange={handleOpenChange}>
-    <Dialog.Content class="sm:max-w-lg glass-panel border-primary/20">
+    <Dialog.Content class="sm:max-w-xl overflow-hidden glass-panel border-border">
         <Dialog.Header>
             <Dialog.Title class="flex items-center gap-3">
                 <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-500/5 dark:from-amber-500/20 dark:to-amber-500/5 border border-amber-500/40 dark:border-amber-500/30">
@@ -81,8 +82,17 @@
             </Dialog.Description>
         </Dialog.Header>
 
-        <div class="space-y-3 py-4">
-            {#if activity.tool !== 'bash' || !activity.args?.command}
+        <div class="space-y-3 py-4 overflow-hidden">
+            {#if (activity.tool === 'write' || activity.tool === 'update') && activity.args?.path && activity.args?.newContent}
+                <div class="overflow-auto">
+                    <DiffViewer
+                        path={String(activity.args.path)}
+                        oldContent={activity.args.oldContent as string | null}
+                        newContent={String(activity.args.newContent)}
+                        isNewFile={activity.args.isNewFile as boolean | undefined}
+                    />
+                </div>
+            {:else if activity.tool !== 'bash' || !activity.args?.command}
             <div>
                 <span class="text-xs text-muted-foreground uppercase tracking-wide">Arguments</span>
                 <pre class="mt-2 max-h-64 overflow-auto rounded-xl bg-background/50 border border-border/30 p-4 font-mono text-xs text-foreground/80 whitespace-pre-wrap break-all">{JSON.stringify(activity.args, null, 2)}</pre>

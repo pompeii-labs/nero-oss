@@ -10,6 +10,7 @@
     import Clock from '@lucide/svelte/icons/clock';
     import Zap from '@lucide/svelte/icons/zap';
     import ShieldOff from '@lucide/svelte/icons/shield-off';
+    import DiffViewer from './diff-viewer.svelte';
 
     type Props = {
         activity: ToolActivity;
@@ -71,10 +72,19 @@
 
     {#if expanded}
         <div class="border-t border-border/30 px-4 py-3 space-y-3">
+            {#if (activity.tool === 'write' || activity.tool === 'update') && activity.args?.path && activity.args?.newContent}
+                <DiffViewer
+                    path={String(activity.args.path)}
+                    oldContent={activity.args.oldContent as string | null}
+                    newContent={String(activity.args.newContent)}
+                    isNewFile={activity.args.isNewFile as boolean | undefined}
+                />
+            {:else}
             <div>
                 <span class="text-xs text-muted-foreground uppercase tracking-wide">Arguments</span>
                 <pre class="mt-2 overflow-x-auto rounded-lg bg-background/50 border border-border/30 p-3 font-mono text-xs text-foreground/80 whitespace-pre-wrap break-all">{JSON.stringify(activity.args, null, 2)}</pre>
             </div>
+            {/if}
 
             {#if activity.result}
                 <div>
