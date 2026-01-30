@@ -2,6 +2,11 @@
 
 All notable changes to Nero are documented here.
 
+## 1.11.1 (2026-01-30)
+
+### Fixes
+- Fix /context showing inaccurate token counts (now includes system prompts, tools, all message types)
+
 ## 1.11.0 (2026-01-30)
 
 ### Changes
