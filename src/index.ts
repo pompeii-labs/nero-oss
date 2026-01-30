@@ -1130,6 +1130,7 @@ program
     environment:
       - HOST_HOME=\${HOME}
       - DATABASE_URL=postgresql://nero:nero@db:5432/nero
+      - GIT_DISCOVERY_ACROSS_FILESYSTEM=1
     env_file:
       - .env
     volumes:
@@ -1192,6 +1193,7 @@ docker run -d --name ${options.name} \\
   -v ~/.nero:/host/home/.nero \\
   -v ~:/host/home \\
   -e HOST_HOME=$HOME \\
+  -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 \\
   --env-file ~/.nero/.env \\
   ghcr.io/pompeii-labs/nero-oss:latest
 `;
