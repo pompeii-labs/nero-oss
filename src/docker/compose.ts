@@ -1,4 +1,5 @@
 import type { DockerConfig, ComposeFile, ComposeService } from './types.js';
+import { getDockerSocketMount } from './socket.js';
 
 const IMAGE = 'ghcr.io/pompeii-labs/nero-oss:latest';
 
@@ -14,13 +15,16 @@ function buildNeroService(config: DockerConfig): ComposeService {
             `DATABASE_URL=postgresql://nero:nero@${isIntegrated ? 'localhost' : 'db'}:5432/nero`,
             'GIT_DISCOVERY_ACROSS_FILESYSTEM=1',
             `NERO_MODE=${config.mode}`,
+            ...(isIntegrated && getDockerSocketMount()
+                ? ['DOCKER_HOST=unix:///var/run/docker.sock']
+                : []),
         ],
         env_file: ['.env'],
         volumes: isIntegrated
             ? [
                   '${HOME}/.nero:/host/home/.nero',
                   '${HOME}:/host/home',
-                  '/var/run/docker.sock:/var/run/docker.sock',
+                  ...(getDockerSocketMount() ? [getDockerSocketMount()!] : []),
               ]
             : ['nero_config:/app/config'],
     };

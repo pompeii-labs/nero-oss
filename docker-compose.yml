@@ -14,9 +14,11 @@ services:
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
       - NERO_LICENSE_KEY=${NERO_LICENSE_KEY}
       - HOST_HOME=${HOME}
+      - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:
       - nero-data:/app/.nero
       - ${HOME}:/host/home:rw
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
     depends_on:
       db:
         condition: service_healthy

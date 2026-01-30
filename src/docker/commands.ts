@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
 import type { DockerConfig } from './types.js';
+import { getDockerSocketMount } from './socket.js';
 
 const IMAGE = 'ghcr.io/pompeii-labs/nero-oss:latest';
 
@@ -25,7 +26,11 @@ export function generateRunScript(config: DockerConfig): string {
         args.push('--network host');
         args.push('-v ~/.nero:/host/home/.nero');
         args.push('-v ~:/host/home');
-        args.push('-v /var/run/docker.sock:/var/run/docker.sock');
+        const socketMount = getDockerSocketMount();
+        if (socketMount) {
+            args.push(`-v ${socketMount}`);
+            args.push('-e DOCKER_HOST=unix:///var/run/docker.sock');
+        }
         args.push('-e HOST_HOME=$HOME');
         args.push('-e GIT_DISCOVERY_ACROSS_FILESYSTEM=1');
         args.push('-e NERO_MODE=integrated');
