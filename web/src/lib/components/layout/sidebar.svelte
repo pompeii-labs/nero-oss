@@ -12,8 +12,11 @@
     import Sun from '@lucide/svelte/icons/sun';
     import Moon from '@lucide/svelte/icons/moon';
     import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+    import PanelLeftClose from '@lucide/svelte/icons/panel-left-close';
+    import PanelLeft from '@lucide/svelte/icons/panel-left';
     import { connectionStatus, startConnectionMonitor, checkConnection } from '$lib/stores/connection';
     import { theme, toggleTheme, initTheme } from '$lib/stores/theme';
+    import { sidebarCollapsed, toggleSidebar } from '$lib/stores/sidebar';
 
     type NavItem = {
         href: string;
@@ -47,10 +50,18 @@
     });
 </script>
 
-<aside class="flex h-full w-64 flex-col border-r border-border bg-card">
-    <div class="flex items-center gap-3 border-b border-border px-4 py-4">
-        <NeroIcon class="h-8 w-6 text-primary" />
-        <span class="text-lg font-semibold text-foreground">Nero</span>
+<aside class={cn(
+    "flex h-full flex-col border-r border-border bg-card transition-all duration-200",
+    $sidebarCollapsed ? "w-16" : "w-64"
+)}>
+    <div class={cn(
+        "flex items-center border-b border-border px-4 py-4",
+        $sidebarCollapsed ? "justify-center" : "gap-3"
+    )}>
+        <NeroIcon class="h-8 w-6 text-primary flex-shrink-0" />
+        {#if !$sidebarCollapsed}
+            <span class="text-lg font-semibold text-foreground">Nero</span>
+        {/if}
     </div>
 
     <nav class="flex-1 space-y-1 p-3">
@@ -58,15 +69,19 @@
             {@const active = isActive(item.href, $page.url.pathname)}
             <a
                 href={item.href}
+                title={$sidebarCollapsed ? item.label : undefined}
                 class={cn(
-                    'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                    'flex items-center rounded-md text-sm font-medium transition-colors',
+                    $sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2',
                     active
                         ? 'bg-primary/10 text-primary'
                         : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                 )}
             >
-                <item.icon class="h-4 w-4" />
-                {item.label}
+                <item.icon class="h-4 w-4 flex-shrink-0" />
+                {#if !$sidebarCollapsed}
+                    {item.label}
+                {/if}
             </a>
         {/each}
     </nav>
@@ -74,32 +89,66 @@
     <div class="border-t border-border p-3 space-y-2">
         <button
             type="button"
-            onclick={toggleTheme}
-            class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+            onclick={toggleSidebar}
+            title={$sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            class={cn(
+                "flex w-full items-center rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors",
+                $sidebarCollapsed ? "justify-center px-2 py-2" : "gap-3 px-3 py-2"
+            )}
         >
-            {#if $theme === 'dark'}
-                <Sun class="h-4 w-4" />
-                <span>Light Mode</span>
+            {#if $sidebarCollapsed}
+                <PanelLeft class="h-4 w-4" />
             {:else}
-                <Moon class="h-4 w-4" />
-                <span>Dark Mode</span>
+                <PanelLeftClose class="h-4 w-4" />
+                <span>Collapse</span>
             {/if}
         </button>
 
-        <div class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+        <button
+            type="button"
+            onclick={toggleTheme}
+            title={$sidebarCollapsed ? ($theme === 'dark' ? 'Light Mode' : 'Dark Mode') : undefined}
+            class={cn(
+                "flex w-full items-center rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors",
+                $sidebarCollapsed ? "justify-center px-2 py-2" : "gap-3 px-3 py-2"
+            )}
+        >
+            {#if $theme === 'dark'}
+                <Sun class="h-4 w-4 flex-shrink-0" />
+                {#if !$sidebarCollapsed}
+                    <span>Light Mode</span>
+                {/if}
+            {:else}
+                <Moon class="h-4 w-4 flex-shrink-0" />
+                {#if !$sidebarCollapsed}
+                    <span>Dark Mode</span>
+                {/if}
+            {/if}
+        </button>
+
+        <div class={cn(
+            "flex items-center rounded-md bg-muted/50",
+            $sidebarCollapsed ? "justify-center px-2 py-2" : "justify-between px-3 py-2"
+        )}>
             <div class="flex items-center gap-2">
                 {#if $connectionStatus === 'connected'}
                     <div class="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
-                    <span class="text-xs text-muted-foreground">Connected</span>
+                    {#if !$sidebarCollapsed}
+                        <span class="text-xs text-muted-foreground">Connected</span>
+                    {/if}
                 {:else if $connectionStatus === 'connecting'}
                     <RefreshCw class="h-3 w-3 text-amber-600 dark:text-amber-400 animate-spin" />
-                    <span class="text-xs text-amber-600 dark:text-amber-400">Connecting...</span>
+                    {#if !$sidebarCollapsed}
+                        <span class="text-xs text-amber-600 dark:text-amber-400">Connecting...</span>
+                    {/if}
                 {:else}
                     <div class="h-2 w-2 rounded-full bg-red-500"></div>
-                    <span class="text-xs text-red-600 dark:text-red-400">Disconnected</span>
+                    {#if !$sidebarCollapsed}
+                        <span class="text-xs text-red-600 dark:text-red-400">Disconnected</span>
+                    {/if}
                 {/if}
             </div>
-            {#if $connectionStatus === 'disconnected'}
+            {#if $connectionStatus === 'disconnected' && !$sidebarCollapsed}
                 <button
                     type="button"
                     onclick={reconnect}
