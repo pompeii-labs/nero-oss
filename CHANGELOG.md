@@ -2,6 +2,14 @@
 
 All notable changes to Nero are documented here.
 
+## 1.11.0 (2026-01-30)
+
+### Changes
+- Add timezone configuration with auto-detect and `/timezone` command
+- Add abort/interrupt controls: Stop button, `/abort` command, Ctrl+C, Escape
+- Prevent background thinking from running while actively processing
+- Add open source community files (LICENSE, CONTRIBUTING, CHANGELOG)
+
 ## 1.10.0 (2026-01-30)
 
 ### Changes
