@@ -26,6 +26,11 @@ export class ProcessManager extends EventEmitter {
     private childProcesses: Map<string, ChildProcess> = new Map();
     private idCounter = 0;
 
+    constructor() {
+        super();
+        this.on('error', () => {});
+    }
+
     startProcess(command: string, options: ProcessOptions = {}): string {
         const id = `proc_${++this.idCounter}`;
         const maxOutputLines = options.maxOutputLines ?? 500;
