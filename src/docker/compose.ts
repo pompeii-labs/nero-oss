@@ -33,10 +33,11 @@ function buildNeroService(config: DockerConfig): ComposeService {
         service.network_mode = 'host';
     } else {
         service.ports = [`${config.port}:4848`];
-        service.depends_on = {
-            db: { condition: 'service_healthy' },
-        };
     }
+
+    service.depends_on = {
+        db: { condition: 'service_healthy' },
+    };
 
     return service;
 }
