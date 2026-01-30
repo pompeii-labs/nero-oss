@@ -13,7 +13,7 @@ RUN bun run build && cd web && bun run build
 
 FROM oven/bun:alpine
 
-RUN apk add --no-cache git curl procps
+RUN apk add --no-cache git curl procps docker-cli docker-cli-compose
 
 WORKDIR /app
 
