@@ -305,20 +305,74 @@ export class Nero extends MagmaAgent {
         return this.hasSummary;
     }
 
+    private estimateStringTokens(str: string): number {
+        return Math.ceil(str.length / 3.5);
+    }
+
     estimateTokens(): number {
-        const messages = this.getMessages(-1);
         let total = 0;
-        for (const msg of messages) {
-            if (typeof msg.content === 'string') {
-                total += Math.ceil(msg.content.length / 4);
+
+        const systemPrompts = this.getSystemPrompts();
+        for (const prompt of systemPrompts) {
+            if (typeof prompt.content === 'string') {
+                total += this.estimateStringTokens(prompt.content);
             }
         }
+
+        const builtInTools = this.getTools();
+        for (const tool of builtInTools) {
+            total += this.estimateStringTokens(tool.name);
+            total += this.estimateStringTokens(tool.description);
+            if (tool.params) {
+                total += this.estimateStringTokens(JSON.stringify(tool.params));
+            }
+        }
+
+        const mcpTools = this.mcpClient.getToolsSync();
+        for (const tool of mcpTools) {
+            total += this.estimateStringTokens(tool.name);
+            total += this.estimateStringTokens(tool.description || '');
+            if (tool.inputSchema) {
+                total += this.estimateStringTokens(JSON.stringify(tool.inputSchema));
+            }
+        }
+
+        const messages = this.getMessages(-1);
+        for (const msg of messages) {
+            const content = msg.content as string | unknown[];
+            if (typeof content === 'string') {
+                total += this.estimateStringTokens(content);
+            } else if (Array.isArray(content)) {
+                for (const block of content) {
+                    if (typeof block === 'string') {
+                        total += this.estimateStringTokens(block);
+                    } else if (block && typeof block === 'object') {
+                        const b = block as Record<string, unknown>;
+                        if ('text' in b && typeof b.text === 'string') {
+                            total += this.estimateStringTokens(b.text);
+                        }
+                        if ('input' in b) {
+                            total += this.estimateStringTokens(JSON.stringify(b.input));
+                        }
+                        if ('content' in b) {
+                            total += this.estimateStringTokens(
+                                typeof b.content === 'string'
+                                    ? b.content
+                                    : JSON.stringify(b.content),
+                            );
+                        }
+                    }
+                }
+            }
+            total += 4;
+        }
+
         return total;
     }
 
     getContextUsage(): { tokens: number; limit: number; percentage: number } {
         const tokens = this.estimateTokens();
-        const limit = 180000;
+        const limit = 200000;
         return {
             tokens,
             limit,

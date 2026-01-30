@@ -200,6 +200,14 @@ export class McpClient {
         return allTools;
     }
 
+    getToolsSync(): McpTool[] {
+        const allTools: McpTool[] = [];
+        for (const server of this.servers.values()) {
+            allTools.push(...server.tools);
+        }
+        return allTools;
+    }
+
     getToolNames(): string[] {
         const names: string[] = [];
         for (const server of this.servers.values()) {
