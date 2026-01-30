@@ -2,8 +2,8 @@ import { Router, Request, Response } from 'express';
 import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
 import { Logger } from '../../util/logger.js';
+import { getConfigDir } from '../../config.js';
 
 const logger = new Logger('Admin');
 
@@ -17,8 +17,7 @@ const ENV_KEYS = [
 ];
 
 function getEnvPath(): string {
-    const neroDir = join(homedir(), '.nero');
-    return join(neroDir, '.env');
+    return join(getConfigDir(), '.env');
 }
 
 function parseEnvFile(content: string): Record<string, string> {
