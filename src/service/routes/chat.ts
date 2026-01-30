@@ -191,6 +191,16 @@ export function createChatRouter(agent: Nero) {
         }
     });
 
+    router.post('/abort', (req: Request, res: Response) => {
+        if (agent.isProcessing()) {
+            agent.abort();
+            logger.info('Request aborted via /api/abort');
+            res.json({ success: true, message: 'Request aborted' });
+        } else {
+            res.json({ success: true, message: 'No active request to abort' });
+        }
+    });
+
     router.post('/compact', async (req: Request, res: Response) => {
         try {
             logger.info('Starting compaction');

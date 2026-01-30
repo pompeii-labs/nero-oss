@@ -48,7 +48,11 @@ export class NeroProxy {
     }
 
     async cleanup(): Promise<void> {
-        // Nothing to clean up for client
+        await this.client.abortCurrentChat();
+    }
+
+    async abort(): Promise<void> {
+        await this.client.abortCurrentChat();
     }
 
     async chat(

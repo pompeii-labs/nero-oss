@@ -28,11 +28,24 @@ export class NeroClient {
     private timeout: number;
     private licenseKey?: string;
     private logger = new Logger('Client');
+    private currentChatController: AbortController | null = null;
 
     constructor(config: NeroClientConfig) {
         this.baseUrl = config.baseUrl.replace(/\/$/, '');
         this.timeout = config.timeout || 120000;
         this.licenseKey = config.licenseKey;
+    }
+
+    async abortCurrentChat(): Promise<void> {
+        if (this.currentChatController) {
+            this.currentChatController.abort();
+            this.currentChatController = null;
+        }
+        try {
+            await fetch(`${this.baseUrl}/api/abort`, { method: 'POST' });
+        } catch {
+            // Ignore errors - server might already be done
+        }
     }
 
     private getHeaders(extra?: Record<string, string>): Record<string, string> {
@@ -62,6 +75,7 @@ export class NeroClient {
         onPermission?: PermissionHandler,
     ): Promise<ChatResponse> {
         const controller = new AbortController();
+        this.currentChatController = controller;
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
         try {
@@ -90,6 +104,7 @@ export class NeroClient {
             }
         } finally {
             clearTimeout(timeoutId);
+            this.currentChatController = null;
         }
     }
 

@@ -209,15 +209,58 @@ export const commands: SlashCommand[] = [
         execute: async (_, ctx) => {
             const settings = ctx.config.settings;
             const mcpCount = Object.keys(ctx.config.mcpServers).length;
+            const timezone = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
             let output = `\n${chalk.bold('Settings:')}\n`;
             output += `  Streaming: ${settings.streaming ? chalk.green('on') : chalk.dim('off')}\n`;
             output += `  Model: ${chalk.cyan(settings.model)}\n`;
+            output += `  Timezone: ${chalk.cyan(timezone)}${!settings.timezone ? chalk.dim(' (auto)') : ''}\n`;
             output += `  Verbose: ${settings.verbose ? chalk.green('on') : chalk.dim('off')}\n`;
             output += `  MCP Servers: ${mcpCount > 0 ? chalk.green(mcpCount) : chalk.dim('none')}\n`;
             output += `  Config Path: ${chalk.dim(getConfigPath())}\n`;
 
             return { message: output };
+        },
+    },
+    {
+        name: 'timezone',
+        aliases: ['tz'],
+        description: 'Show or set your timezone (e.g., America/New_York)',
+        execute: async (args, ctx) => {
+            const current =
+                ctx.config.settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+            if (args.length === 0) {
+                const isAuto = !ctx.config.settings.timezone;
+                return {
+                    message:
+                        `Current timezone: ${chalk.cyan(current)}${isAuto ? chalk.dim(' (auto-detected)') : ''}\n` +
+                        chalk.dim('Set with: /timezone America/New_York'),
+                };
+            }
+
+            if (args[0] === 'auto' || args[0] === 'reset') {
+                await updateSettings({ timezone: undefined });
+                ctx.config.settings.timezone = undefined;
+                const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                return {
+                    message: `Timezone reset to auto-detect: ${chalk.cyan(detected)}`,
+                };
+            }
+
+            const newTimezone = args.join('/');
+
+            try {
+                new Date().toLocaleString('en-US', { timeZone: newTimezone });
+            } catch {
+                return {
+                    error: `Invalid timezone: ${newTimezone}\nExamples: America/New_York, Europe/London, Asia/Tokyo`,
+                };
+            }
+
+            await updateSettings({ timezone: newTimezone });
+            ctx.config.settings.timezone = newTimezone;
+            return { message: `Timezone set to ${chalk.cyan(newTimezone)}` };
         },
     },
     {

@@ -82,6 +82,8 @@ export class Nero extends MagmaAgent {
     }> = [];
     private backgroundMode: boolean = false;
     private sessionManager: SessionManager | null = null;
+    private _isProcessing: boolean = false;
+    private _aborted: boolean = false;
 
     constructor(config: NeroConfig) {
         const client = new OpenAI({
@@ -478,8 +480,26 @@ Be thorough - this summary will be the primary context for future conversations.
         const homeDir = isDocker ? '/host/home' : homedir();
         const isGitRepo = existsSync(join(this.currentCwd, '.git'));
 
+        const timezone =
+            this.config.settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const now = new Date();
+        const localTime = now.toLocaleString('en-US', {
+            timeZone: timezone,
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+        });
+
         const context: Record<string, any> = {
-            time: new Date().toISOString(),
+            time: {
+                local: localTime,
+                timezone: timezone,
+                iso: now.toISOString(),
+            },
             environment: {
                 runtime: isDocker ? 'Docker container' : 'local',
                 home: homeDir,
@@ -587,6 +607,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
     }
 
     async chat(message: string, onChunk?: (chunk: string) => void): Promise<ChatResponse> {
+        this._aborted = false;
         this.proactivity.onUserActivity();
 
         this.sessionManager?.onUserMessage();
@@ -623,17 +644,22 @@ You are responding via Slack DM. Use Slack-friendly formatting:
 
         this.addMessage({ role: 'user', content: message });
 
-        const response = await this.main();
+        this._isProcessing = true;
+        try {
+            const response = await this.main();
 
-        await this.saveMessage('user', message);
-        if (response?.content) {
-            await this.saveMessage('assistant', response.content);
+            await this.saveMessage('user', message);
+            if (response?.content) {
+                await this.saveMessage('assistant', response.content);
+            }
+
+            return {
+                content: response?.content || '',
+                streamed: !!onChunk,
+            };
+        } finally {
+            this._isProcessing = false;
         }
-
-        return {
-            content: response?.content || '',
-            streamed: !!onChunk,
-        };
     }
 
     clearHistory(): void {
@@ -843,6 +869,22 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
         return this.currentCwd;
     }
 
+    isProcessing(): boolean {
+        return this._isProcessing;
+    }
+
+    abort(): void {
+        this._aborted = true;
+    }
+
+    resetAbort(): void {
+        this._aborted = false;
+    }
+
+    isAborted(): boolean {
+        return this._aborted;
+    }
+
     private resolvePath(inputPath: string): string {
         const hostHome = process.env.HOST_HOME || '';
         let resolved = inputPath;
@@ -944,6 +986,18 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
         args: Record<string, any>,
         callId: string,
     ): Promise<boolean> {
+        if (this._aborted) {
+            const activity: ToolActivity = {
+                id: callId,
+                tool,
+                args,
+                status: 'skipped',
+                skipReason: 'Request cancelled',
+            };
+            this.emitActivity(activity);
+            return false;
+        }
+
         if (this.backgroundMode) {
             if (this.config.proactivity.destructive) {
                 return true;

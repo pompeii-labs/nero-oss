@@ -32,6 +32,7 @@ export interface NeroSettings {
     verbose: boolean;
     historyLimit: number;
     sessions: SessionSettings;
+    timezone?: string;
 }
 
 export interface ProactivityConfig {

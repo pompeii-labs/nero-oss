@@ -3,7 +3,7 @@ import { getAllowedTools, revokeAllowedTool } from './actions/settings';
 import { getMemories } from './actions/memories';
 import { getMcpServers } from './actions/mcp';
 import { getSettings, updateSettings, validateModel } from './actions/settings';
-import { compactContext, streamThink, type ToolActivity } from './actions/chat';
+import { compactContext, streamThink, abortChat, type ToolActivity } from './actions/chat';
 
 export interface SlashCommand {
     name: string;
@@ -313,6 +313,20 @@ export const commands: SlashCommand[] = [
             return {
                 message: `Conversation compacted.\n\nSummary:\n${response.summary || 'No summary available.'}`,
             };
+        },
+    },
+    {
+        name: 'abort',
+        aliases: ['stop'],
+        description: 'Stop the current request',
+        execute: async () => {
+            const response = await abortChat();
+
+            if (!response.success) {
+                return { error: 'Failed to abort request' };
+            }
+
+            return { message: response.message || 'Request aborted.' };
         },
     },
     {

@@ -174,6 +174,19 @@ export async function clearHistory(): Promise<{ success: boolean }> {
     return { success: response.ok };
 }
 
+export async function abortChat(): Promise<{ success: boolean; message?: string }> {
+    const url = getServerUrl('/api/abort');
+
+    const response = await fetch(url, { method: 'POST' });
+
+    if (!response.ok) {
+        return { success: false };
+    }
+
+    const data = await response.json();
+    return { success: true, message: data.message };
+}
+
 export type ThinkSSEEvent =
     | { type: 'activity'; data: ToolActivity }
     | { type: 'status'; data: string }

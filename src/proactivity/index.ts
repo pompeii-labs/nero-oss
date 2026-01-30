@@ -60,6 +60,11 @@ export class ProactivityManager {
     private async runBackgroundThinking(): Promise<void> {
         if (this.isRunning || !isDbConnected() || !this.agent) return;
 
+        if (this.agent.isProcessing()) {
+            console.log(chalk.dim('[proactivity] Skipping - Nero is currently processing'));
+            return;
+        }
+
         this.isRunning = true;
         console.log(chalk.dim('[proactivity] Running background thinking...'));
 

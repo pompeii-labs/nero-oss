@@ -1,7 +1,7 @@
 <script lang="ts">
     import { goto } from '$app/navigation';
     import { onMount } from 'svelte';
-    import { streamChat, clearHistory, type ToolActivity } from '$lib/actions/chat';
+    import { streamChat, clearHistory, abortChat, type ToolActivity } from '$lib/actions/chat';
     import { getHistory } from '$lib/actions/health';
     import { executeCommand, isSlashCommand, type CommandContext, type CommandWidget } from '$lib/commands';
     import ChatMessage from '$lib/components/chat/chat-message.svelte';
@@ -43,6 +43,7 @@
     let thinkingMode = $state(false);
     let thinkingActivities: ToolActivity[] = $state([]);
     let connectionError = $state<string | null>(null);
+    let abortController: AbortController | null = $state(null);
 
     const SCROLL_THRESHOLD = 100;
 
@@ -181,6 +182,16 @@
         scrollToBottom();
     }
 
+    async function handleAbort() {
+        if (abortController) {
+            abortController.abort();
+            abortController = null;
+        }
+        await abortChat();
+        loading = false;
+        streamingContent = '';
+    }
+
     async function handleSendMessage(message: string) {
         timeline = [...timeline, {
             type: 'message',
@@ -194,11 +205,13 @@
         loadingText = 'Processing';
         streamingContent = '';
         connectionError = null;
+        abortController = new AbortController();
         scrollToBottom();
 
         try {
         await streamChat({
             message,
+            signal: abortController.signal,
             callbacks: {
                 onChunk: (chunk) => {
                     streamingContent += chunk;
@@ -254,12 +267,14 @@
                     }
                     streamingContent = '';
                     loading = false;
+                    abortController = null;
                     scrollToBottom();
                 },
                 onError: (error) => {
                     console.error('Chat error:', error);
                     loading = false;
                     streamingContent = '';
+                    abortController = null;
 
                     if (error.includes('Failed to fetch') || error.includes('NetworkError') || error.includes('ECONNREFUSED')) {
                         connectionError = 'Unable to connect to Nero. Make sure it\'s running!';
@@ -274,6 +289,10 @@
             console.error('Chat fetch error:', err);
             loading = false;
             streamingContent = '';
+            abortController = null;
+            if (err instanceof Error && err.name === 'AbortError') {
+                return;
+            }
             connectionError = 'Unable to connect to Nero. Make sure it\'s running!';
             scrollToBottom();
         }
@@ -461,7 +480,7 @@
                 </button>
             </div>
         {/if}
-        <ChatInput onSubmit={handleSendMessage} onCommand={handleCommand} {loading} />
+        <ChatInput onSubmit={handleSendMessage} onCommand={handleCommand} onAbort={handleAbort} {loading} />
     </div>
 </div>
 

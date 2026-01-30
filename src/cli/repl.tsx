@@ -847,6 +847,7 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
             }
         } else if (ctrlCCountRef.current >= 2) {
             if (isLoading || processingRef.current) {
+                nero.abort().catch(() => {});
                 setIsLoading(false);
                 processingRef.current = false;
                 setStreamingText('');

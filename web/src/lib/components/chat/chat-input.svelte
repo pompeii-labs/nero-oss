@@ -4,16 +4,17 @@
     import CommandPalette from './command-palette.svelte';
     import { getCommandSuggestions, isSlashCommand, type SlashCommand } from '$lib/commands';
     import ArrowUp from '@lucide/svelte/icons/arrow-up';
-    import Loader2 from '@lucide/svelte/icons/loader-2';
+    import Square from '@lucide/svelte/icons/square';
 
     type Props = {
         onSubmit: (message: string) => void;
         onCommand?: (command: string) => void;
+        onAbort?: () => void;
         disabled?: boolean;
         loading?: boolean;
     };
 
-    let { onSubmit, onCommand, disabled = false, loading = false }: Props = $props();
+    let { onSubmit, onCommand, onAbort, disabled = false, loading = false }: Props = $props();
 
     let message = $state('');
     let textareaRef: HTMLTextAreaElement | null = $state(null);
@@ -52,6 +53,12 @@
         textareaRef?.focus();
     }
 
+    function handleAbort() {
+        if (loading && onAbort) {
+            onAbort();
+        }
+    }
+
     function selectCommand(command: SlashCommand) {
         message = `/${command.name} `;
         suggestions = [];
@@ -59,6 +66,14 @@
     }
 
     function handleKeyDown(event: KeyboardEvent) {
+        if (loading && onAbort) {
+            if (event.key === 'Escape' || (event.key === 'c' && (event.ctrlKey || event.metaKey))) {
+                event.preventDefault();
+                handleAbort();
+                return;
+            }
+        }
+
         if (suggestions.length > 0) {
             if (event.key === 'ArrowDown') {
                 event.preventDefault();
@@ -129,19 +144,26 @@
             />
 
             <div class="absolute bottom-3 right-3">
-                <button
-                    type="button"
-                    onclick={handleSubmit}
-                    disabled={!message.trim() || disabled || loading}
-                    class="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground transition-all hover:from-primary/90 hover:to-primary/70 disabled:opacity-40 disabled:cursor-not-allowed group"
-                >
-                    <div class="absolute inset-0 rounded-xl bg-primary/30 blur-lg opacity-0 group-hover:opacity-60 transition-opacity"></div>
-                    {#if loading}
-                        <Loader2 class="relative h-4 w-4 animate-spin" />
-                    {:else}
+                {#if loading && onAbort}
+                    <button
+                        type="button"
+                        onclick={handleAbort}
+                        class="relative flex h-10 w-10 items-center justify-center rounded-xl bg-muted/80 text-muted-foreground transition-all hover:bg-muted hover:text-foreground group"
+                        title="Stop (Esc)"
+                    >
+                        <Square class="relative h-3.5 w-3.5 fill-current" />
+                    </button>
+                {:else}
+                    <button
+                        type="button"
+                        onclick={handleSubmit}
+                        disabled={!message.trim() || disabled || loading}
+                        class="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground transition-all hover:from-primary/90 hover:to-primary/70 disabled:opacity-40 disabled:cursor-not-allowed group"
+                    >
+                        <div class="absolute inset-0 rounded-xl bg-primary/30 blur-lg opacity-0 group-hover:opacity-60 transition-opacity"></div>
                         <ArrowUp class="relative h-4 w-4" />
-                    {/if}
-                </button>
+                    </button>
+                {/if}
             </div>
         </div>
 
@@ -154,6 +176,12 @@
                 <kbd class="px-1.5 py-0.5 rounded bg-muted/30 border border-border/50 font-mono text-[10px]">/</kbd>
                 <span>for commands</span>
             </span>
+            {#if loading && onAbort}
+                <span class="flex items-center gap-1.5">
+                    <kbd class="px-1.5 py-0.5 rounded bg-muted/30 border border-border/50 font-mono text-[10px]">Esc</kbd>
+                    <span>to stop</span>
+                </span>
+            {/if}
         </div>
     </div>
 </div>
