@@ -66,46 +66,46 @@ export async function discoverOAuthMetadata(serverUrl: string): Promise<{
 } | null> {
     try {
         const baseUrl = new URL(serverUrl);
-        const resourceUrl = new URL('/.well-known/oauth-protected-resource', baseUrl);
+        let resourceMetadata: OAuthProtectedResourceMetadata | undefined;
+        let authServerMetadata: OAuthAuthorizationServerMetadata | undefined;
 
+        const resourceUrl = new URL('/.well-known/oauth-protected-resource', baseUrl);
         const resourceResponse = await fetch(resourceUrl.toString());
-        if (!resourceResponse.ok) {
+        if (resourceResponse.ok) {
+            resourceMetadata = await resourceResponse.json();
+        }
+
+        if (resourceMetadata?.authorization_servers?.length) {
+            const authServerUrl = resourceMetadata.authorization_servers[0];
+            let authServerMetadataUrl: string;
+
+            if (authServerUrl.includes('/.well-known/')) {
+                authServerMetadataUrl = authServerUrl;
+            } else {
+                const authBase = new URL(authServerUrl);
+                authServerMetadataUrl = new URL(
+                    '/.well-known/oauth-authorization-server',
+                    authBase,
+                ).toString();
+            }
+
+            const authServerResponse = await fetch(authServerMetadataUrl);
+            if (authServerResponse.ok) {
+                authServerMetadata = await authServerResponse.json();
+            }
+        }
+
+        if (!authServerMetadata) {
+            const authServerUrl = new URL('/.well-known/oauth-authorization-server', baseUrl);
+            const authServerResponse = await fetch(authServerUrl.toString());
+            if (authServerResponse.ok) {
+                authServerMetadata = await authServerResponse.json();
+            }
+        }
+
+        if (!resourceMetadata && !authServerMetadata) {
             return null;
         }
-
-        const resourceMetadata: OAuthProtectedResourceMetadata = await resourceResponse.json();
-
-        if (
-            !resourceMetadata.authorization_servers ||
-            resourceMetadata.authorization_servers.length === 0
-        ) {
-            console.log(chalk.yellow('No authorization servers found in resource metadata'));
-            return { resource: resourceMetadata };
-        }
-
-        const authServerUrl = resourceMetadata.authorization_servers[0];
-        let authServerMetadataUrl: string;
-
-        if (authServerUrl.includes('/.well-known/')) {
-            authServerMetadataUrl = authServerUrl;
-        } else {
-            const authBase = new URL(authServerUrl);
-            authServerMetadataUrl = new URL(
-                '/.well-known/oauth-authorization-server',
-                authBase,
-            ).toString();
-        }
-
-        const authServerResponse = await fetch(authServerMetadataUrl);
-        if (!authServerResponse.ok) {
-            console.log(
-                chalk.yellow(`Failed to fetch auth server metadata from ${authServerMetadataUrl}`),
-            );
-            return { resource: resourceMetadata };
-        }
-
-        const authServerMetadata: OAuthAuthorizationServerMetadata =
-            await authServerResponse.json();
 
         return {
             resource: resourceMetadata,

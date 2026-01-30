@@ -6,6 +6,7 @@ import { spawn, ChildProcess } from 'child_process';
 import chalk from 'chalk';
 import type { McpServerConfig } from '../config.js';
 import { updateMcpServerOAuth } from '../config.js';
+import { hostToContainer } from '../util/paths.js';
 import { isTokenExpired, refreshAccessToken, discoverOAuthMetadata } from './oauth.js';
 import { VERSION } from '../util/version.js';
 
@@ -108,6 +109,7 @@ export class McpClient {
                             `[mcp] Server ${name} requires authentication. Run: nero mcp auth ${name}`,
                         ),
                     );
+                    return;
                 }
             }
 
@@ -124,15 +126,16 @@ export class McpClient {
             });
         } else if (config.command) {
             const env = { ...process.env, ...config.env } as Record<string, string>;
+            const translatedArgs = (config.args || []).map(hostToContainer);
 
-            proc = spawn(config.command, config.args || [], {
+            proc = spawn(config.command, translatedArgs, {
                 env,
                 stdio: ['pipe', 'pipe', 'pipe'],
             });
 
             transport = new StdioClientTransport({
                 command: config.command,
-                args: config.args,
+                args: translatedArgs,
                 env,
             });
             console.log(chalk.dim(`[mcp] Connecting to ${name} via stdio...`));

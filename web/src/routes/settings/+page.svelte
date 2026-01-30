@@ -330,7 +330,14 @@
                                         </span>
                                     {/if}
                                     {#if envInfo?.env[env.name]?.isSet}
-                                        <Check class="h-3.5 w-3.5 text-green-600 dark:text-green-400 ml-auto" />
+                                        <span class="rounded-full bg-green-500/20 border border-green-500/40 dark:border-green-500/30 px-1.5 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400 uppercase tracking-wide ml-auto flex items-center gap-1">
+                                            <Check class="h-3 w-3" />
+                                            Set
+                                        </span>
+                                    {:else}
+                                        <span class="rounded-full bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide ml-auto">
+                                            Not Set
+                                        </span>
                                     {/if}
                                 </div>
                                 <Input
