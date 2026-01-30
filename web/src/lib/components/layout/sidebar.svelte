@@ -92,11 +92,11 @@
                     <div class="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
                     <span class="text-xs text-muted-foreground">Connected</span>
                 {:else if $connectionStatus === 'connecting'}
-                    <RefreshCw class="h-3 w-3 text-amber-400 animate-spin" />
-                    <span class="text-xs text-amber-400">Connecting...</span>
+                    <RefreshCw class="h-3 w-3 text-amber-600 dark:text-amber-400 animate-spin" />
+                    <span class="text-xs text-amber-600 dark:text-amber-400">Connecting...</span>
                 {:else}
                     <div class="h-2 w-2 rounded-full bg-red-500"></div>
-                    <span class="text-xs text-red-400">Disconnected</span>
+                    <span class="text-xs text-red-600 dark:text-red-400">Disconnected</span>
                 {/if}
             </div>
             {#if $connectionStatus === 'disconnected'}

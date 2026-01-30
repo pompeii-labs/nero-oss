@@ -425,13 +425,13 @@
 
             {#if connectionError}
                 <div class="message-appear">
-                    <div class="glass-panel rounded-xl p-4 border-red-500/30 bg-red-500/5">
+                    <div class="glass-panel rounded-xl p-4 border-red-500/40 dark:border-red-500/30 bg-red-500/5">
                         <div class="flex items-start gap-3">
-                            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-400 shrink-0">
+                            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 shrink-0">
                                 <AlertCircle class="h-4 w-4" />
                             </div>
                             <div class="flex-1 min-w-0">
-                                <p class="text-sm text-red-400 font-medium">Connection Error</p>
+                                <p class="text-sm text-red-600 dark:text-red-400 font-medium">Connection Error</p>
                                 <p class="text-sm text-muted-foreground mt-1">{connectionError}</p>
                             </div>
                             <button

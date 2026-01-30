@@ -21,10 +21,10 @@
     let copied = $state(false);
 
     const mediumConfig = {
-        voice: { icon: Phone, label: 'Voice', color: 'text-green-400' },
-        sms: { icon: MessageSquare, label: 'SMS', color: 'text-blue-400' },
-        cli: { icon: Terminal, label: 'CLI', color: 'text-amber-400' },
-        slack: { icon: Hash, label: 'Slack', color: 'text-purple-400' },
+        voice: { icon: Phone, label: 'Voice', color: 'text-green-600 dark:text-green-400' },
+        sms: { icon: MessageSquare, label: 'SMS', color: 'text-blue-600 dark:text-blue-400' },
+        cli: { icon: Terminal, label: 'CLI', color: 'text-amber-600 dark:text-amber-400' },
+        slack: { icon: Hash, label: 'Slack', color: 'text-purple-600 dark:text-purple-400' },
         api: null
     };
 
@@ -124,7 +124,7 @@
                 title="Copy message"
             >
                 {#if copied}
-                    <Check class="h-3.5 w-3.5 text-green-400" />
+                    <Check class="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                 {:else}
                     <Copy class="h-3.5 w-3.5 text-muted-foreground" />
                 {/if}

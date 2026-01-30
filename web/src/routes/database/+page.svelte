@@ -55,8 +55,8 @@
                 >
                     <div class="p-4 border-b border-border/30">
                         <div class="flex items-center gap-3">
-                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-green-500/20 to-green-500/5 border border-green-500/20">
-                                <Database class="h-5 w-5 text-green-400" />
+                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-green-500/20 to-green-500/5 border border-green-500/30 dark:border-green-500/20">
+                                <Database class="h-5 w-5 text-green-600 dark:text-green-400" />
                             </div>
                             <div>
                                 <h2 class="font-medium text-foreground">PostgreSQL Connected</h2>
@@ -65,7 +65,7 @@
                             <div class="ml-auto">
                                 <div class="flex items-center gap-2">
                                     <span class="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
-                                    <span class="text-sm text-green-400">Connected</span>
+                                    <span class="text-sm text-green-600 dark:text-green-400">Connected</span>
                                 </div>
                             </div>
                         </div>
@@ -82,8 +82,8 @@
                 >
                     <div class="p-4 border-b border-border/30">
                         <div class="flex items-center gap-3">
-                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-500/5 border border-amber-500/20">
-                                <Database class="h-5 w-5 text-amber-400" />
+                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-500/5 border border-amber-500/30 dark:border-amber-500/20">
+                                <Database class="h-5 w-5 text-amber-600 dark:text-amber-400" />
                             </div>
                             <div>
                                 <h2 class="font-medium text-foreground">Database Not Connected</h2>
@@ -91,8 +91,8 @@
                             </div>
                             <div class="ml-auto">
                                 <div class="flex items-center gap-2">
-                                    <X class="h-4 w-4 text-amber-400" />
-                                    <span class="text-sm text-amber-400">Not Connected</span>
+                                    <X class="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                    <span class="text-sm text-amber-600 dark:text-amber-400">Not Connected</span>
                                 </div>
                             </div>
                         </div>

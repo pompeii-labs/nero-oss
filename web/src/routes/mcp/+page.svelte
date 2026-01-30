@@ -279,7 +279,7 @@
                                             )}
                                         >
                                             {#if config.transport === 'http'}
-                                                <Globe class="h-5 w-5 text-blue-400" />
+                                                <Globe class="h-5 w-5 text-blue-600 dark:text-blue-400" />
                                             {:else}
                                                 <Terminal class="h-5 w-5 text-primary" />
                                             {/if}
@@ -314,7 +314,7 @@
                                             {#if config.disabled}
                                                 <PowerOff class="h-4 w-4 text-muted-foreground" />
                                             {:else}
-                                                <Power class="h-4 w-4 text-green-400" />
+                                                <Power class="h-4 w-4 text-green-600 dark:text-green-400" />
                                             {/if}
                                         </Button>
                                         <Button

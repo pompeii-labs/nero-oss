@@ -67,8 +67,8 @@
     <Dialog.Content class="sm:max-w-lg glass-panel border-primary/20">
         <Dialog.Header>
             <Dialog.Title class="flex items-center gap-3">
-                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-500/5 border border-amber-500/30">
-                    <ShieldAlert class="h-5 w-5 text-amber-400" />
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-500/5 dark:from-amber-500/20 dark:to-amber-500/5 border border-amber-500/40 dark:border-amber-500/30">
+                    <ShieldAlert class="h-5 w-5 text-amber-600 dark:text-amber-400" />
                 </div>
                 <span>Permission Required</span>
             </Dialog.Title>
@@ -95,7 +95,7 @@
                 variant="outline"
                 onclick={() => handleResponse(false)}
                 disabled={responding}
-                class="border-border/50 hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-400"
+                class="border-border/50 hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
             >
                 Deny
             </Button>
@@ -103,7 +103,7 @@
                 variant="outline"
                 onclick={() => handleResponse(true, true)}
                 disabled={responding}
-                class="border-border/50 hover:border-green-500/50 hover:bg-green-500/10 hover:text-green-400"
+                class="border-border/50 hover:border-green-500/50 hover:bg-green-500/10 hover:text-green-600 dark:hover:text-green-400"
                 title={`Allow pattern: ${getToolPattern()}`}
             >
                 <ShieldCheck class="h-4 w-4 mr-2" />

@@ -9,21 +9,21 @@
     let { widget }: Props = $props();
 
     function getColor(percentage: number): string {
-        if (percentage > 80) return 'text-red-400';
+        if (percentage > 80) return 'text-red-600 dark:text-red-400';
         if (percentage > 60) return 'text-primary';
-        return 'text-green-400';
+        return 'text-green-600 dark:text-green-400';
     }
 
     function getBarColor(percentage: number): string {
-        if (percentage > 80) return 'bg-red-400';
+        if (percentage > 80) return 'bg-red-500';
         if (percentage > 60) return 'bg-primary';
-        return 'bg-green-400';
+        return 'bg-green-500';
     }
 
     function getUsageColor(remaining: number): string {
-        if (remaining < 1) return 'text-red-400';
+        if (remaining < 1) return 'text-red-600 dark:text-red-400';
         if (remaining < 5) return 'text-primary';
-        return 'text-green-400';
+        return 'text-green-600 dark:text-green-400';
     }
 </script>
 
@@ -46,7 +46,7 @@
                 <span>{limit.toLocaleString()} limit</span>
             </div>
             {#if percentage > 70}
-                <p class="text-xs text-amber-400 pt-1">Tip: Run /compact to reduce context usage</p>
+                <p class="text-xs text-amber-600 dark:text-amber-400 pt-1">Tip: Run /compact to reduce context usage</p>
             {/if}
         </div>
     </div>
@@ -74,13 +74,13 @@
                 </div>
                 <div class="h-1.5 rounded-full bg-background/50 overflow-hidden border border-border/30">
                     <div
-                        class={cn('h-full rounded-full transition-all', getUsageColor(remaining).replace('text-', 'bg-'))}
+                        class={cn('h-full rounded-full transition-all', remaining < 1 ? 'bg-red-500' : remaining < 5 ? 'bg-primary' : 'bg-green-500')}
                         style="width: {percentage}%"
                     ></div>
                 </div>
                 {#if remaining < 1}
-                    <p class="text-xs text-red-400">
-                        Low balance! <a href="https://openrouter.ai/credits" target="_blank" class="underline hover:text-red-300">Top up credits</a>
+                    <p class="text-xs text-red-600 dark:text-red-400">
+                        Low balance! <a href="https://openrouter.ai/credits" target="_blank" class="underline hover:text-red-500 dark:hover:text-red-300">Top up credits</a>
                     </p>
                 {/if}
             {:else}
@@ -101,11 +101,11 @@
             <div class="flex items-center gap-2">
                 <div class={cn(
                     'w-2 h-2 rounded-full',
-                    urgent ? 'bg-amber-400 animate-pulse' : 'bg-green-400'
+                    urgent ? 'bg-amber-500 animate-pulse' : 'bg-green-500'
                 )}></div>
                 <span class="text-sm text-muted-foreground">Thought Complete</span>
                 {#if urgent}
-                    <span class="text-[10px] uppercase tracking-wider text-amber-400 font-medium px-1.5 py-0.5 rounded bg-amber-400/10 border border-amber-400/20">Urgent</span>
+                    <span class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-medium px-1.5 py-0.5 rounded bg-amber-400/10 border border-amber-500/30 dark:border-amber-400/20">Urgent</span>
                 {/if}
                 {#if activities.length > 0}
                     <span class="text-[10px] text-muted-foreground/60 ml-auto">{activities.length} tool{activities.length === 1 ? '' : 's'} used</span>

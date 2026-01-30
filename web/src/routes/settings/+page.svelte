@@ -227,8 +227,8 @@
                 >
                     <div class="p-4 border-b border-border/30">
                         <div class="flex items-center gap-3">
-                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-green-500/20 to-green-500/5 border border-green-500/20">
-                                <Activity class="h-5 w-5 text-green-400" />
+                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-green-500/20 to-green-500/5 border border-green-500/30 dark:border-green-500/20">
+                                <Activity class="h-5 w-5 text-green-600 dark:text-green-400" />
                             </div>
                             <div>
                                 <h2 class="font-medium text-foreground">Server Status</h2>
@@ -254,8 +254,8 @@
                                     <span class="text-xs text-muted-foreground uppercase tracking-wide">Voice</span>
                                     <p class="flex items-center gap-2 mt-1">
                                         {#if serverInfo.features.voice}
-                                            <Check class="h-4 w-4 text-green-400" />
-                                            <span class="text-sm text-green-400">Enabled</span>
+                                            <Check class="h-4 w-4 text-green-600 dark:text-green-400" />
+                                            <span class="text-sm text-green-600 dark:text-green-400">Enabled</span>
                                         {:else}
                                             <X class="h-4 w-4 text-muted-foreground" />
                                             <span class="text-sm text-muted-foreground">Disabled</span>
@@ -266,8 +266,8 @@
                                     <span class="text-xs text-muted-foreground uppercase tracking-wide">SMS</span>
                                     <p class="flex items-center gap-2 mt-1">
                                         {#if serverInfo.features.sms}
-                                            <Check class="h-4 w-4 text-green-400" />
-                                            <span class="text-sm text-green-400">Enabled</span>
+                                            <Check class="h-4 w-4 text-green-600 dark:text-green-400" />
+                                            <span class="text-sm text-green-600 dark:text-green-400">Enabled</span>
                                         {:else}
                                             <X class="h-4 w-4 text-muted-foreground" />
                                             <span class="text-sm text-muted-foreground">Disabled</span>
@@ -288,8 +288,8 @@
                     <div class="p-4 border-b border-border/30">
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-3">
-                                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 border border-cyan-500/20">
-                                    <Terminal class="h-5 w-5 text-cyan-400" />
+                                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 border border-cyan-500/30 dark:border-cyan-500/20">
+                                    <Terminal class="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
                                 </div>
                                 <div>
                                     <h2 class="font-medium text-foreground">Environment Variables</h2>
@@ -321,7 +321,7 @@
                                 <div class="flex items-center gap-2 mb-2">
                                     <code class="font-mono text-sm text-foreground">{env.name}</code>
                                     {#if env.required}
-                                        <span class="rounded-full bg-red-500/20 border border-red-500/30 px-1.5 py-0.5 text-[10px] font-medium text-red-400 uppercase tracking-wide">
+                                        <span class="rounded-full bg-red-500/20 border border-red-500/40 dark:border-red-500/30 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400 uppercase tracking-wide">
                                             Required
                                         </span>
                                     {:else}
@@ -330,7 +330,7 @@
                                         </span>
                                     {/if}
                                     {#if envInfo?.env[env.name]?.isSet}
-                                        <Check class="h-3.5 w-3.5 text-green-400 ml-auto" />
+                                        <Check class="h-3.5 w-3.5 text-green-600 dark:text-green-400 ml-auto" />
                                     {/if}
                                 </div>
                                 <Input
@@ -343,8 +343,8 @@
                             </div>
                         {/each}
                         {#if envDirty}
-                            <div class="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
-                                <p class="text-xs text-amber-400">
+                            <div class="rounded-lg bg-amber-500/10 border border-amber-500/30 dark:border-amber-500/20 p-3">
+                                <p class="text-xs text-amber-600 dark:text-amber-400">
                                     You have unsaved changes. Save and restart to apply.
                                 </p>
                             </div>
@@ -358,8 +358,8 @@
                 >
                     <div class="p-4 border-b border-border/30">
                         <div class="flex items-center gap-3">
-                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-500/5 border border-blue-500/20">
-                                <Server class="h-5 w-5 text-blue-400" />
+                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-500/5 border border-blue-500/30 dark:border-blue-500/20">
+                                <Server class="h-5 w-5 text-blue-600 dark:text-blue-400" />
                             </div>
                             <div>
                                 <h2 class="font-medium text-foreground">Service Control</h2>
@@ -431,8 +431,8 @@
                 >
                     <div class="p-4 border-b border-border/30">
                         <div class="flex items-center gap-3">
-                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500/20 to-violet-500/5 border border-violet-500/20">
-                                <Shield class="h-5 w-5 text-violet-400" />
+                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500/20 to-violet-500/5 border border-violet-500/30 dark:border-violet-500/20">
+                                <Shield class="h-5 w-5 text-violet-600 dark:text-violet-400" />
                             </div>
                             <div>
                                 <h2 class="font-medium text-foreground">Allowed Tools</h2>

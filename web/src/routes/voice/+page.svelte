@@ -83,8 +83,8 @@
                 >
                     <div class="p-4 border-b border-border/30">
                         <div class="flex items-center gap-3">
-                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-500/5 border border-amber-500/20">
-                                <Mic class="h-5 w-5 text-amber-400" />
+                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-500/5 border border-amber-500/30 dark:border-amber-500/20">
+                                <Mic class="h-5 w-5 text-amber-600 dark:text-amber-400" />
                             </div>
                             <div>
                                 <h2 class="font-medium text-foreground">Voice Not Configured</h2>
@@ -261,7 +261,7 @@
                         <p class="text-muted-foreground">Say something to Nero</p>
                     {/if}
                 {:else if $status === 'error'}
-                    <h2 class="text-2xl font-semibold text-red-400">Connection Error</h2>
+                    <h2 class="text-2xl font-semibold text-red-600 dark:text-red-400">Connection Error</h2>
                     <p class="text-muted-foreground">{$errorMessage || 'Something went wrong'}</p>
                 {/if}
             </div>
