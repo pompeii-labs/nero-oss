@@ -1,6 +1,26 @@
-# Nero
+<p align="center">
+  <strong>Your self-hosted AI that actually knows what's going on.</strong>
+</p>
 
-Open source AI companion with terminal, voice, and SMS interfaces.
+<p align="center">
+  <a href="https://github.com/pompeii-labs/nero-oss/releases"><img src="https://img.shields.io/github/v/release/pompeii-labs/nero-oss" alt="Release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" /></a>
+  <a href="https://github.com/pompeii-labs/nero-oss/stargazers"><img src="https://img.shields.io/github/stars/pompeii-labs/nero-oss" alt="Stars" /></a>
+</p>
+
+---
+
+Nero is an open source AI companion that runs on your machine, connects to your tools via MCP, and thinks in the background while you're away. Talk to it through the terminal, web dashboard, voice calls, or SMS.
+
+**Why Nero?**
+- **Self-hosted** - Your data stays on your machine. No cloud dependency.
+- **Multi-interface** - CLI, web UI, voice, and SMS. Use what fits the moment.
+- **Proactive** - Background thinking monitors your projects and surfaces insights.
+- **MCP-native** - First-class Model Context Protocol support. Add any MCP server in seconds.
+
+<p align="center">
+  <img src="assets/screenshot.png" alt="Nero Web UI" width="800" />
+</p>
 
 ## Install
 
