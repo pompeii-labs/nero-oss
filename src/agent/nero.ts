@@ -998,6 +998,7 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
             const env = { ...process.env };
             if (process.env.HOST_HOME) {
                 env.HOME = '/host/home';
+                env.GIT_DISCOVERY_ACROSS_FILESYSTEM = '1';
             }
 
             const timeout = this.backgroundMode ? 10000 : 30000;
