@@ -2,6 +2,29 @@
 
 All notable changes to Nero are documented here.
 
+## 1.14.0 (2026-01-31)
+
+### New Features
+
+**Native iOS App**
+- Full-featured iOS companion app built with SwiftUI
+- Chat interface with markdown rendering and streaming responses
+- Voice mode with real-time audio and echo cancellation
+- Memories management (view, add, delete)
+- Settings with connection status, context usage, and server info
+- Connect via local network or remote tunnel with license key
+- Hamburger menu navigation
+
+**Skills Support**
+- Skills are reusable prompts that extend Nero's capabilities
+- Compatible with the skills.sh ecosystem
+- CLI commands: `nero skills list/add/create/remove`
+- REPL/web: `/<skill-name>` to toggle skills on/off
+- Skills appear in command palette suggestions
+- `/skills` command shows loaded status
+- `/reload` refreshes skills along with MCP config
+- Support installing skills from git repos
+
 ## 1.13.0 (2026-01-30)
 
 ### Changes

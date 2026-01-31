@@ -10,7 +10,7 @@
 
 ---
 
-Nero is an open source AI companion that runs on your machine, connects to your tools via MCP, and thinks in the background while you're away. Talk to it through the terminal, web dashboard, voice calls, or SMS.
+Nero is an open source AI companion that runs on your machine, connects to your tools via MCP, and thinks in the background while you're away. Talk to it through the terminal, web dashboard, iOS app, voice calls, or SMS.
 
 **Why Nero?**
 - **Self-hosted** - Your data stays on your machine. No cloud dependency.
@@ -265,6 +265,24 @@ nero think protect dev     # Add branch to protected list
 ```
 
 When enabled, Nero waits 5 minutes after your last message, then checks git status, logs, MCP tools, etc. every 10 minutes. Thoughts are surfaced when you return.
+
+## iOS App
+
+A native iOS companion app is available in the `ios/` directory.
+
+**Features:**
+- Chat with markdown rendering and streaming
+- Voice mode with real-time audio
+- Memories management
+- Connect via local network or remote tunnel
+
+**Setup:**
+1. Open `ios/Nero.xcodeproj` in Xcode
+2. Update the bundle identifier and signing team
+3. Build and run on your device
+4. Enter your Nero server URL (e.g., `http://192.168.1.100:4848`)
+
+For remote access, use your license key to connect via tunnel.
 
 ## Environment Variables
 
