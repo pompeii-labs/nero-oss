@@ -7,7 +7,7 @@ import type {
 } from '@pompeii-labs/magma/types';
 import OpenAI from 'openai';
 import chalk from 'chalk';
-import { readFile, writeFile, readdir } from 'fs/promises';
+import { readFile, writeFile, readdir, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { execSync, exec } from 'child_process';
 import { promisify } from 'util';
@@ -558,7 +558,9 @@ Be thorough - this summary will be the primary context for future conversations.
                 runtime: isDocker ? 'Docker container' : 'local',
                 home: homeDir,
                 cwd: this.currentCwd,
-                gitRepo: isGitRepo,
+                gitRepo: isGitRepo
+                    ? 'yes'
+                    : 'NO - do not run git commands here, cd to a project first',
             },
         };
 
@@ -1194,6 +1196,10 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
         this.emitActivity(activity);
 
         try {
+            const parentDir = dirname(filePath);
+            if (!existsSync(parentDir)) {
+                await mkdir(parentDir, { recursive: true });
+            }
             await writeFile(filePath, content, 'utf-8');
             activity.status = 'complete';
             activity.result = `Written ${content.length} bytes to ${path}`;
