@@ -1031,6 +1031,7 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
                 encoding: 'utf-8',
                 cwd: this.currentCwd,
                 timeout: 5000,
+                stdio: ['pipe', 'pipe', 'pipe'],
             }).trim();
         } catch {
             return undefined;
