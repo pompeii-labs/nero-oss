@@ -2,6 +2,16 @@
 
 All notable changes to Nero are documented here.
 
+## 1.13.0 (2026-01-30)
+
+### Changes
+- Add `cd` tool for changing directories
+- Write tool auto-creates parent directories
+- Clearer git repository context in system prompts
+
+### Fixes
+- Suppress git stderr output when not in a git repository
+
 ## 1.12.2 (2026-01-30)
 
 ### Fixes
