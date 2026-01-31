@@ -188,6 +188,68 @@ nero migrate              # Run database migrations
 | `/memory` | Show stored memories |
 | `/usage` | Show context usage |
 | `/think` | Run background thinking manually |
+| `/skills` | List available skills |
+
+## Skills
+
+Skills are reusable prompts that extend Nero's capabilities. They follow the [Agent Skills](https://skills.sh) standard.
+
+```bash
+# List installed skills
+nero skills list
+
+# Install from git repo
+nero skills add user/repo
+
+# Create your own
+nero skills create my-skill
+
+# Remove a skill
+nero skills remove my-skill
+```
+
+Skills live in `~/.nero/skills/`. Each skill is a folder with a `SKILL.md` file:
+
+```
+~/.nero/skills/
+  my-skill/
+    SKILL.md
+```
+
+### Using Skills
+
+In the web UI or REPL, type `/<skill-name>` to load a skill into context:
+
+```
+/my-skill          # Load skill
+/my-skill          # Run again to unload
+/skills            # List all skills (● = loaded)
+```
+
+Loaded skills stay active until you unload them or reload Nero.
+
+### Creating Skills
+
+```bash
+nero skills create commit-helper
+```
+
+Edit `~/.nero/skills/commit-helper/SKILL.md`:
+
+```yaml
+---
+name: commit-helper
+description: Help write git commit messages
+---
+
+When the user asks you to commit, analyze the staged changes and suggest a clear, conventional commit message.
+```
+
+### Installing from npx skills
+
+```bash
+npx skills add vercel-labs/agent-skills --skill frontend-design --path ~/.nero/skills
+```
 
 ## Background Thinking
 

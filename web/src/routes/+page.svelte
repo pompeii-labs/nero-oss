@@ -3,7 +3,7 @@
     import { onMount } from 'svelte';
     import { streamChat, clearHistory, abortChat, type ToolActivity } from '$lib/actions/chat';
     import { getHistory } from '$lib/actions/health';
-    import { executeCommand, isSlashCommand, type CommandContext, type CommandWidget } from '$lib/commands';
+    import { executeCommand, isSlashCommand, checkAndToggleSkill, refreshLoadedSkills, type CommandContext, type CommandWidget } from '$lib/commands';
     import ChatMessage from '$lib/components/chat/chat-message.svelte';
     import ChatInput from '$lib/components/chat/chat-input.svelte';
     import ToolActivityComponent from '$lib/components/chat/tool-activity.svelte';
@@ -48,6 +48,8 @@
     const SCROLL_THRESHOLD = 100;
 
     onMount(async () => {
+        refreshLoadedSkills();
+
         const historyResponse = await getHistory();
         if (historyResponse.success) {
             timeline = historyResponse.data.messages.map((m, i) => ({
@@ -124,6 +126,32 @@
     };
 
     async function handleCommand(input: string) {
+        const skillResult = await checkAndToggleSkill(input);
+
+        if (skillResult) {
+            timeline = [...timeline, {
+                type: 'message',
+                data: {
+                    id: `user-${Date.now()}`,
+                    role: 'user',
+                    content: input
+                }
+            }];
+            const msg = skillResult.action === 'loaded'
+                ? `Skill "${skillResult.skillName}" loaded. ${skillResult.loadedSkills.length} active.`
+                : `Skill "${skillResult.skillName}" unloaded. ${skillResult.loadedSkills.length} active.`;
+            timeline = [...timeline, {
+                type: 'message',
+                data: {
+                    id: `system-${Date.now()}`,
+                    role: 'system',
+                    content: msg
+                }
+            }];
+            scrollToBottom();
+            return;
+        }
+
         timeline = [...timeline, {
             type: 'message',
             data: {

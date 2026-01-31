@@ -18,6 +18,7 @@ import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import { encode as toon } from '@toon-format/toon';
 import { NeroConfig, getConfigDir } from '../config.js';
+import { discoverSkills, loadSkill, getSkillContent, type Skill } from '../skills/index.js';
 import { McpClient } from '../mcp/client.js';
 import { db, isDbConnected } from '../db/index.js';
 import { Message, Memory, Action, Summary, Note } from '../models/index.js';
@@ -120,6 +121,9 @@ export class Nero extends MagmaAgent {
         }
     }
 
+    private skillsCache: Skill[] = [];
+    private loadedSkills: Map<string, { skill: Skill; args: string[] }> = new Map();
+
     async setup(): Promise<void> {
         const promptPath = join(__dirname, '../../prompts/main.txt');
         try {
@@ -131,6 +135,7 @@ export class Nero extends MagmaAgent {
 
         await this.loadUserInstructions();
         await this.mcpClient.connect();
+        await this.loadSkills();
 
         const mcpTools = await this.mcpClient.getTools();
         console.log(chalk.dim(`[setup] Loaded ${mcpTools.length} MCP tools`));
@@ -145,6 +150,67 @@ export class Nero extends MagmaAgent {
         if (this.memoriesCache.length > 0) {
             console.log(chalk.dim(`[setup] Loaded ${this.memoriesCache.length} memories`));
         }
+    }
+
+    private async loadSkills(): Promise<void> {
+        try {
+            this.skillsCache = await discoverSkills();
+            if (this.skillsCache.length > 0) {
+                console.log(chalk.dim(`[setup] Loaded ${this.skillsCache.length} skills`));
+            }
+        } catch {
+            this.skillsCache = [];
+        }
+    }
+
+    async refreshSkills(): Promise<void> {
+        await this.loadSkills();
+    }
+
+    getLoadedSkillNames(): string[] {
+        return Array.from(this.loadedSkills.keys());
+    }
+
+    loadSkillIntoContext(skill: Skill, args: string[]): void {
+        this.loadedSkills.set(skill.name, { skill, args });
+    }
+
+    unloadSkillFromContext(name: string): boolean {
+        return this.loadedSkills.delete(name);
+    }
+
+    private getSkillsContext(): string {
+        let context = '';
+
+        if (this.loadedSkills.size > 0) {
+            context += '\n\n## Active Skills\n\n';
+            context +=
+                'The following skills are currently loaded. Follow their instructions for the relevant tasks. ';
+            context += 'Use the `unloadSkill` tool when you are done with a skill.\n';
+
+            for (const [name, { skill, args }] of this.loadedSkills) {
+                const content = getSkillContent(skill, args);
+                context += `\n<skill name="${name}">\n${content}\n</skill>\n`;
+            }
+        }
+
+        if (this.skillsCache.length === 0) return context;
+
+        const unloaded = this.skillsCache.filter((s) => !this.loadedSkills.has(s.name));
+
+        if (unloaded.length > 0) {
+            context += '\n\n## Available Skills\n\n';
+            context +=
+                'You have access to specialized skills that provide detailed instructions for specific tasks. ';
+            context +=
+                'Use the `skill` tool to load a skill when the task matches its description.\n\n';
+
+            for (const skill of unloaded) {
+                context += `- **${skill.name}**: ${skill.metadata.description || 'No description'}\n`;
+            }
+        }
+
+        return context;
     }
 
     private async loadRecentMessages(limit = 50): Promise<void> {
@@ -444,6 +510,7 @@ Be thorough - this summary will be the primary context for future conversations.
         });
         this.hasSummary = true;
         this.loadedMessages = [];
+        this.loadedSkills.clear();
 
         return summaryContent;
     }
@@ -608,6 +675,11 @@ Be thorough - this summary will be the primary context for future conversations.
                 role: 'system',
                 content: `## User Instructions (from NERO.md)\n${this.userInstructions}`,
             });
+        }
+
+        const skillsContext = this.getSkillsContext();
+        if (skillsContext) {
+            messages.push({ role: 'system', content: skillsContext });
         }
 
         messages.push({ role: 'system', content: contextPrompt });
@@ -908,6 +980,106 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
             this.emitActivity(activity);
             return `Error: ${activity.error}`;
         }
+    }
+
+    @tool({
+        description:
+            'Load a skill to get specialized instructions for a task. The skill will be added to your active context.',
+    })
+    @toolparam({
+        key: 'name',
+        type: 'string',
+        required: true,
+        description: 'The name of the skill to load',
+    })
+    @toolparam({
+        key: 'args',
+        type: 'array',
+        items: { type: 'string' },
+        required: false,
+        description: 'Optional arguments to pass to the skill',
+    })
+    async skill(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { name, args } = call.fn_args as { name: string; args?: string[] };
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'skill',
+            displayName: `Skill: ${name}`,
+            args: { name, args },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            if (this.loadedSkills.has(name)) {
+                activity.status = 'complete';
+                activity.result = `Skill already loaded: ${name}`;
+                this.emitActivity(activity);
+                return `Skill "${name}" is already loaded. Check the Active Skills section in your context.`;
+            }
+
+            const skill = await loadSkill(name);
+            if (!skill) {
+                const available = this.skillsCache.map((s) => s.name).join(', ');
+                activity.status = 'error';
+                activity.error = `Skill not found: ${name}`;
+                this.emitActivity(activity);
+                return `Error: Skill "${name}" not found. Available skills: ${available || 'none'}`;
+            }
+
+            this.loadedSkills.set(name, { skill, args: args || [] });
+
+            activity.status = 'complete';
+            activity.result = `Loaded skill: ${name}`;
+            this.emitActivity(activity);
+
+            return `Skill "${name}" loaded. Its instructions are now in your Active Skills context. Use \`unloadSkill\` when done.`;
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Error loading skill: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description:
+            'Unload a skill when you are done using its instructions. This removes the skill from your active context to free up memory.',
+    })
+    @toolparam({
+        key: 'name',
+        type: 'string',
+        required: true,
+        description: 'The name of the skill to unload',
+    })
+    async unloadSkill(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { name } = call.fn_args as { name: string };
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'unloadSkill',
+            displayName: `Unload Skill: ${name}`,
+            args: { name },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        if (!this.loadedSkills.has(name)) {
+            activity.status = 'error';
+            activity.error = `Skill not loaded: ${name}`;
+            this.emitActivity(activity);
+            const loaded = Array.from(this.loadedSkills.keys()).join(', ');
+            return `Skill "${name}" is not currently loaded. Loaded skills: ${loaded || 'none'}`;
+        }
+
+        this.loadedSkills.delete(name);
+
+        activity.status = 'complete';
+        activity.result = `Unloaded skill: ${name}`;
+        this.emitActivity(activity);
+
+        return `Skill "${name}" unloaded. Its instructions have been removed from your active context.`;
     }
 
     private currentMedium: 'cli' | 'voice' | 'sms' | 'slack' | 'api' = 'cli';

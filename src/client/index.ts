@@ -210,7 +210,7 @@ export class NeroClient {
         return response.json();
     }
 
-    async reload(): Promise<{ success: boolean; mcpTools: number }> {
+    async reload(): Promise<{ success: boolean; mcpTools: number; loadedSkills: string[] }> {
         const response = await fetch(`${this.baseUrl}/api/reload`, {
             method: 'POST',
             headers: this.getHeaders(),
@@ -220,6 +220,62 @@ export class NeroClient {
             throw new Error(error.error || `HTTP ${response.status}`);
         }
         return response.json();
+    }
+
+    async getLoadedSkills(): Promise<string[]> {
+        const response = await fetch(`${this.baseUrl}/api/skills/loaded`, {
+            headers: this.getHeaders(),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to get loaded skills: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.skills;
+    }
+
+    async loadSkill(
+        name: string,
+        args?: string[],
+    ): Promise<{ success: boolean; loadedSkills: string[] }> {
+        const response = await fetch(`${this.baseUrl}/api/skills/load`, {
+            method: 'POST',
+            headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ name, args }),
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(error.error || `HTTP ${response.status}`);
+        }
+        return response.json();
+    }
+
+    async unloadSkill(name: string): Promise<{ success: boolean; loadedSkills: string[] }> {
+        const response = await fetch(`${this.baseUrl}/api/skills/unload`, {
+            method: 'POST',
+            headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ name }),
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(error.error || `HTTP ${response.status}`);
+        }
+        return response.json();
+    }
+
+    async getAvailableSkills(): Promise<
+        Array<{
+            name: string;
+            description: string;
+        }>
+    > {
+        const response = await fetch(`${this.baseUrl}/api/skills`, {
+            headers: this.getHeaders(),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to get skills: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.skills;
     }
 
     async respondToPermission(id: string, approved: boolean): Promise<void> {

@@ -62,7 +62,9 @@ export async function getHistory(): Promise<ServerResponse<HistoryInfo>> {
     }
 }
 
-export async function reloadConfig(): Promise<ServerResponse<{ mcpTools: number }>> {
+export async function reloadConfig(): Promise<
+    ServerResponse<{ mcpTools: number; loadedSkills?: string[] }>
+> {
     try {
         const response = await fetch(getServerUrl('/api/reload'), { method: 'POST' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);

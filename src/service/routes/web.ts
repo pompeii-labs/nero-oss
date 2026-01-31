@@ -12,6 +12,13 @@ import {
     type NeroConfig,
     type McpServerConfig,
 } from '../../config.js';
+import {
+    discoverSkills,
+    loadSkill,
+    getSkillContent,
+    getSkillsDir,
+    findSkill,
+} from '../../skills/index.js';
 
 export function createWebRouter(agent: Nero) {
     const router = Router();
@@ -269,6 +276,71 @@ export function createWebRouter(agent: Nero) {
         } catch (error) {
             logger.error(`Failed to get Slack install URL: ${(error as Error).message}`);
             res.status(500).json({ error: 'Failed to get Slack install URL' });
+        }
+    });
+
+    router.get('/skills', async (req: Request, res: Response) => {
+        try {
+            const skills = await discoverSkills();
+            res.json({
+                skills: skills.map((s) => ({
+                    name: s.name,
+                    description: s.metadata.description,
+                })),
+                skillsDir: getSkillsDir(),
+            });
+        } catch (error) {
+            logger.error(`Failed to get skills: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to get skills' });
+        }
+    });
+
+    router.get('/skills/:name', async (req: Request, res: Response) => {
+        const name = decodeURIComponent(req.params.name as string);
+
+        try {
+            const skill = await loadSkill(name);
+            if (!skill) {
+                res.status(404).json({ error: 'Skill not found' });
+                return;
+            }
+
+            res.json({
+                name: skill.name,
+                path: skill.path,
+                metadata: skill.metadata,
+                content: skill.content,
+            });
+        } catch (error) {
+            logger.error(`Failed to get skill: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to get skill' });
+        }
+    });
+
+    router.post('/skills/:name/invoke', async (req: Request, res: Response) => {
+        const name = decodeURIComponent(req.params.name as string);
+        const { args } = req.body as { args?: string[] };
+
+        try {
+            const skills = await discoverSkills();
+            const skill = findSkill(name, skills);
+
+            if (!skill) {
+                res.status(404).json({ error: 'Skill not found' });
+                return;
+            }
+
+            const content = getSkillContent(skill, args || []);
+            res.json({
+                skill: {
+                    name: skill.name,
+                    description: skill.metadata.description,
+                },
+                content,
+            });
+        } catch (error) {
+            logger.error(`Failed to invoke skill: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to invoke skill' });
         }
     });
 

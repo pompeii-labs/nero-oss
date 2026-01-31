@@ -2,7 +2,7 @@
     import { Textarea } from '$lib/components/ui/textarea';
     import { Button } from '$lib/components/ui/button';
     import CommandPalette from './command-palette.svelte';
-    import { getCommandSuggestions, isSlashCommand, type SlashCommand } from '$lib/commands';
+    import { getSuggestions, isSlashCommand, type Suggestion } from '$lib/commands';
     import ArrowUp from '@lucide/svelte/icons/arrow-up';
     import Square from '@lucide/svelte/icons/square';
 
@@ -19,18 +19,18 @@
     let message = $state('');
     let textareaRef: HTMLTextAreaElement | null = $state(null);
     let containerRef: HTMLDivElement | null = $state(null);
-    let suggestions: SlashCommand[] = $state([]);
+    let suggestions: Suggestion[] = $state([]);
     let selectedIndex = $state(0);
     let isFocused = $state(false);
 
     const MIN_HEIGHT = 56;
     const MAX_HEIGHT = 200;
 
-    function updateSuggestions() {
+    async function updateSuggestions() {
         if (isSlashCommand(message)) {
             const partial = message.slice(1).split(/\s+/)[0] || '';
             if (!message.includes(' ')) {
-                suggestions = getCommandSuggestions(partial);
+                suggestions = await getSuggestions(partial);
                 selectedIndex = 0;
             } else {
                 suggestions = [];
@@ -59,8 +59,12 @@
         }
     }
 
-    function selectCommand(command: SlashCommand) {
-        message = `/${command.name} `;
+    function selectSuggestion(suggestion: Suggestion) {
+        if (suggestion.type === 'command') {
+            message = `/${suggestion.command.name} `;
+        } else {
+            message = `/${suggestion.name} `;
+        }
         suggestions = [];
         textareaRef?.focus();
     }
@@ -87,7 +91,7 @@
             }
             if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
                 event.preventDefault();
-                selectCommand(suggestions[selectedIndex]);
+                selectSuggestion(suggestions[selectedIndex]);
                 return;
             }
             if (event.key === 'Escape') {
@@ -126,9 +130,9 @@
             style="height: {MIN_HEIGHT}px"
         >
             <CommandPalette
-                commands={suggestions}
+                {suggestions}
                 {selectedIndex}
-                onSelect={selectCommand}
+                onSelect={selectSuggestion}
             />
 
             <Textarea

@@ -9,7 +9,14 @@ import { NeroClient } from '../client/index.js';
 import { NeroProxy } from '../client/proxy.js';
 import { Logger, formatToolName } from '../util/logger.js';
 import { VERSION } from '../util/version.js';
-import { commands, getCommandSuggestions, executeCommand, CommandContext } from './commands.js';
+import {
+    commands,
+    getCommandSuggestions,
+    executeCommand,
+    CommandContext,
+    checkForSkillInvocation,
+    type SkillInvocation,
+} from './commands.js';
 import { NERO_BLUE, GLITCH_CHARS } from './theme.js';
 import { generateDiff, formatDiffStats, DiffResult } from '../util/diff.js';
 
@@ -52,70 +59,80 @@ function extractBashPattern(command: string): string {
     return `${base} *`;
 }
 
-function NeroInput({ value, onChange, onSubmit, onCtrlC, placeholder = '', focus = true }: NeroInputProps) {
+function NeroInput({
+    value,
+    onChange,
+    onSubmit,
+    onCtrlC,
+    placeholder = '',
+    focus = true,
+}: NeroInputProps) {
     const [cursor, setCursor] = useState(value.length);
 
     useEffect(() => {
         if (cursor > value.length) setCursor(value.length);
     }, [value, cursor]);
 
-    useInput((input, key) => {
-        if (!focus) return;
+    useInput(
+        (input, key) => {
+            if (!focus) return;
 
-        if (key.ctrl && input === 'c') {
-            onCtrlC();
-            return;
-        }
-
-        if (key.ctrl && input === 'w') {
-            if (cursor > 0) {
-                const boundary = findWordBoundaryLeft(value, cursor);
-                onChange(value.slice(0, boundary) + value.slice(cursor));
-                setCursor(boundary);
+            if (key.ctrl && input === 'c') {
+                onCtrlC();
+                return;
             }
-            return;
-        }
 
-        if (key.return) {
-            onSubmit(value);
-            return;
-        }
-
-        if (key.leftArrow) {
-            if (key.meta) {
-                setCursor(findWordBoundaryLeft(value, cursor));
-            } else {
-                setCursor(Math.max(0, cursor - 1));
+            if (key.ctrl && input === 'w') {
+                if (cursor > 0) {
+                    const boundary = findWordBoundaryLeft(value, cursor);
+                    onChange(value.slice(0, boundary) + value.slice(cursor));
+                    setCursor(boundary);
+                }
+                return;
             }
-            return;
-        }
 
-        if (key.rightArrow) {
-            if (key.meta) {
-                setCursor(findWordBoundaryRight(value, cursor));
-            } else {
-                setCursor(Math.min(value.length, cursor + 1));
+            if (key.return) {
+                onSubmit(value);
+                return;
             }
-            return;
-        }
 
-        if (key.backspace || key.delete) {
-            if (cursor > 0) {
-                onChange(value.slice(0, cursor - 1) + value.slice(cursor));
-                setCursor(cursor - 1);
+            if (key.leftArrow) {
+                if (key.meta) {
+                    setCursor(findWordBoundaryLeft(value, cursor));
+                } else {
+                    setCursor(Math.max(0, cursor - 1));
+                }
+                return;
             }
-            return;
-        }
 
-        if (key.upArrow || key.downArrow || key.tab || key.escape) {
-            return;
-        }
+            if (key.rightArrow) {
+                if (key.meta) {
+                    setCursor(findWordBoundaryRight(value, cursor));
+                } else {
+                    setCursor(Math.min(value.length, cursor + 1));
+                }
+                return;
+            }
 
-        if (input) {
-            onChange(value.slice(0, cursor) + input + value.slice(cursor));
-            setCursor(cursor + input.length);
-        }
-    }, { isActive: focus });
+            if (key.backspace || key.delete) {
+                if (cursor > 0) {
+                    onChange(value.slice(0, cursor - 1) + value.slice(cursor));
+                    setCursor(cursor - 1);
+                }
+                return;
+            }
+
+            if (key.upArrow || key.downArrow || key.tab || key.escape) {
+                return;
+            }
+
+            if (input) {
+                onChange(value.slice(0, cursor) + input + value.slice(cursor));
+                setCursor(cursor + input.length);
+            }
+        },
+        { isActive: focus },
+    );
 
     const displayValue = value || '';
     const showPlaceholder = displayValue.length === 0 && placeholder;
@@ -145,7 +162,6 @@ function NeroInput({ value, onChange, onSubmit, onCtrlC, placeholder = '', focus
 function getGlitchChar(): string {
     return GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
 }
-
 
 function formatArgValue(value: unknown, maxLen = 60): string {
     if (typeof value === 'string') {
@@ -182,25 +198,32 @@ function getToolGlyph(status: string): string {
     return '○';
 }
 
-function NeroBlock({ items, hiddenCount, termWidth }: { items?: TurnItem[]; hiddenCount: number; termWidth: number }) {
-    const hasContent = items && items.some(i => i.type === 'text' && i.content);
+function NeroBlock({
+    items,
+    hiddenCount,
+    termWidth,
+}: {
+    items?: TurnItem[];
+    hiddenCount: number;
+    termWidth: number;
+}) {
+    const hasContent = items && items.some((i) => i.type === 'text' && i.content);
 
     return (
         <Box flexDirection="column">
-            <Text color={NERO_BLUE} bold underline>nero</Text>
-            {hiddenCount > 0 && (
-                <Text dimColor>... +{hiddenCount} earlier</Text>
-            )}
-            {items && items.map((item) => (
-                item.type === 'tool' && item.toolData ? (
-                    <ToolLogDisplay key={item.id} toolData={item.toolData} />
-                ) : item.type === 'text' && item.content ? (
-                    <Text key={item.id}>{wrapText(item.content, termWidth)}</Text>
-                ) : null
-            ))}
-            {!hasContent && (
-                <Text dimColor>[no response]</Text>
-            )}
+            <Text color={NERO_BLUE} bold underline>
+                nero
+            </Text>
+            {hiddenCount > 0 && <Text dimColor>... +{hiddenCount} earlier</Text>}
+            {items &&
+                items.map((item) =>
+                    item.type === 'tool' && item.toolData ? (
+                        <ToolLogDisplay key={item.id} toolData={item.toolData} />
+                    ) : item.type === 'text' && item.content ? (
+                        <Text key={item.id}>{wrapText(item.content, termWidth)}</Text>
+                    ) : null,
+                )}
+            {!hasContent && <Text dimColor>[no response]</Text>}
         </Box>
     );
 }
@@ -208,10 +231,16 @@ function NeroBlock({ items, hiddenCount, termWidth }: { items?: TurnItem[]; hidd
 function ToolLogDisplay({ toolData }: { toolData: ToolMessage }) {
     const isRunning = toolData.status === 'running';
     const glyph = getToolGlyph(toolData.status);
-    const glyphColor = toolData.status === 'complete' ? NERO_BLUE :
-                       toolData.status === 'error' ? 'red' :
-                       toolData.status === 'skipped' ? 'yellow' :
-                       toolData.status === 'running' ? 'cyan' : 'gray';
+    const glyphColor =
+        toolData.status === 'complete'
+            ? NERO_BLUE
+            : toolData.status === 'error'
+              ? 'red'
+              : toolData.status === 'skipped'
+                ? 'yellow'
+                : toolData.status === 'running'
+                  ? 'cyan'
+                  : 'gray';
     const toolName = toolData.displayName || formatToolName(toolData.tool);
 
     const isWrite = toolData.tool === 'write';
@@ -224,8 +253,9 @@ function ToolLogDisplay({ toolData }: { toolData: ToolMessage }) {
         return generateDiff(oldContent, newContent);
     }, [hasWriteDiff, toolData.args]);
 
-    const mainArg = Object.entries(toolData.args).find(([key]) =>
-        !['isNewFile', 'linesAdded', 'linesRemoved', 'oldContent', 'newContent'].includes(key)
+    const mainArg = Object.entries(toolData.args).find(
+        ([key]) =>
+            !['isNewFile', 'linesAdded', 'linesRemoved', 'oldContent', 'newContent'].includes(key),
     );
     const argPreview = mainArg ? formatArgValue(mainArg[1], 50) : '';
 
@@ -236,7 +266,9 @@ function ToolLogDisplay({ toolData }: { toolData: ToolMessage }) {
             <Box>
                 <Text color={glyphColor}>{prefix}</Text>
                 <Text color={glyphColor}>{glyph} </Text>
-                <Text color={glyphColor} bold>{toolName}</Text>
+                <Text color={glyphColor} bold>
+                    {toolName}
+                </Text>
                 {argPreview && <Text dimColor> {argPreview}</Text>}
                 {diff && (
                     <Text>
@@ -251,21 +283,37 @@ function ToolLogDisplay({ toolData }: { toolData: ToolMessage }) {
             {diff && !isRunning && (
                 <Box flexDirection="column" marginLeft={3} marginTop={1}>
                     {diff.lines.slice(0, 20).map((line, i) => {
-                        const linePrefix = line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' ';
-                        const color = line.type === 'add' ? 'green' : line.type === 'remove' ? 'red' : undefined;
-                        const content = line.content.length > 70 ? line.content.slice(0, 67) + '...' : line.content;
+                        const linePrefix =
+                            line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' ';
+                        const color =
+                            line.type === 'add'
+                                ? 'green'
+                                : line.type === 'remove'
+                                  ? 'red'
+                                  : undefined;
+                        const content =
+                            line.content.length > 70
+                                ? line.content.slice(0, 67) + '...'
+                                : line.content;
                         return (
-                            <Text key={i} color={color} dimColor={line.type === 'context'}>{linePrefix} {content}</Text>
+                            <Text key={i} color={color} dimColor={line.type === 'context'}>
+                                {linePrefix} {content}
+                            </Text>
                         );
                     })}
                     {diff.lines.length > 20 && (
-                        <Text dimColor>  ... +{diff.lines.length - 20} more lines</Text>
+                        <Text dimColor> ... +{diff.lines.length - 20} more lines</Text>
                     )}
                 </Box>
             )}
             {toolData.result && !isRunning && !diff && (
                 <Box marginLeft={3}>
-                    <Text dimColor>↳ {toolData.result.length > 70 ? toolData.result.slice(0, 70) + '...' : toolData.result}</Text>
+                    <Text dimColor>
+                        ↳{' '}
+                        {toolData.result.length > 70
+                            ? toolData.result.slice(0, 70) + '...'
+                            : toolData.result}
+                    </Text>
                 </Box>
             )}
         </Box>
@@ -380,30 +428,45 @@ function CommandLoader({ message }: { message: string }) {
 
     useEffect(() => {
         const timer = setInterval(() => {
-            setFrame(f => (f + 1) % shimmerChars.length);
+            setFrame((f) => (f + 1) % shimmerChars.length);
         }, 120);
         return () => clearInterval(timer);
     }, []);
 
-    const bar = Array(12).fill(null).map((_, i) => {
-        const charIndex = (frame + i) % shimmerChars.length;
-        return shimmerChars[charIndex];
-    }).join('');
+    const bar = Array(12)
+        .fill(null)
+        .map((_, i) => {
+            const charIndex = (frame + i) % shimmerChars.length;
+            return shimmerChars[charIndex];
+        })
+        .join('');
 
     return (
         <Box flexDirection="column" marginY={1}>
             <Box>
-                <Text color={NERO_BLUE} bold>{bar}</Text>
+                <Text color={NERO_BLUE} bold>
+                    {bar}
+                </Text>
             </Box>
             <Box marginTop={0}>
                 <Text color={NERO_BLUE}>{message}</Text>
-                <Text color={NERO_BLUE} dimColor>...</Text>
+                <Text color={NERO_BLUE} dimColor>
+                    ...
+                </Text>
             </Box>
         </Box>
     );
 }
 
-function DiffView({ diff, path, isNewFile }: { diff: DiffResult; path: string; isNewFile: boolean }) {
+function DiffView({
+    diff,
+    path,
+    isNewFile,
+}: {
+    diff: DiffResult;
+    path: string;
+    isNewFile: boolean;
+}) {
     return (
         <Box flexDirection="column" marginTop={1}>
             <Box>
@@ -417,18 +480,20 @@ function DiffView({ diff, path, isNewFile }: { diff: DiffResult; path: string; i
             <Box flexDirection="column" marginTop={1}>
                 {diff.lines.slice(0, 30).map((line, i) => {
                     const prefix = line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' ';
-                    const color = line.type === 'add' ? 'green' : line.type === 'remove' ? 'red' : undefined;
-                    const content = line.content.length > 80 ? line.content.slice(0, 77) + '...' : line.content;
+                    const color =
+                        line.type === 'add' ? 'green' : line.type === 'remove' ? 'red' : undefined;
+                    const content =
+                        line.content.length > 80 ? line.content.slice(0, 77) + '...' : line.content;
                     return (
-                        <Text key={i} color={color}>{prefix} {content}</Text>
+                        <Text key={i} color={color}>
+                            {prefix} {content}
+                        </Text>
                     );
                 })}
                 {diff.lines.length > 30 && (
                     <Text dimColor>... +{diff.lines.length - 30} more lines</Text>
                 )}
-                {diff.truncated && (
-                    <Text dimColor>(diff truncated)</Text>
-                )}
+                {diff.truncated && <Text dimColor>(diff truncated)</Text>}
             </Box>
         </Box>
     );
@@ -437,7 +502,7 @@ function DiffView({ diff, path, isNewFile }: { diff: DiffResult; path: string; i
 function PermissionPrompt({
     activity,
     onRespond,
-    onAlwaysAllow
+    onAlwaysAllow,
 }: {
     activity: ToolActivity;
     onRespond: (approved: boolean) => void;
@@ -466,15 +531,25 @@ function PermissionPrompt({
     }, [isWriteWithDiff, args]);
 
     const displayArgs = Object.entries(args).filter(
-        ([key]) => !['oldContent', 'newContent', 'isNewFile'].includes(key)
+        ([key]) => !['oldContent', 'newContent', 'isNewFile'].includes(key),
     );
 
     return (
         <Box flexDirection="column" marginY={1}>
-            <Text color={NERO_BLUE}>░▒▓ <Text bold>Permission Required</Text></Text>
-            <Box flexDirection="column" borderStyle="single" borderColor={NERO_BLUE} paddingX={2} paddingY={1}>
+            <Text color={NERO_BLUE}>
+                ░▒▓ <Text bold>Permission Required</Text>
+            </Text>
+            <Box
+                flexDirection="column"
+                borderStyle="single"
+                borderColor={NERO_BLUE}
+                paddingX={2}
+                paddingY={1}
+            >
                 <Box>
-                    <Text color={NERO_BLUE} bold>{toolName}</Text>
+                    <Text color={NERO_BLUE} bold>
+                        {toolName}
+                    </Text>
                 </Box>
                 {displayArgs.length > 0 && (
                     <Box flexDirection="column" marginTop={1}>
@@ -497,9 +572,21 @@ function PermissionPrompt({
                     />
                 )}
                 <Box marginTop={1}>
-                    <Text dimColor>[</Text><Text color={NERO_BLUE} bold>y</Text><Text dimColor>]es </Text>
-                    <Text dimColor>[</Text><Text color={NERO_BLUE} bold>n</Text><Text dimColor>]o </Text>
-                    <Text dimColor>[</Text><Text color={NERO_BLUE} bold>a</Text><Text dimColor>]lways</Text>
+                    <Text dimColor>[</Text>
+                    <Text color={NERO_BLUE} bold>
+                        y
+                    </Text>
+                    <Text dimColor>]es </Text>
+                    <Text dimColor>[</Text>
+                    <Text color={NERO_BLUE} bold>
+                        n
+                    </Text>
+                    <Text dimColor>]o </Text>
+                    <Text dimColor>[</Text>
+                    <Text color={NERO_BLUE} bold>
+                        a
+                    </Text>
+                    <Text dimColor>]lways</Text>
                 </Box>
             </Box>
         </Box>
@@ -510,7 +597,7 @@ function WelcomeBanner({ model }: { model: string }) {
     return (
         <Box flexDirection="column" marginBottom={1}>
             <Text color={NERO_BLUE} bold>
-{` ███╗   ██╗███████╗██████╗  ██████╗
+                {` ███╗   ██╗███████╗██████╗  ██████╗
  ████╗  ██║██╔════╝██╔══██╗██╔═══██╗
  ██╔██╗ ██║█████╗  ██████╔╝██║   ██║
  ██║╚██╗██║██╔══╝  ██╔══██╗██║   ██║
@@ -518,31 +605,72 @@ function WelcomeBanner({ model }: { model: string }) {
  ╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝ ╚═════╝`}
             </Text>
             <Text> </Text>
-            <Text dimColor>  v{VERSION} | {model}</Text>
-            <Text dimColor>  Type a message to get started, or /help for commands</Text>
+            <Text dimColor>
+                {' '}
+                v{VERSION} | {model}
+            </Text>
+            <Text dimColor> Type a message to get started, or /help for commands</Text>
         </Box>
     );
 }
 
-function CommandSuggestions({ input }: { input: string }) {
+function CommandSuggestions({
+    input,
+    skills,
+    loadedSkills,
+}: {
+    input: string;
+    skills: Skill[];
+    loadedSkills: string[];
+}) {
     if (!input.startsWith('/')) return null;
 
-    const partial = input.slice(1).split(/\s/)[0];
-    const suggestions = getCommandSuggestions(partial);
+    const partial = input.slice(1).split(/\s/)[0].toLowerCase();
+    const commandSuggestions = getCommandSuggestions(partial);
 
-    if (suggestions.length === 0 || (suggestions.length === 1 && suggestions[0].name === partial)) {
+    const loadedSet = new Set(loadedSkills.map((s) => s.toLowerCase()));
+
+    const skillSuggestions = skills
+        .filter((s) => s.name.toLowerCase().startsWith(partial))
+        .slice(0, 5);
+
+    const hasExactCommandMatch =
+        commandSuggestions.length === 1 && commandSuggestions[0].name === partial;
+    const hasExactSkillMatch =
+        skillSuggestions.length === 1 && skillSuggestions[0].name.toLowerCase() === partial;
+
+    if (
+        (commandSuggestions.length === 0 && skillSuggestions.length === 0) ||
+        (hasExactCommandMatch && skillSuggestions.length === 0) ||
+        (hasExactSkillMatch && commandSuggestions.length === 0)
+    ) {
         return null;
     }
 
     return (
         <Box flexDirection="column" marginLeft={2} marginTop={1}>
-            {suggestions.slice(0, 5).map((cmd) => (
+            {commandSuggestions.slice(0, 3).map((cmd) => (
                 <Text key={cmd.name} dimColor>
                     /{cmd.name} <Text color="gray">- {cmd.description}</Text>
                 </Text>
             ))}
+            {skillSuggestions.map((skill) => {
+                const isLoaded = loadedSet.has(skill.name.toLowerCase());
+                return (
+                    <Text key={skill.name} dimColor>
+                        /{skill.name}{' '}
+                        {isLoaded ? <Text color="green">●</Text> : <Text color={NERO_BLUE}>○</Text>}{' '}
+                        <Text color="gray">- {skill.description || 'skill'}</Text>
+                    </Text>
+                );
+            })}
         </Box>
     );
+}
+
+interface Skill {
+    name: string;
+    description: string;
 }
 
 function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
@@ -565,7 +693,9 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
                 msgs.push({
                     id: 'history-divider',
                     role: 'system',
-                    content: chalk.dim(`--- Loaded ${initialHistory.length} messages from previous session ---`),
+                    content: chalk.dim(
+                        `--- Loaded ${initialHistory.length} messages from previous session ---`,
+                    ),
                 });
             }
 
@@ -597,6 +727,8 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
     const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
     const [currentActivity, setCurrentActivity] = useState<ToolActivity | null>(null);
     const [commandLoading, setCommandLoading] = useState<string | null>(null);
+    const [skills, setSkills] = useState<Skill[]>([]);
+    const [loadedSkills, setLoadedSkills] = useState<string[]>([]);
     const processingRef = useRef(false);
     const messageIdRef = useRef(0);
     const lastCtrlCRef = useRef<number>(0);
@@ -608,9 +740,21 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
         return `msg-${messageIdRef.current}`;
     };
 
-    const addMessage = useCallback((role: Message['role'], content: string, toolData?: ToolMessage) => {
-        setMessages(prev => [...prev, { id: genId(), role, content, toolData }]);
-    }, []);
+    useEffect(() => {
+        nero.getAvailableSkills()
+            .then(setSkills)
+            .catch(() => {});
+        nero.getLoadedSkills()
+            .then(setLoadedSkills)
+            .catch(() => {});
+    }, [nero]);
+
+    const addMessage = useCallback(
+        (role: Message['role'], content: string, toolData?: ToolMessage) => {
+            setMessages((prev) => [...prev, { id: genId(), role, content, toolData }]);
+        },
+        [],
+    );
 
     const flushedLengthRef = useRef(0);
 
@@ -624,11 +768,16 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
             });
         }
 
-        setMessages(prev => {
+        setMessages((prev) => {
             const newMessages = [...prev];
             for (const item of allItems) {
                 if (item.type === 'tool' && item.toolData) {
-                    newMessages.push({ id: genId(), role: 'tool', content: '', toolData: item.toolData as ToolMessage });
+                    newMessages.push({
+                        id: genId(),
+                        role: 'tool',
+                        content: '',
+                        toolData: item.toolData as ToolMessage,
+                    });
                 } else if (item.type === 'text' && item.content) {
                     newMessages.push({ id: genId(), role: 'assistant', content: item.content });
                 }
@@ -675,31 +824,35 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
                 setCurrentTurnItems(currentTurnItemsRef.current);
             } else if (activity.status === 'complete' || activity.status === 'error') {
                 setCurrentActivity(null);
-                currentTurnItemsRef.current = currentTurnItemsRef.current.map(item =>
-                    item.type === 'tool' && item.toolData?.tool === activity.tool && item.toolData?.status === 'running'
+                currentTurnItemsRef.current = currentTurnItemsRef.current.map((item) =>
+                    item.type === 'tool' &&
+                    item.toolData?.tool === activity.tool &&
+                    item.toolData?.status === 'running'
                         ? {
-                            ...item,
-                            toolData: {
-                                ...item.toolData,
-                                status: activity.status as 'complete' | 'error',
-                                result: activity.result || activity.error,
-                            },
-                        }
-                        : item
+                              ...item,
+                              toolData: {
+                                  ...item.toolData,
+                                  status: activity.status as 'complete' | 'error',
+                                  result: activity.result || activity.error,
+                              },
+                          }
+                        : item,
                 );
                 setCurrentTurnItems(currentTurnItemsRef.current);
             } else if (activity.status === 'denied') {
                 setCurrentActivity(null);
-                currentTurnItemsRef.current = currentTurnItemsRef.current.map(item =>
-                    item.type === 'tool' && item.toolData?.tool === activity.tool && item.toolData?.status === 'running'
+                currentTurnItemsRef.current = currentTurnItemsRef.current.map((item) =>
+                    item.type === 'tool' &&
+                    item.toolData?.tool === activity.tool &&
+                    item.toolData?.status === 'running'
                         ? {
-                            ...item,
-                            toolData: {
-                                ...item.toolData,
-                                status: 'denied' as const,
-                            },
-                        }
-                        : item
+                              ...item,
+                              toolData: {
+                                  ...item.toolData,
+                                  status: 'denied' as const,
+                              },
+                          }
+                        : item,
                 );
                 setCurrentTurnItems(currentTurnItemsRef.current);
             } else if (activity.status === 'skipped') {
@@ -751,79 +904,107 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
         setMessages([]);
     }, []);
 
-    const handleSubmit = useCallback(async (value: string) => {
-        const trimmed = value.trim();
-        if (!trimmed || processingRef.current) return;
+    const handleSubmit = useCallback(
+        async (value: string) => {
+            const trimmed = value.trim();
+            if (!trimmed || processingRef.current) return;
 
-        setInput('');
+            setInput('');
 
-        if (trimmed.startsWith('/')) {
-            const ctx: CommandContext = {
-                nero,
-                config,
-                clearScreen: clearMessages,
-                exit,
-                log: (msg) => addMessage('system', msg),
-                setLoading: setCommandLoading,
-            };
+            if (trimmed.startsWith('/')) {
+                const skillInvocation = await checkForSkillInvocation(trimmed);
 
-            const result = await executeCommand(trimmed, ctx);
-            setCommandLoading(null);
+                if (skillInvocation) {
+                    setCommandLoading(`Loading skill: ${skillInvocation.skill.name}`);
 
-            if (result.message) {
-                addMessage('system', result.message);
-            }
-            if (result.error) {
-                addMessage('system', chalk.red(result.error));
-            }
-
-            const newConfig = await loadConfig();
-            setConfig(newConfig);
-            return;
-        }
-
-        processingRef.current = true;
-        addMessage('user', trimmed);
-        currentTurnItemsRef.current = [];
-        setCurrentTurnItems([]);
-        streamingTextRef.current = '';
-        setStreamingText('');
-        flushedLengthRef.current = 0;
-        setIsLoading(true);
-
-        try {
-            let finalContent = '';
-
-            if (config.settings.streaming) {
-                let lastUpdate = 0;
-                const THROTTLE_MS = 80;
-
-                await nero.chat(trimmed, (chunk) => {
-                    finalContent += chunk;
-                    streamingTextRef.current = finalContent;
-
-                    const now = Date.now();
-                    if (now - lastUpdate >= THROTTLE_MS) {
-                        lastUpdate = now;
-                        setStreamingText(finalContent);
+                    try {
+                        const newLoadedSkills = await nero.loadSkill(
+                            skillInvocation.skill.name,
+                            skillInvocation.args,
+                        );
+                        setLoadedSkills(newLoadedSkills);
+                        setCommandLoading(null);
+                        addMessage(
+                            'system',
+                            chalk.green(`Skill loaded: ${skillInvocation.skill.name}`) +
+                                chalk.dim(` (${newLoadedSkills.length} active)`),
+                        );
+                    } catch (error) {
+                        setCommandLoading(null);
+                        const err = error as Error;
+                        addMessage('system', chalk.red(`Failed to load skill: ${err.message}`));
                     }
-                });
-                setStreamingText(finalContent);
-                flushStreamingText();
-                finalizeTurn();
-            } else {
-                const response = await nero.chat(trimmed);
-                finalizeTurn(response.content);
+                    return;
+                }
+
+                const ctx: CommandContext = {
+                    nero,
+                    config,
+                    clearScreen: clearMessages,
+                    exit,
+                    log: (msg) => addMessage('system', msg),
+                    setLoading: setCommandLoading,
+                };
+
+                const result = await executeCommand(trimmed, ctx);
+                setCommandLoading(null);
+
+                if (result.message) {
+                    addMessage('system', result.message);
+                }
+                if (result.error) {
+                    addMessage('system', chalk.red(result.error));
+                }
+
+                const newConfig = await loadConfig();
+                setConfig(newConfig);
+                return;
             }
-        } catch (error) {
-            const err = error as Error;
-            addMessage('system', chalk.red(`Error: ${err.message}`));
-        } finally {
+
+            processingRef.current = true;
+            addMessage('user', trimmed);
+            currentTurnItemsRef.current = [];
+            setCurrentTurnItems([]);
+            streamingTextRef.current = '';
             setStreamingText('');
-            setIsLoading(false);
-            processingRef.current = false;
-        }
-    }, [nero, config, addMessage, clearMessages, exit]);
+            flushedLengthRef.current = 0;
+            setIsLoading(true);
+
+            try {
+                let finalContent = '';
+
+                if (config.settings.streaming) {
+                    let lastUpdate = 0;
+                    const THROTTLE_MS = 80;
+
+                    await nero.chat(trimmed, (chunk) => {
+                        finalContent += chunk;
+                        streamingTextRef.current = finalContent;
+
+                        const now = Date.now();
+                        if (now - lastUpdate >= THROTTLE_MS) {
+                            lastUpdate = now;
+                            setStreamingText(finalContent);
+                        }
+                    });
+                    setStreamingText(finalContent);
+                    flushStreamingText();
+                    finalizeTurn();
+                } else {
+                    const response = await nero.chat(trimmed);
+                    finalizeTurn(response.content);
+                }
+            } catch (error) {
+                const err = error as Error;
+                addMessage('system', chalk.red(`Error: ${err.message}`));
+            } finally {
+                setStreamingText('');
+                setIsLoading(false);
+                processingRef.current = false;
+            }
+        },
+        [nero, config, addMessage, clearMessages, exit],
+    );
 
     const handleCtrlC = useCallback(() => {
         const now = Date.now();
@@ -868,18 +1049,16 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
             <Static items={displayGroups}>
                 {(group) => (
                     <Box key={group.id} marginBottom={1} flexDirection="column">
-                        {group.type === 'banner' && (
-                            <WelcomeBanner model={config.settings.model} />
-                        )}
+                        {group.type === 'banner' && <WelcomeBanner model={config.settings.model} />}
                         {group.type === 'user' && (
                             <Box flexDirection="column">
-                                <Text color="cyan" bold underline>you</Text>
+                                <Text color="cyan" bold underline>
+                                    you
+                                </Text>
                                 <Text>{wrapText(group.content || '', termWidth)}</Text>
                             </Box>
                         )}
-                        {group.type === 'system' && (
-                            <Text>{group.content}</Text>
-                        )}
+                        {group.type === 'system' && <Text>{group.content}</Text>}
                         {group.type === 'nero-block' && (
                             <NeroBlock
                                 items={group.items}
@@ -893,18 +1072,27 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
 
             {isLoading && !pendingPermission && (
                 <Box marginBottom={1} flexDirection="column">
-                    <Text color={NERO_BLUE} bold underline>nero</Text>
+                    <Text color={NERO_BLUE} bold underline>
+                        nero
+                    </Text>
                     {(() => {
-                        const toolItems = currentTurnItems.filter(i => i.type === 'tool');
+                        const toolItems = currentTurnItems.filter((i) => i.type === 'tool');
                         const hiddenTools = Math.max(0, toolItems.length - MAX_VISIBLE_ITEMS);
                         return (
                             <>
                                 {hiddenTools > 0 && (
                                     <Text dimColor>... +{hiddenTools} earlier</Text>
                                 )}
-                                {toolItems.slice(-MAX_VISIBLE_ITEMS).map((item) => (
-                                    item.toolData ? <ToolLogDisplay key={item.id} toolData={item.toolData} /> : null
-                                ))}
+                                {toolItems
+                                    .slice(-MAX_VISIBLE_ITEMS)
+                                    .map((item) =>
+                                        item.toolData ? (
+                                            <ToolLogDisplay
+                                                key={item.id}
+                                                toolData={item.toolData}
+                                            />
+                                        ) : null,
+                                    )}
                             </>
                         );
                     })()}
@@ -913,12 +1101,20 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
                         return (
                             <>
                                 {unflushedText.trim() && (
-                                    <Text>{wrapText(unflushedText, termWidth)}{!currentActivity && <Text dimColor>▊</Text>}</Text>
+                                    <Text>
+                                        {wrapText(unflushedText, termWidth)}
+                                        {!currentActivity && <Text dimColor>▊</Text>}
+                                    </Text>
                                 )}
                                 {(currentActivity || !unflushedText.trim()) && (
                                     <Box>
                                         <AnimatedLoader />
-                                        <Text dimColor> {currentActivity ? formatToolName(currentActivity.tool) : 'thinking...'}</Text>
+                                        <Text dimColor>
+                                            {' '}
+                                            {currentActivity
+                                                ? formatToolName(currentActivity.tool)
+                                                : 'thinking...'}
+                                        </Text>
                                     </Box>
                                 )}
                             </>
@@ -935,14 +1131,14 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
                 />
             )}
 
-            {commandLoading && (
-                <CommandLoader message={commandLoading} />
-            )}
+            {commandLoading && <CommandLoader message={commandLoading} />}
 
             {!pendingPermission && !commandLoading && (
                 <Box flexDirection="column">
                     <Box>
-                        <Text color="cyan" bold>&gt; </Text>
+                        <Text color="cyan" bold>
+                            &gt;{' '}
+                        </Text>
                         <NeroInput
                             value={input}
                             onChange={setInput}
@@ -955,7 +1151,7 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
                 </Box>
             )}
 
-            <CommandSuggestions input={input} />
+            <CommandSuggestions input={input} skills={skills} loadedSkills={loadedSkills} />
 
             <Box marginTop={1}>
                 <Text dimColor>Enter to send | Opt+←→ nav | Ctrl+W del word | Ctrl+C exit</Text>
@@ -992,7 +1188,7 @@ export async function startRepl(config: NeroConfig): Promise<void> {
             initialHistory={initialHistory}
             hasSummary={hasSummary}
         />,
-        { exitOnCtrlC: false }
+        { exitOnCtrlC: false },
     );
 
     await waitUntilExit();

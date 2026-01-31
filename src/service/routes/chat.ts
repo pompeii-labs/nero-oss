@@ -6,7 +6,14 @@ import { Logger } from '../../util/logger.js';
 import { isDbConnected } from '../../db/index.js';
 import { Workspace, ThinkingRun } from '../../models/index.js';
 import { hostToContainer } from '../../util/paths.js';
-import { isToolAllowed, addAllowedTool, getAllowedTools, removeAllowedTool } from '../../config.js';
+import {
+    isToolAllowed,
+    addAllowedTool,
+    getAllowedTools,
+    removeAllowedTool,
+    loadConfig,
+} from '../../config.js';
+import { loadSkill, getSkillContent } from '../../skills/index.js';
 
 interface ChatRequest {
     message: string;
@@ -281,6 +288,83 @@ export function createChatRouter(agent: Nero) {
         } finally {
             agent.setActivityCallback(() => {});
         }
+    });
+
+    router.post('/reload', async (req: Request, res: Response) => {
+        try {
+            logger.info('Reloading configuration and skills');
+            const newConfig = await loadConfig();
+            const result = await agent.reload(newConfig);
+            await agent.refreshSkills();
+            logger.success(`Reload complete: ${result.mcpTools} MCP tools`);
+            res.json({
+                success: true,
+                mcpTools: result.mcpTools,
+                loadedSkills: agent.getLoadedSkillNames(),
+            });
+        } catch (error) {
+            const err = error as Error;
+            logger.error(`Reload failed: ${err.message}`);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.get('/skills/loaded', (req: Request, res: Response) => {
+        res.json({ skills: agent.getLoadedSkillNames() });
+    });
+
+    router.post('/skills/load', async (req: Request, res: Response) => {
+        const { name, args } = req.body as { name: string; args?: string[] };
+
+        if (!name) {
+            res.status(400).json({ error: 'Skill name is required' });
+            return;
+        }
+
+        try {
+            const skill = await loadSkill(name);
+            if (!skill) {
+                res.status(404).json({ error: `Skill not found: ${name}` });
+                return;
+            }
+
+            agent.loadSkillIntoContext(skill, args || []);
+            logger.info(`Loaded skill: ${name}`);
+
+            res.json({
+                success: true,
+                skill: {
+                    name: skill.name,
+                    description: skill.metadata.description,
+                },
+                loadedSkills: agent.getLoadedSkillNames(),
+            });
+        } catch (error) {
+            const err = error as Error;
+            logger.error(`Failed to load skill: ${err.message}`);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    router.post('/skills/unload', async (req: Request, res: Response) => {
+        const { name } = req.body as { name: string };
+
+        if (!name) {
+            res.status(400).json({ error: 'Skill name is required' });
+            return;
+        }
+
+        const unloaded = agent.unloadSkillFromContext(name);
+        if (!unloaded) {
+            res.status(404).json({ error: `Skill not loaded: ${name}` });
+            return;
+        }
+
+        logger.info(`Unloaded skill: ${name}`);
+        res.json({
+            success: true,
+            loadedSkills: agent.getLoadedSkillNames(),
+        });
     });
 
     return router;

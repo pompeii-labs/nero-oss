@@ -151,4 +151,33 @@ export class NeroProxy {
     ): Promise<{ thought: string | null; urgent: boolean }> {
         return this.client.think((activity) => this.activityCallback?.(activity), onStatus);
     }
+
+    async reload(): Promise<{ mcpTools: number; loadedSkills: string[] }> {
+        const result = await this.client.reload();
+        this.cachedMcpTools = await this.client.getContext().then((ctx) => ctx.mcpTools);
+        return { mcpTools: result.mcpTools, loadedSkills: result.loadedSkills };
+    }
+
+    async getLoadedSkills(): Promise<string[]> {
+        return this.client.getLoadedSkills();
+    }
+
+    async loadSkill(name: string, args?: string[]): Promise<string[]> {
+        const result = await this.client.loadSkill(name, args);
+        return result.loadedSkills;
+    }
+
+    async unloadSkill(name: string): Promise<string[]> {
+        const result = await this.client.unloadSkill(name);
+        return result.loadedSkills;
+    }
+
+    async getAvailableSkills(): Promise<
+        Array<{
+            name: string;
+            description: string;
+        }>
+    > {
+        return this.client.getAvailableSkills();
+    }
 }

@@ -19,6 +19,33 @@ import {
     openBrowser,
     type StoredOAuthData,
 } from '../mcp/oauth.js';
+import {
+    discoverSkills,
+    loadSkill,
+    getSkillContent,
+    getSkillsDir,
+    findSkill,
+    type Skill,
+} from '../skills/index.js';
+
+let cachedSkills: Skill[] | null = null;
+
+export async function getSkills(): Promise<Skill[]> {
+    if (!cachedSkills) {
+        cachedSkills = await discoverSkills();
+    }
+    return cachedSkills;
+}
+
+export function clearSkillsCache(): void {
+    cachedSkills = null;
+}
+
+export interface SkillInvocation {
+    skill: Skill;
+    content: string;
+    args: string[];
+}
 
 export interface SlashCommand {
     name: string;
@@ -672,6 +699,80 @@ export const commands: SlashCommand[] = [
             return { message: chalk.green(`Revoked always-allow for "${tool}".`) };
         },
     },
+    {
+        name: 'reload',
+        aliases: ['r'],
+        description: 'Reload configuration, MCP servers, and skills',
+        execute: async (_, ctx) => {
+            ctx.setLoading('Reloading');
+
+            try {
+                const result = await ctx.nero.reload();
+                clearSkillsCache();
+                ctx.setLoading(null);
+                return {
+                    message:
+                        chalk.green('Reloaded successfully.\n') +
+                        chalk.dim(`MCP tools: ${result.mcpTools}\n`) +
+                        chalk.dim(
+                            `Active skills: ${result.loadedSkills.length > 0 ? result.loadedSkills.join(', ') : 'none'}`,
+                        ),
+                };
+            } catch (error) {
+                ctx.setLoading(null);
+                const err = error as Error;
+                return { error: `Reload failed: ${err.message}` };
+            }
+        },
+    },
+    {
+        name: 'skills',
+        aliases: ['skill'],
+        description: 'List available skills or show skill details',
+        execute: async (args, ctx) => {
+            clearSkillsCache();
+            const skills = await getSkills();
+
+            if (args.length > 0) {
+                const skillName = args[0];
+                const skill = findSkill(skillName, skills);
+
+                if (!skill) {
+                    return { error: `Skill not found: ${skillName}` };
+                }
+
+                let output = `\n${chalk.bold(skill.name)}\n`;
+                if (skill.metadata.description) {
+                    output += chalk.dim(skill.metadata.description) + '\n';
+                }
+                output += chalk.dim(`Path: ${skill.path}\n`);
+                output += chalk.dim(`\nInvoke: /${skill.name}\n`);
+
+                return { message: output };
+            }
+
+            if (skills.length === 0) {
+                const skillsDir = getSkillsDir();
+                let output = chalk.yellow('No skills installed.\n\n');
+                output += chalk.dim('Install skills with:\n');
+                output += chalk.cyan(`  npx skills add <repo> --path ${skillsDir}\n\n`);
+                output += chalk.dim('Or create your own:\n');
+                output += chalk.cyan('  nero skills create my-skill\n');
+                return { message: output };
+            }
+
+            let output = `\n${chalk.bold('Available Skills:')}\n\n`;
+            for (const skill of skills) {
+                output += `  ${chalk.cyan('/' + skill.name)}\n`;
+                if (skill.metadata.description) {
+                    output += `    ${chalk.dim(skill.metadata.description)}\n`;
+                }
+            }
+
+            output += chalk.dim('\nUse /skills <name> for details\n');
+            return { message: output };
+        },
+    },
 ];
 
 async function handleMcpAuth(serverName: string, ctx: CommandContext): Promise<CommandResult> {
@@ -881,6 +982,33 @@ async function handleMcpLogout(serverName: string, ctx: CommandContext): Promise
 export function findCommand(input: string): SlashCommand | null {
     const name = input.toLowerCase();
     return commands.find((cmd) => cmd.name === name || cmd.aliases.includes(name)) || null;
+}
+
+export async function checkForSkillInvocation(input: string): Promise<SkillInvocation | null> {
+    if (!input.startsWith('/')) return null;
+
+    const parts = input.slice(1).split(/\s+/);
+    const cmdName = parts[0].toLowerCase();
+    const args = parts.slice(1);
+
+    if (findCommand(cmdName)) {
+        return null;
+    }
+
+    const skills = await getSkills();
+    const skill = findSkill(cmdName, skills);
+
+    if (!skill) {
+        return null;
+    }
+
+    const content = getSkillContent(skill, args);
+
+    return {
+        skill,
+        content,
+        args,
+    };
 }
 
 export function getCommandSuggestions(partial: string): SlashCommand[] {

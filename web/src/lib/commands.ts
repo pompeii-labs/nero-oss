@@ -4,6 +4,137 @@ import { getMemories } from './actions/memories';
 import { getMcpServers } from './actions/mcp';
 import { getSettings, updateSettings, validateModel } from './actions/settings';
 import { compactContext, streamThink, abortChat, type ToolActivity } from './actions/chat';
+import {
+    getSkills,
+    getLoadedSkills,
+    loadSkillIntoContext,
+    unloadSkillFromContext,
+    type SkillSummary,
+} from './actions/skills';
+
+let cachedSkills: SkillSummary[] | null = null;
+let skillsDir: string | null = null;
+let loadedSkillNames: Set<string> = new Set();
+
+export async function loadSkills(): Promise<SkillSummary[]> {
+    if (cachedSkills) return cachedSkills;
+    const response = await getSkills();
+    if (response.success) {
+        cachedSkills = response.data.skills;
+        skillsDir = response.data.skillsDir;
+        return cachedSkills;
+    }
+    return [];
+}
+
+export async function refreshLoadedSkills(): Promise<Set<string>> {
+    const response = await getLoadedSkills();
+    if (response.success) {
+        loadedSkillNames = new Set(response.data.skills);
+    }
+    return loadedSkillNames;
+}
+
+export function getLoadedSkillsSet(): Set<string> {
+    return loadedSkillNames;
+}
+
+export function clearSkillsCache(): void {
+    cachedSkills = null;
+    skillsDir = null;
+}
+
+export function getCachedSkills(): SkillSummary[] {
+    return cachedSkills || [];
+}
+
+export function getSkillsDir(): string | null {
+    return skillsDir;
+}
+
+export interface SkillSuggestion {
+    type: 'skill';
+    name: string;
+    description: string;
+    loaded: boolean;
+}
+
+export type Suggestion = { type: 'command'; command: SlashCommand } | SkillSuggestion;
+
+export async function getSuggestions(partial: string): Promise<Suggestion[]> {
+    const lower = partial.toLowerCase();
+    const suggestions: Suggestion[] = [];
+
+    const matchingCommands = commands.filter(
+        (cmd) => cmd.name.startsWith(lower) || cmd.aliases.some((a) => a.startsWith(lower)),
+    );
+    for (const cmd of matchingCommands) {
+        suggestions.push({ type: 'command', command: cmd });
+    }
+
+    const skills = await loadSkills();
+    const matchingSkills = skills.filter((s) => s.name.toLowerCase().startsWith(lower));
+
+    for (const skill of matchingSkills) {
+        suggestions.push({
+            type: 'skill',
+            name: skill.name,
+            description: skill.description,
+            loaded: loadedSkillNames.has(skill.name),
+        });
+    }
+
+    return suggestions;
+}
+
+export interface SkillToggleResult {
+    skillName: string;
+    action: 'loaded' | 'unloaded';
+    loadedSkills: string[];
+}
+
+export async function checkAndToggleSkill(input: string): Promise<SkillToggleResult | null> {
+    if (!input.startsWith('/')) return null;
+
+    const parts = input.slice(1).split(/\s+/);
+    const cmdName = parts[0].toLowerCase();
+    const args = parts.slice(1);
+
+    if (findCommand(cmdName)) {
+        return null;
+    }
+
+    const skills = await loadSkills();
+    const skill = skills.find((s) => s.name.toLowerCase() === cmdName);
+
+    if (!skill) return null;
+
+    const isLoaded = loadedSkillNames.has(skill.name);
+
+    if (isLoaded) {
+        const response = await unloadSkillFromContext(skill.name);
+        if (!response.success) return null;
+
+        loadedSkillNames = new Set(response.data.loadedSkills);
+
+        return {
+            skillName: skill.name,
+            action: 'unloaded',
+            loadedSkills: response.data.loadedSkills,
+        };
+    } else {
+        const response = await loadSkillIntoContext(skill.name, args);
+        if (!response.success) return null;
+
+        loadedSkillNames = new Set(response.data.loadedSkills);
+
+        return {
+            skillName: skill.name,
+            action: 'loaded',
+            loadedSkills: response.data.loadedSkills,
+        };
+    }
+}
 
 export interface SlashCommand {
     name: string;
@@ -75,14 +206,18 @@ export const commands: SlashCommand[] = [
     {
         name: 'reload',
         aliases: ['r'],
-        description: 'Reload Nero configuration',
+        description: 'Reload Nero configuration and skills',
         execute: async (_, ctx) => {
             ctx.setLoading('Reloading configuration');
             const response = await reloadConfig();
+            clearSkillsCache();
+            await loadSkills();
+            await refreshLoadedSkills();
             ctx.setLoading(null);
             if (response.success) {
+                const skillCount = response.data.loadedSkills?.length || 0;
                 return {
-                    message: `Config reloaded. ${response.data.mcpTools} MCP tools available.`,
+                    message: `Config reloaded. ${response.data.mcpTools} MCP tools, ${skillCount} skills loaded.`,
                 };
             }
             return { error: 'Failed to reload configuration' };
@@ -509,6 +644,56 @@ export const commands: SlashCommand[] = [
                     data: { activities, thought, urgent },
                 },
             };
+        },
+    },
+    {
+        name: 'skills',
+        aliases: ['skill'],
+        description: 'List available skills',
+        execute: async (args, ctx) => {
+            clearSkillsCache();
+            ctx.setLoading('Loading skills');
+            const skills = await loadSkills();
+            await refreshLoadedSkills();
+            ctx.setLoading(null);
+
+            if (args.length > 0) {
+                const skillName = args[0].toLowerCase();
+                const skill = skills.find((s) => s.name.toLowerCase() === skillName);
+
+                if (!skill) {
+                    return { error: `Skill not found: ${args[0]}` };
+                }
+
+                const isLoaded = loadedSkillNames.has(skill.name);
+                let msg = `${skill.name}${isLoaded ? ' (loaded)' : ''}\n`;
+                if (skill.description) {
+                    msg += `${skill.description}\n`;
+                }
+                msg += `\n${isLoaded ? 'Unload' : 'Load'}: /${skill.name}`;
+
+                return { message: msg };
+            }
+
+            if (skills.length === 0) {
+                const dir = getSkillsDir() || '~/.nero/skills';
+                return {
+                    message: `No skills installed.\n\nInstall with:\n  npx skills add <repo> --path ${dir}\n\nOr create your own:\n  nero skills create my-skill`,
+                };
+            }
+
+            let msg = 'Skills:\n\n';
+            for (const skill of skills) {
+                const isLoaded = loadedSkillNames.has(skill.name);
+                const indicator = isLoaded ? '●' : '○';
+                msg += `  ${indicator} /${skill.name}\n`;
+                if (skill.description) {
+                    msg += `    ${skill.description}\n`;
+                }
+            }
+
+            msg += '\n● = loaded, ○ = available';
+            return { message: msg };
         },
     },
 ];
