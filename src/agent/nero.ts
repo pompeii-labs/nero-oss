@@ -1431,6 +1431,16 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
         }
     }
 
+    @tool({ description: 'Change working directory for subsequent commands' })
+    @toolparam({ key: 'path', type: 'string', required: true, description: 'Directory path' })
+    async cd(call: MagmaToolCall): Promise<string> {
+        const dirPath = this.resolvePath(call.fn_args.path);
+        if (!existsSync(dirPath)) return `Error: ${call.fn_args.path} does not exist`;
+        this.currentCwd = dirPath;
+        const git = existsSync(join(dirPath, '.git'));
+        return `${containerToHost(dirPath)}${git ? ' (git repo)' : ''}`;
+    }
+
     @tool({ description: 'List files in a directory' })
     @toolparam({
         key: 'path',
