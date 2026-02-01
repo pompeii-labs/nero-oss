@@ -2,6 +2,14 @@
 
 All notable changes to Nero are documented here.
 
+## 1.15.0 (2026-02-01)
+
+### Fixes
+- iOS: Tool activities now appear in timeline order instead of fixed section above input
+
+### Changes
+- Nero can now reference background activity when asked what he's been up to
+
 ## 1.14.0 (2026-01-31)
 
 ### New Features
