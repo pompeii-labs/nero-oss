@@ -79,3 +79,27 @@ struct PermissionRequest: Identifiable {
     let id: String
     let activity: ToolActivity
 }
+
+enum TimelineItem: Identifiable {
+    case message(Message)
+    case activity(ToolActivity)
+
+    var id: String {
+        switch self {
+        case .message(let message):
+            return "msg-\(message.id)"
+        case .activity(let activity):
+            return "act-\(activity.id)"
+        }
+    }
+
+    var message: Message? {
+        if case .message(let msg) = self { return msg }
+        return nil
+    }
+
+    var activity: ToolActivity? {
+        if case .activity(let act) = self { return act }
+        return nil
+    }
+}

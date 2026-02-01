@@ -17,11 +17,7 @@ struct ChatView: View {
                 NeroBackgroundView()
 
                 VStack(spacing: 0) {
-                    messagesView
-
-                    if !viewModel.activities.isEmpty {
-                        activitiesSection
-                    }
+                    timelineView
 
                     inputBar
                         .padding(.horizontal, 16)
@@ -84,13 +80,19 @@ struct ChatView: View {
         }
     }
 
-    private var messagesView: some View {
+    private var timelineView: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
-                    ForEach(viewModel.messages) { message in
-                        MessageBubble(message: message)
-                            .id(message.id)
+                    ForEach(viewModel.timeline) { item in
+                        switch item {
+                        case .message(let message):
+                            MessageBubble(message: message)
+                                .id(item.id)
+                        case .activity(let activity):
+                            ToolActivityCard(activity: activity)
+                                .id(item.id)
+                        }
                     }
 
                     if viewModel.isLoading {
@@ -119,7 +121,7 @@ struct ChatView: View {
                     scrollToBottom(proxy: proxy)
                 }
             }
-            .onChange(of: viewModel.messages.count) { _, _ in
+            .onChange(of: viewModel.timeline.count) { _, _ in
                 shouldScroll = true
             }
             .onChange(of: viewModel.isLoading) { _, _ in
@@ -146,16 +148,6 @@ struct ChatView: View {
             }
             shouldScroll = false
         }
-    }
-
-    private var activitiesSection: some View {
-        VStack(spacing: 8) {
-            ForEach(viewModel.activities) { activity in
-                ToolActivityCard(activity: activity)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
     }
 
     private var inputBar: some View {
@@ -257,7 +249,7 @@ struct ChatView: View {
     private func clearConversation() async {
         do {
             try await APIManager.shared.clear()
-            viewModel.messages = []
+            viewModel.timeline = []
             toastManager.success("Conversation cleared")
         } catch {
             toastManager.error("Failed to clear conversation")

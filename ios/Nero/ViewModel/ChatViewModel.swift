@@ -2,20 +2,19 @@ import SwiftUI
 
 @MainActor
 class ChatViewModel: ObservableObject {
-    @Published var messages: [Message] = []
-    @Published var activities: [ToolActivity] = []
+    @Published var timeline: [TimelineItem] = []
     @Published var pendingPermission: PermissionRequest?
     @Published var isLoading = false
     @Published var inputText = ""
 
     private var streamTask: Task<Void, Never>?
-    private var streamingIndex: Int?
+    private var streamingMessageId: String?
 
     func loadHistory() async {
         do {
             let loadedMessages = try await APIManager.shared.getHistory()
             withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                messages = loadedMessages
+                timeline = loadedMessages.map { .message($0) }
             }
         } catch {
             print("Failed to load history: \(error)")
@@ -27,11 +26,10 @@ class ChatViewModel: ObservableObject {
         guard !text.isEmpty else { return }
 
         inputText = ""
-        activities = []
 
         let userMessage = Message(role: .user, content: text)
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            messages.append(userMessage)
+            timeline.append(.message(userMessage))
         }
 
         isLoading = true
@@ -43,14 +41,17 @@ class ChatViewModel: ObservableObject {
 
                     switch event {
                     case .chunk(let chunk):
-                        if let idx = streamingIndex {
-                            messages[idx].content += chunk
+                        if let msgId = streamingMessageId,
+                           let idx = timeline.firstIndex(where: { $0.id == "msg-\(msgId)" }),
+                           case .message(var msg) = timeline[idx] {
+                            msg.content += chunk
+                            timeline[idx] = .message(msg)
                         } else {
                             let assistantMessage = Message(role: .assistant, content: chunk)
+                            streamingMessageId = assistantMessage.id
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                messages.append(assistantMessage)
+                                timeline.append(.message(assistantMessage))
                             }
-                            streamingIndex = messages.count - 1
                         }
 
                     case .activity(let activity):
@@ -61,34 +62,43 @@ class ChatViewModel: ObservableObject {
                         updateActivity(activity)
 
                     case .done(let content):
-                        if let idx = streamingIndex {
-                            messages[idx].content = content
+                        if let msgId = streamingMessageId,
+                           let idx = timeline.firstIndex(where: { $0.id == "msg-\(msgId)" }),
+                           case .message(var msg) = timeline[idx] {
+                            msg.content = content
+                            timeline[idx] = .message(msg)
                         } else if !content.isEmpty {
                             let assistantMessage = Message(role: .assistant, content: content)
-                            messages.append(assistantMessage)
+                            timeline.append(.message(assistantMessage))
                         }
 
                     case .error(let errorMsg):
-                        if let idx = streamingIndex {
-                            messages[idx].content = "Error: \(errorMsg)"
+                        if let msgId = streamingMessageId,
+                           let idx = timeline.firstIndex(where: { $0.id == "msg-\(msgId)" }),
+                           case .message(var msg) = timeline[idx] {
+                            msg.content = "Error: \(errorMsg)"
+                            timeline[idx] = .message(msg)
                         } else {
                             let assistantMessage = Message(role: .assistant, content: "Error: \(errorMsg)")
-                            messages.append(assistantMessage)
+                            timeline.append(.message(assistantMessage))
                         }
                     }
                 }
             } catch {
                 if !Task.isCancelled {
-                    if let idx = streamingIndex {
-                        messages[idx].content = "Error: \(error.localizedDescription)"
+                    if let msgId = streamingMessageId,
+                       let idx = timeline.firstIndex(where: { $0.id == "msg-\(msgId)" }),
+                       case .message(var msg) = timeline[idx] {
+                        msg.content = "Error: \(error.localizedDescription)"
+                        timeline[idx] = .message(msg)
                     } else {
                         let assistantMessage = Message(role: .assistant, content: "Error: \(error.localizedDescription)")
-                        messages.append(assistantMessage)
+                        timeline.append(.message(assistantMessage))
                     }
                 }
             }
 
-            streamingIndex = nil
+            streamingMessageId = nil
             isLoading = false
         }
     }
@@ -99,8 +109,10 @@ class ChatViewModel: ObservableObject {
         do {
             try await APIManager.shared.respondToPermission(id: permission.id, approved: approved)
 
-            if let index = activities.firstIndex(where: { $0.id == permission.activity.id }) {
-                activities[index].status = approved ? .approved : .denied
+            if let index = timeline.firstIndex(where: { $0.id == "act-\(permission.activity.id)" }),
+               case .activity(var activity) = timeline[index] {
+                activity.status = approved ? .approved : .denied
+                timeline[index] = .activity(activity)
             }
         } catch {
             print("Failed to respond to permission: \(error)")
@@ -119,19 +131,15 @@ class ChatViewModel: ObservableObject {
             print("Failed to abort: \(error)")
         }
 
-        streamingIndex = nil
+        streamingMessageId = nil
         isLoading = false
     }
 
     private func updateActivity(_ activity: ToolActivity) {
-        if let index = activities.firstIndex(where: { $0.id == activity.id }) {
-            activities[index] = activity
+        if let index = timeline.firstIndex(where: { $0.id == "act-\(activity.id)" }) {
+            timeline[index] = .activity(activity)
         } else {
-            activities.append(activity)
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-            self?.activities.removeAll { $0.id == activity.id && $0.status == .complete }
+            timeline.append(.activity(activity))
         }
     }
 }
