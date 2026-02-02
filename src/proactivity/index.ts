@@ -21,6 +21,10 @@ export class ProactivityManager {
 
     setAgent(agent: Nero): void {
         this.agent = agent;
+        if (this.config.proactivity.enabled) {
+            console.log(chalk.dim('[proactivity] Starting idle timer on service start'));
+            this.resetIdleTimer();
+        }
     }
 
     onUserActivity(): void {
