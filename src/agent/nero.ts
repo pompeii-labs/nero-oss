@@ -1444,8 +1444,8 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
             tool: 'update',
             args: {
                 path,
-                old_string: old_string.slice(0, 100) + (old_string.length > 100 ? '...' : ''),
-                new_string: new_string.slice(0, 100) + (new_string.length > 100 ? '...' : ''),
+                oldContent,
+                newContent,
                 linesAdded: diff.linesAdded,
                 linesRemoved: diff.linesRemoved,
             },
