@@ -47,6 +47,12 @@ export class VoiceWebSocketManager {
 
             console.log(chalk.dim(`[voice] WebSocket upgrade: ${pathname}`));
 
+            const isLocal = (() => {
+                const ip = request.socket.remoteAddress || '';
+                const normalized = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+                return normalized === '127.0.0.1' || normalized === '::1';
+            })();
+
             if (pathname.startsWith('/webhook/voice/stream/token=')) {
                 const tokenMatch = pathname.match(/\/token=([^/]+)/);
                 const token = tokenMatch ? tokenMatch[1] : null;
@@ -66,6 +72,16 @@ export class VoiceWebSocketManager {
                     this.twilioWss.emit('connection', ws, request);
                 });
             } else if (pathname === '/webhook/voice/stream') {
+                if (this.config.licenseKey && !isLocal) {
+                    const headerKey = request.headers['x-license-key'] as string;
+                    if (!headerKey || !verifyWsToken(headerKey, this.config.licenseKey)) {
+                        console.log(chalk.red(`[voice] Web voice auth failed`));
+                        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+                        socket.destroy();
+                        return;
+                    }
+                }
+
                 console.log(chalk.green(`[voice] Web voice connection accepted`));
                 this.webWss.handleUpgrade(request, socket, head, (ws) => {
                     this.webWss.emit('connection', ws, request);
@@ -186,6 +202,13 @@ export class VoiceWebSocketManager {
                     case 'start':
                         streamSid = parsed.start?.streamSid;
                         console.log(chalk.dim(`[twilio] Stream started: ${streamSid}`));
+
+                        this.agent.setMedium('voice');
+                        this.agent
+                            .chat('<start />', (chunk) => flow?.inputText(chunk))
+                            .then(() => {
+                                flow?.inputText(null as unknown as string);
+                            });
                         break;
                     case 'media':
                         flow?.inputAudio(Buffer.from(parsed.media.payload, 'base64'));
@@ -195,8 +218,6 @@ export class VoiceWebSocketManager {
                         break;
                     case 'connected':
                         if (!flow) setupFlow();
-                        flow?.inputText("Hey, this is Nero. What's on your mind?");
-                        flow?.inputText(null as unknown as string);
                         break;
                 }
             } catch (err) {
@@ -310,8 +331,12 @@ export class VoiceWebSocketManager {
                     case 'medium':
                         if (!flow) {
                             setupFlow();
-                            flow?.inputText("Hey, this is Nero. What's on your mind?");
-                            flow?.inputText(null as unknown as string);
+                            this.agent.setMedium('voice');
+                            this.agent
+                                .chat('<start />', (chunk) => flow?.inputText(chunk))
+                                .then(() => {
+                                    flow?.inputText(null as unknown as string);
+                                });
                         }
                         console.log(chalk.dim(`[web-voice] Flow initialized`));
                         break;

@@ -33,6 +33,7 @@ export interface NeroSettings {
     historyLimit: number;
     sessions: SessionSettings;
     timezone?: string;
+    onlineMode?: boolean;
 }
 
 export interface ProactivityConfig {
@@ -47,6 +48,8 @@ export interface NeroConfig {
     licenseKey: string | null;
     tunnelUrl?: string;
     port?: number;
+    relayPort?: number;
+    bindHost?: string;
     voice: {
         enabled: boolean;
         elevenlabsVoiceId?: string;
@@ -74,6 +77,7 @@ const defaultSettings: NeroSettings = {
     verbose: false,
     historyLimit: 20,
     sessions: defaultSessionSettings,
+    onlineMode: false,
 };
 
 const defaultProactivity: ProactivityConfig = {
@@ -86,6 +90,8 @@ const defaultProactivity: ProactivityConfig = {
 const defaultConfig: NeroConfig = {
     mcpServers: {},
     licenseKey: null,
+    relayPort: 4849,
+    bindHost: '0.0.0.0',
     voice: {
         enabled: true,
         elevenlabsVoiceId: 'cjVigY5qzO86Huf0OWal',

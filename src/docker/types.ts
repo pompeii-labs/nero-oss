@@ -3,6 +3,7 @@ export type NeroMode = 'integrated' | 'contained';
 export interface DockerConfig {
     name: string;
     port: string;
+    relayPort?: string;
     mode: NeroMode;
     image: string;
 }

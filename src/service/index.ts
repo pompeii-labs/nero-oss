@@ -19,6 +19,7 @@ import { handleSlack } from '../slack/handler.js';
 import { handleIncomingCall } from '../voice/twilio.js';
 import { VoiceWebSocketManager } from '../voice/websocket.js';
 import { createAuthMiddleware } from './middleware/auth.js';
+import { RelayServer } from '../relay/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -30,12 +31,13 @@ export class NeroService {
     private config: NeroConfig;
     private wsManager: VoiceWebSocketManager | null = null;
     private licensePollInterval: NodeJS.Timeout | null = null;
+    private relay: RelayServer | null = null;
     private readonly port: number;
     private readonly host: string;
 
     constructor(port: number, config: NeroConfig) {
         this.port = port;
-        this.host = '0.0.0.0';
+        this.host = config.settings.onlineMode ? '127.0.0.1' : config.bindHost || '0.0.0.0';
         this.config = config;
 
         this.app = express();
@@ -52,6 +54,7 @@ export class NeroService {
         const corsOptions = this.config.licenseKey ? { origin: backendUrl } : { origin: true };
 
         this.app.use(cors(corsOptions));
+        this.app.set('trust proxy', false);
         this.app.use(express.json());
         this.app.use(express.urlencoded({ extended: true }));
 
@@ -156,13 +159,9 @@ export class NeroService {
     private webDistPath: string | null = null;
 
     private isLocalRequest(req: Request): boolean {
-        const host = req.hostname || req.headers.host || '';
-        return (
-            host === 'localhost' ||
-            host.startsWith('localhost:') ||
-            host === '127.0.0.1' ||
-            host.startsWith('127.0.0.1:')
-        );
+        const ip = req.socket.remoteAddress || req.ip || '';
+        const normalized = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+        return normalized === '127.0.0.1' || normalized === '::1';
     }
 
     private setupStaticServing(): void {
@@ -218,6 +217,11 @@ export class NeroService {
                 await this.wsManager.shutdown();
             }
 
+            if (this.relay) {
+                await this.relay.stop();
+                this.relay = null;
+            }
+
             await this.agent.cleanup();
 
             this.httpServer.close(() => {
@@ -237,6 +241,18 @@ export class NeroService {
 
     async start(): Promise<void> {
         await this.agent.setup();
+
+        if (this.config.settings.onlineMode) {
+            const relayPort = this.config.relayPort || 4849;
+            this.relay = new RelayServer({
+                listenHost: this.config.bindHost || '0.0.0.0',
+                listenPort: relayPort,
+                targetHost: '127.0.0.1',
+                targetPort: this.port,
+                licenseKey: this.config.licenseKey || undefined,
+            });
+            await this.relay.start();
+        }
 
         this.httpServer.listen(this.port, this.host, () => {
             this.logger.success(`Nero v${VERSION} running on http://${this.host}:${this.port}`);

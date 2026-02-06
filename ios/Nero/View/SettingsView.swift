@@ -95,7 +95,7 @@ struct SettingsView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "globe")
                                 .font(.caption2)
-                            Text("Tunnel")
+                            Text("Remote")
                                 .font(.caption)
                         }
                         .foregroundColor(.neroBlue)

@@ -3,6 +3,14 @@ import chalk from 'chalk';
 import { NeroConfig } from '../config.js';
 import { createWsToken } from '../util/wstoken.js';
 
+function escapeXml(str: string): string {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 export async function handleIncomingCall(
     req: Request,
     res: Response,
@@ -22,12 +30,14 @@ export async function handleIncomingCall(
         wsUrl += `/token=${token}`;
     }
 
+    const safeFrom = escapeXml(From || '');
+
     res.setHeader('Content-Type', 'application/xml');
     res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Connect>
         <Stream url="${wsUrl}">
-            <Parameter name="phone" value="${From}" />
+            <Parameter name="phone" value="${safeFrom}" />
         </Stream>
     </Connect>
 </Response>`);

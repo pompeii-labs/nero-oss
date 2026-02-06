@@ -143,6 +143,37 @@ nero mcp list
 nero mcp remove filesystem
 ```
 
+## Remote Access (Relay)
+
+Nero supports **remote access** without exposing the core service to the public internet. A lightweight **relay** is tunneled instead, and the relay proxies only the allowed endpoints back to your local Nero instance.
+
+### How It Works
+- The tunnel points to the **relay** (default port `4849`)
+- The relay forwards requests to your local Nero (`127.0.0.1:4848`)
+- This keeps the main API private while still enabling remote use (Slack/SMS/Voice/iOS)
+
+### Enable Relay Mode
+
+```bash
+nero relay start
+nero license register   # one-time
+```
+
+This will:
+- Enable online mode
+- Start the tunnel to the relay
+- Auto-register the tunnel URL in the backend
+
+### Relay Commands
+
+```bash
+nero relay start     # Start relay + tunnel (always detached)
+nero relay status    # Show relay/tunnel status
+nero relay stop      # Stop relay/tunnel
+```
+
+> `nero tunnel` still works but is deprecated. Use `nero relay`.
+
 ## User Instructions (NERO.md)
 
 Create `~/.nero/NERO.md` to customize Nero's behavior with persistent instructions:

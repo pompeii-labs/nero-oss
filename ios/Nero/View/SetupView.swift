@@ -13,7 +13,7 @@ struct SetupView: View {
 
     enum ConnectionMode: String, CaseIterable {
         case local = "Local"
-        case tunnel = "Tunnel"
+        case tunnel = "Remote"
     }
 
     var body: some View {
@@ -281,8 +281,8 @@ struct SetupView: View {
 
                 helpItem(
                     icon: "globe",
-                    title: "Tunnel",
-                    description: "Connect from anywhere with your license key. Requires Nero to be running with tunnel enabled."
+                    title: "Remote",
+                    description: "Connect from anywhere with your license key. Requires Nero to be running with relay enabled."
                 )
             }
         }
@@ -362,7 +362,7 @@ struct SetupView: View {
 
                 guard let tunnelUrl = verifyResponse.tunnel_url, !tunnelUrl.isEmpty else {
                     await MainActor.run {
-                        errorMessage = "No tunnel available. Make sure Nero is running with a license key configured."
+                        errorMessage = "No relay available. Make sure Nero is running with a license key configured."
                     }
                     return
                 }
@@ -376,11 +376,11 @@ struct SetupView: View {
                 let connected = await neroManager.checkConnection()
                 if !connected {
                     await MainActor.run {
-                        errorMessage = "Could not connect via tunnel. Ensure Nero is running."
+                        errorMessage = "Could not connect remotely. Ensure Nero is running."
                     }
                 } else {
                     await MainActor.run {
-                        toastManager.success("Connected via tunnel")
+                        toastManager.success("Connected remotely")
                     }
                 }
             }
