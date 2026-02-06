@@ -1,7 +1,4 @@
 import { describe, test, expect, beforeAll } from 'bun:test';
-import { config } from 'dotenv';
-
-config();
 
 function normalizeUrl(url: string | undefined): string | undefined {
     if (!url) return undefined;
@@ -12,7 +9,8 @@ function normalizeUrl(url: string | undefined): string | undefined {
     return url.replace(/\/$/, '');
 }
 
-const TUNNEL_URL = normalizeUrl(process.env.NERO_TUNNEL_URL);
+const RUN_TUNNEL_TESTS = process.env.RUN_TUNNEL_TESTS === '1';
+const TUNNEL_URL = RUN_TUNNEL_TESTS ? normalizeUrl(process.env.NERO_TUNNEL_URL) : undefined;
 const LICENSE_KEY = process.env.NERO_LICENSE_KEY || 'test-license-key-12345';
 
 describe('Tunnel Authentication Integration Tests', () => {

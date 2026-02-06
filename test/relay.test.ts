@@ -1,12 +1,11 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import http from 'http';
+import type { AddressInfo } from 'net';
 import { WebSocket, WebSocketServer } from 'ws';
 import { RelayServer } from '../src/relay/index.js';
 import { createWsToken } from '../src/util/wstoken.js';
 
 const LICENSE_KEY = 'test-license-key-12345';
-const PORT_CANDIDATES = [18488, 19488, 20488, 21488, 22488];
-const RELAY_PORT_CANDIDATES = [18489, 19489, 20489, 21489, 22489];
 
 type Servers = {
     upstream: http.Server;
@@ -16,40 +15,6 @@ type Servers = {
     relayPort: number;
     upstreamSockets: Set<import('net').Socket>;
 };
-
-async function listenOnFixedPort(server: http.Server, host: string, port: number): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-        const onError = (err: any) => {
-            server.off('listening', onListening);
-            reject(err);
-        };
-        const onListening = () => {
-            server.off('error', onError);
-            resolve();
-        };
-        server.once('error', onError);
-        server.once('listening', onListening);
-        server.listen(port, host);
-    });
-}
-
-async function bindToFirstFreePort(
-    server: http.Server,
-    host: string,
-    ports: number[],
-): Promise<number> {
-    let lastErr: unknown = null;
-    for (const port of ports) {
-        try {
-            await listenOnFixedPort(server, host, port);
-            return port;
-        } catch (err) {
-            lastErr = err;
-            continue;
-        }
-    }
-    throw lastErr ?? new Error('No available ports');
-}
 
 function waitForWs(url: string, headers?: Record<string, string>): Promise<boolean> {
     return new Promise((resolve) => {
@@ -134,20 +99,22 @@ async function startServers(): Promise<Servers> {
         });
     });
 
-    const upstreamPort = await bindToFirstFreePort(upstream, '127.0.0.1', PORT_CANDIDATES);
-
-    const relayServer = http.createServer();
-    const relayPort = await bindToFirstFreePort(relayServer, '127.0.0.1', RELAY_PORT_CANDIDATES);
-    relayServer.close();
+    const upstreamPort = await new Promise<number>((resolve, reject) => {
+        upstream.once('error', reject);
+        upstream.listen(0, '127.0.0.1', () => {
+            resolve((upstream.address() as AddressInfo).port);
+        });
+    });
 
     const relay = new RelayServer({
         listenHost: '127.0.0.1',
-        listenPort: relayPort,
+        listenPort: 0,
         targetHost: '127.0.0.1',
         targetPort: upstreamPort,
         licenseKey: LICENSE_KEY,
     });
     await relay.start();
+    const relayPort = relay.port;
 
     return { upstream, upstreamWss, relay, upstreamPort, relayPort, upstreamSockets };
 }

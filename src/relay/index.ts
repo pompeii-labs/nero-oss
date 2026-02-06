@@ -36,6 +36,12 @@ export class RelayServer {
     private rateLimitCleanup: NodeJS.Timeout | null = null;
     private stopped = false;
 
+    get port(): number {
+        const addr = this.server.address();
+        if (addr && typeof addr === 'object') return addr.port;
+        return this.config.listenPort;
+    }
+
     constructor(config: RelayConfig) {
         this.config = config;
         this.server = http.createServer(this.handleHttp.bind(this));
@@ -95,7 +101,7 @@ export class RelayServer {
         return new Promise((resolve) => {
             this.server.listen(this.config.listenPort, this.config.listenHost, () => {
                 this.logger.info(
-                    `[Relay] Listening on http://${this.config.listenHost}:${this.config.listenPort}`,
+                    `[Relay] Listening on http://${this.config.listenHost}:${this.port}`,
                 );
                 resolve();
             });

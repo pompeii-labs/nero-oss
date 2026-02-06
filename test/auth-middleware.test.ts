@@ -1,17 +1,20 @@
 import { describe, test, expect, mock, beforeEach } from 'bun:test';
 import { createAuthMiddleware } from '../src/service/middleware/auth';
 
+interface MockRequest {
+    hostname: string;
+    headers: Record<string, string>;
+    socket: { remoteAddress?: string };
+    ip?: string;
+}
+
 function createMockReq(overrides: Partial<MockRequest> = {}): MockRequest {
     return {
         hostname: 'tunnel.example.com',
         headers: {},
+        socket: { remoteAddress: '203.0.113.1' },
         ...overrides,
     };
-}
-
-interface MockRequest {
-    hostname: string;
-    headers: Record<string, string>;
 }
 
 interface MockResponse {
@@ -69,38 +72,12 @@ describe('Auth Middleware', () => {
     describe('License Key Configured', () => {
         const LICENSE_KEY = 'valid-license-key-12345';
 
-        test('allows local requests without key (localhost)', () => {
-            const middleware = createAuthMiddleware(LICENSE_KEY);
-            const req = createMockReq({ hostname: 'localhost', headers: {} });
-            const res = createMockRes();
-            let nextCalled = false;
-
-            middleware(req as never, res as never, () => {
-                nextCalled = true;
-            });
-
-            expect(nextCalled).toBe(true);
-        });
-
-        test('allows local requests without key (localhost with port)', () => {
-            const middleware = createAuthMiddleware(LICENSE_KEY);
-            const req = createMockReq({
-                hostname: 'localhost',
-                headers: { host: 'localhost:4848' },
-            });
-            const res = createMockRes();
-            let nextCalled = false;
-
-            middleware(req as never, res as never, () => {
-                nextCalled = true;
-            });
-
-            expect(nextCalled).toBe(true);
-        });
-
         test('allows local requests without key (127.0.0.1)', () => {
             const middleware = createAuthMiddleware(LICENSE_KEY);
-            const req = createMockReq({ hostname: '127.0.0.1', headers: {} });
+            const req = createMockReq({
+                socket: { remoteAddress: '127.0.0.1' },
+                headers: {},
+            });
             const res = createMockRes();
             let nextCalled = false;
 
@@ -111,11 +88,27 @@ describe('Auth Middleware', () => {
             expect(nextCalled).toBe(true);
         });
 
-        test('allows same-origin requests without key', () => {
+        test('allows local requests without key (::1)', () => {
             const middleware = createAuthMiddleware(LICENSE_KEY);
             const req = createMockReq({
-                hostname: 'tunnel.example.com',
-                headers: { 'sec-fetch-site': 'same-origin' },
+                socket: { remoteAddress: '::1' },
+                headers: {},
+            });
+            const res = createMockRes();
+            let nextCalled = false;
+
+            middleware(req as never, res as never, () => {
+                nextCalled = true;
+            });
+
+            expect(nextCalled).toBe(true);
+        });
+
+        test('allows local requests without key (::ffff:127.0.0.1)', () => {
+            const middleware = createAuthMiddleware(LICENSE_KEY);
+            const req = createMockReq({
+                socket: { remoteAddress: '::ffff:127.0.0.1' },
+                headers: {},
             });
             const res = createMockRes();
             let nextCalled = false;
@@ -130,7 +123,7 @@ describe('Auth Middleware', () => {
         test('rejects remote requests without key (401)', () => {
             const middleware = createAuthMiddleware(LICENSE_KEY);
             const req = createMockReq({
-                hostname: 'tunnel.example.com',
+                socket: { remoteAddress: '203.0.113.1' },
                 headers: {},
             });
             const res = createMockRes();
@@ -148,7 +141,6 @@ describe('Auth Middleware', () => {
         test('rejects requests with invalid key (403)', () => {
             const middleware = createAuthMiddleware(LICENSE_KEY);
             const req = createMockReq({
-                hostname: 'tunnel.example.com',
                 headers: { 'x-license-key': 'wrong-key' },
             });
             const res = createMockRes();
@@ -166,7 +158,6 @@ describe('Auth Middleware', () => {
         test('allows requests with valid key', () => {
             const middleware = createAuthMiddleware(LICENSE_KEY);
             const req = createMockReq({
-                hostname: 'tunnel.example.com',
                 headers: { 'x-license-key': LICENSE_KEY },
             });
             const res = createMockRes();
@@ -182,7 +173,6 @@ describe('Auth Middleware', () => {
         test('key comparison is case-sensitive', () => {
             const middleware = createAuthMiddleware(LICENSE_KEY);
             const req = createMockReq({
-                hostname: 'tunnel.example.com',
                 headers: { 'x-license-key': LICENSE_KEY.toUpperCase() },
             });
             const res = createMockRes();
@@ -203,7 +193,7 @@ describe('Auth Middleware', () => {
         test('does not allow localhost spoofing via X-Forwarded-Host', () => {
             const middleware = createAuthMiddleware(LICENSE_KEY);
             const req = createMockReq({
-                hostname: 'tunnel.example.com',
+                socket: { remoteAddress: '203.0.113.1' },
                 headers: {
                     'x-forwarded-host': 'localhost',
                 },
@@ -219,10 +209,10 @@ describe('Auth Middleware', () => {
             expect(res.statusCode).toBe(401);
         });
 
-        test('uses req.hostname not req.headers.host for local check', () => {
+        test('does not allow localhost spoofing via Host header', () => {
             const middleware = createAuthMiddleware(LICENSE_KEY);
             const req = createMockReq({
-                hostname: 'tunnel.example.com',
+                socket: { remoteAddress: '203.0.113.1' },
                 headers: {
                     host: 'localhost:4848',
                 },
@@ -238,12 +228,12 @@ describe('Auth Middleware', () => {
             expect(res.statusCode).toBe(401);
         });
 
-        test('rejects cross-origin requests', () => {
+        test('rejects remote requests regardless of sec-fetch-site', () => {
             const middleware = createAuthMiddleware(LICENSE_KEY);
             const req = createMockReq({
-                hostname: 'tunnel.example.com',
+                socket: { remoteAddress: '203.0.113.1' },
                 headers: {
-                    'sec-fetch-site': 'cross-site',
+                    'sec-fetch-site': 'same-origin',
                 },
             });
             const res = createMockRes();
@@ -261,10 +251,11 @@ describe('Auth Middleware', () => {
     describe('Edge Cases', () => {
         const LICENSE_KEY = 'test-key';
 
-        test('handles empty hostname gracefully', () => {
+        test('handles missing remoteAddress gracefully', () => {
             const middleware = createAuthMiddleware(LICENSE_KEY);
             const req = createMockReq({
-                hostname: '',
+                socket: { remoteAddress: undefined },
+                ip: '',
                 headers: {},
             });
             const res = createMockRes();
@@ -278,12 +269,13 @@ describe('Auth Middleware', () => {
             expect(res.statusCode).toBe(401);
         });
 
-        test('handles undefined hostname with host header fallback', () => {
+        test('falls back to req.ip when remoteAddress is empty', () => {
             const middleware = createAuthMiddleware(LICENSE_KEY);
-            const req: Partial<MockRequest> = {
-                hostname: undefined as unknown as string,
-                headers: { host: 'external.com' },
-            };
+            const req = createMockReq({
+                socket: { remoteAddress: '' },
+                ip: '127.0.0.1',
+                headers: {},
+            });
             const res = createMockRes();
             let nextCalled = false;
 
@@ -291,13 +283,12 @@ describe('Auth Middleware', () => {
                 nextCalled = true;
             });
 
-            expect(nextCalled).toBe(false);
+            expect(nextCalled).toBe(true);
         });
 
         test('handles whitespace in license key', () => {
             const middleware = createAuthMiddleware(LICENSE_KEY);
             const req = createMockReq({
-                hostname: 'tunnel.example.com',
                 headers: { 'x-license-key': ' test-key ' },
             });
             const res = createMockRes();
@@ -314,7 +305,6 @@ describe('Auth Middleware', () => {
         test('handles empty string as license key header', () => {
             const middleware = createAuthMiddleware(LICENSE_KEY);
             const req = createMockReq({
-                hostname: 'tunnel.example.com',
                 headers: { 'x-license-key': '' },
             });
             const res = createMockRes();
