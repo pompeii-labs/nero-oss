@@ -21,10 +21,10 @@
     let copied = $state(false);
 
     const mediumConfig = {
-        voice: { icon: Phone, label: 'Voice', color: 'text-green-600 dark:text-green-400' },
-        sms: { icon: MessageSquare, label: 'SMS', color: 'text-blue-600 dark:text-blue-400' },
-        cli: { icon: Terminal, label: 'CLI', color: 'text-amber-600 dark:text-amber-400' },
-        slack: { icon: Hash, label: 'Slack', color: 'text-purple-600 dark:text-purple-400' },
+        voice: { icon: Phone, label: 'Voice', color: 'text-green-600 dark:text-green-400', userColor: 'text-white/70 dark:text-green-400' },
+        sms: { icon: MessageSquare, label: 'SMS', color: 'text-blue-600 dark:text-blue-400', userColor: 'text-white/70 dark:text-blue-400' },
+        cli: { icon: Terminal, label: 'CLI', color: 'text-amber-600 dark:text-amber-400', userColor: 'text-white/70 dark:text-amber-400' },
+        slack: { icon: Hash, label: 'Slack', color: 'text-purple-600 dark:text-purple-400', userColor: 'text-white/70 dark:text-purple-400' },
         api: null
     };
 
@@ -74,7 +74,7 @@
             <div class="relative glass-panel-user rounded-2xl rounded-br-md px-4 py-3">
                 {#if showMedium}
                     {@const config = mediumConfig[medium!]!}
-                    <div class="flex items-center gap-1.5 mb-1.5 text-xs {config.color} opacity-80">
+                    <div class="flex items-center gap-1.5 mb-1.5 text-xs {config.userColor}">
                         <svelte:component this={config.icon} class="h-3 w-3" />
                         <span>via {config.label}</span>
                     </div>
