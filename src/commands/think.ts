@@ -43,6 +43,9 @@ export function registerThinkCommands(program: Command) {
             console.log(
                 `  Destructive actions: ${destructive ? chalk.yellow('allowed') : chalk.green('blocked')}`,
             );
+            console.log(
+                `  Interval: ${chalk.cyan(`${config.proactivity?.intervalMinutes ?? 10} minutes`)}`,
+            );
             console.log(`  Protected branches: ${chalk.cyan(protectedBranches.join(', '))}`);
             console.log();
         });
@@ -74,6 +77,25 @@ export function registerThinkCommands(program: Command) {
                 destructive
                     ? chalk.yellow('Destructive actions allowed during background thinking.')
                     : chalk.green('Destructive actions blocked during background thinking.'),
+            );
+        });
+
+    think
+        .command('interval <minutes>')
+        .description('Set the background thinking interval in minutes')
+        .action(async (minutes) => {
+            const value = parseInt(minutes, 10);
+            if (isNaN(value) || value < 1) {
+                console.log(chalk.red('Interval must be a number >= 1.'));
+                return;
+            }
+            const config = await loadConfig();
+            config.proactivity = { ...config.proactivity, intervalMinutes: value };
+            await saveConfig(config);
+            console.log(
+                chalk.green(
+                    `Background thinking interval set to ${value} minute${value === 1 ? '' : 's'}.`,
+                ),
             );
         });
 

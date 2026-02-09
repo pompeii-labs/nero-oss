@@ -42,19 +42,24 @@ export class McpClient {
             return;
         }
 
-        for (const name of serverNames) {
-            const config = this.serverConfigs[name];
-            if (config.disabled) {
-                console.log(chalk.dim(`[mcp] Skipping disabled server: ${name}`));
-                continue;
-            }
-            try {
-                await this.connectServer(name, config);
-            } catch (error) {
-                const err = error as Error;
-                console.error(chalk.yellow(`[mcp] Failed to connect to ${name}: ${err.message}`));
-            }
-        }
+        const connectPromises = serverNames
+            .filter((name) => {
+                if (this.serverConfigs[name].disabled) {
+                    console.log(chalk.dim(`[mcp] Skipping disabled server: ${name}`));
+                    return false;
+                }
+                return true;
+            })
+            .map((name) =>
+                this.connectServer(name, this.serverConfigs[name]).catch((error) => {
+                    const err = error as Error;
+                    console.error(
+                        chalk.yellow(`[mcp] Failed to connect to ${name}: ${err.message}`),
+                    );
+                }),
+            );
+
+        await Promise.allSettled(connectPromises);
     }
 
     private async connectServer(name: string, config: McpServerConfig): Promise<void> {

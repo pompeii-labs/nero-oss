@@ -5,7 +5,6 @@ import type { NeroConfig } from '../config.js';
 import type { Nero } from '../agent/nero.js';
 
 const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
-const BACKGROUND_INTERVAL_MS = 10 * 60 * 1000;
 const RETENTION_DAYS = 7;
 
 export class ProactivityManager {
@@ -48,9 +47,10 @@ export class ProactivityManager {
         console.log(chalk.dim('[proactivity] User idle, starting background loop'));
 
         this.runBackgroundThinking();
+        const intervalMs = this.config.proactivity.intervalMinutes * 60 * 1000;
         this.backgroundInterval = setInterval(() => {
             this.runBackgroundThinking();
-        }, BACKGROUND_INTERVAL_MS);
+        }, intervalMs);
     }
 
     private stopBackgroundLoop(): void {

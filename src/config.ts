@@ -41,6 +41,7 @@ export interface ProactivityConfig {
     notify: boolean;
     destructive: boolean;
     protectedBranches: string[];
+    intervalMinutes: number;
 }
 
 export interface NeroConfig {
@@ -85,6 +86,7 @@ const defaultProactivity: ProactivityConfig = {
     notify: false,
     destructive: false,
     protectedBranches: ['main', 'master'],
+    intervalMinutes: 10,
 };
 
 const defaultConfig: NeroConfig = {
