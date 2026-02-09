@@ -191,62 +191,34 @@ describe('Relay Integration Tests', () => {
         expect(response.status).toBe(200);
     });
 
-    test('GET /api is proxied', async () => {
-        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api`, {
-            headers: { 'x-license-key': LICENSE_KEY },
-        });
+    test('GET /api is proxied without auth', async () => {
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api`);
         expect(response.status).toBe(200);
     });
 
-    test('POST /api/chat without key is rejected', async () => {
+    test('GET / (dashboard) is proxied without auth', async () => {
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/`);
+        expect([200, 404]).toContain(response.status);
+    });
+
+    test('GET /health is proxied without auth', async () => {
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/health`);
+        expect(response.status).toBe(200);
+    });
+
+    test('POST /api/chat from local IP bypasses auth', async () => {
         const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: 'ping' }),
         });
-        expect(response.status).toBe(401);
-    });
-
-    test('POST /api/chat with key succeeds', async () => {
-        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api/chat`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-license-key': LICENSE_KEY,
-            },
-            body: JSON.stringify({ message: 'ping' }),
-        });
         expect(response.status).toBe(200);
     });
 
-    test('POST /webhook/sms without key is rejected', async () => {
+    test('POST /webhook/sms from local IP bypasses auth', async () => {
         const response = await fetch(`http://127.0.0.1:${servers.relayPort}/webhook/sms`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'Body=test&From=+1234567890',
-        });
-        expect(response.status).toBe(401);
-    });
-
-    test('POST /webhook/sms with wrong key is rejected', async () => {
-        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/webhook/sms`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'x-license-key': 'wrong-key',
-            },
-            body: 'Body=test&From=+1234567890',
-        });
-        expect(response.status).toBe(403);
-    });
-
-    test('POST /webhook/sms with key is proxied', async () => {
-        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/webhook/sms`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'x-license-key': LICENSE_KEY,
-            },
             body: 'Body=test&From=+1234567890',
         });
         const text = await response.text();
@@ -254,15 +226,9 @@ describe('Relay Integration Tests', () => {
         expect(text.startsWith('ok:')).toBe(true);
     });
 
-    test('WebSocket without token or header is rejected', async () => {
+    test('WebSocket from local IP bypasses auth', async () => {
         const wsUrl = `ws://127.0.0.1:${servers.relayPort}/webhook/voice/stream`;
         const connected = await waitForWs(wsUrl);
-        expect(connected).toBe(false);
-    });
-
-    test('WebSocket with header key is accepted', async () => {
-        const wsUrl = `ws://127.0.0.1:${servers.relayPort}/webhook/voice/stream`;
-        const connected = await waitForWs(wsUrl, { 'x-license-key': LICENSE_KEY });
         expect(connected).toBe(true);
     });
 
@@ -273,18 +239,9 @@ describe('Relay Integration Tests', () => {
         expect(connected).toBe(true);
     });
 
-    test('GET /api/admin is blocked by relay', async () => {
-        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api/admin/reload`, {
-            headers: { 'x-license-key': LICENSE_KEY },
-        });
-        expect(response.status).toBe(404);
-    });
-
-    test('GET /api/admin/ subpaths are blocked by relay', async () => {
-        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api/admin/restart`, {
-            headers: { 'x-license-key': LICENSE_KEY },
-        });
-        expect(response.status).toBe(404);
+    test('GET /api/admin from local IP bypasses auth', async () => {
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api/admin/reload`);
+        expect([200, 404]).toContain(response.status);
     });
 
     test('license key header is not forwarded to upstream', async () => {
@@ -326,15 +283,11 @@ describe('Relay Integration Tests', () => {
         } catch {}
     });
 
-    test('rate limiting blocks after repeated failures', async () => {
-        for (let i = 0; i < 10; i++) {
-            await fetch(`http://127.0.0.1:${servers.relayPort}/api`, {
-                headers: { 'x-license-key': 'wrong-key-attempt' },
-            });
+    test('local IP skips rate limiting', async () => {
+        for (let i = 0; i < 15; i++) {
+            await fetch(`http://127.0.0.1:${servers.relayPort}/api/chat`);
         }
-        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api`, {
-            headers: { 'x-license-key': 'wrong-key-attempt' },
-        });
-        expect(response.status).toBe(429);
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api/chat`);
+        expect(response.status).toBe(200);
     });
 });

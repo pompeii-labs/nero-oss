@@ -11,7 +11,7 @@ dotenv.config();
 const logger = new Logger('Nero');
 
 async function main() {
-    const port = parseInt(process.env.PORT || '4848');
+    const port = parseInt(process.env.PORT || '4847');
 
     logger.info(`Starting Nero v${VERSION}`);
     logger.info('Initializing database...');

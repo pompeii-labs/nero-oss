@@ -35,10 +35,7 @@ export function generateRunScript(config: DockerConfig): string {
         args.push('-e GIT_DISCOVERY_ACROSS_FILESYSTEM=1');
         args.push('-e NERO_MODE=integrated');
     } else {
-        args.push(`-p 127.0.0.1:${config.port}:4848`);
-        if (config.relayPort) {
-            args.push(`-p ${config.relayPort}:${config.relayPort}`);
-        }
+        args.push(`-p ${config.port}:4848`);
         args.push('-v nero_config:/app/config');
         args.push('-e NERO_MODE=contained');
     }

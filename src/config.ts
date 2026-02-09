@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import chalk from 'chalk';
@@ -90,7 +90,7 @@ const defaultProactivity: ProactivityConfig = {
 const defaultConfig: NeroConfig = {
     mcpServers: {},
     licenseKey: null,
-    relayPort: 4849,
+    relayPort: 4848,
     bindHost: '0.0.0.0',
     voice: {
         enabled: true,
@@ -136,6 +136,32 @@ async function loadTunnelUrl(): Promise<string | undefined> {
     return undefined;
 }
 
+function loadEnvLicenseKey(): string | null {
+    if (process.env.NERO_LICENSE_KEY) return process.env.NERO_LICENSE_KEY;
+    const envPath = join(getConfigDir(), '.env');
+    if (!existsSync(envPath)) return null;
+    try {
+        const content = readFileSync(envPath, 'utf-8');
+        for (const line of content.split('\n')) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('#') || !trimmed.includes('=')) continue;
+            const eqIdx = trimmed.indexOf('=');
+            const key = trimmed.slice(0, eqIdx).trim();
+            if (key === 'NERO_LICENSE_KEY') {
+                let val = trimmed.slice(eqIdx + 1).trim();
+                if (
+                    (val.startsWith('"') && val.endsWith('"')) ||
+                    (val.startsWith("'") && val.endsWith("'"))
+                ) {
+                    val = val.slice(1, -1);
+                }
+                return val || null;
+            }
+        }
+    } catch {}
+    return null;
+}
+
 export async function loadConfig(forceReload = false): Promise<NeroConfig> {
     if (cachedConfig && !forceReload) return cachedConfig;
 
@@ -150,7 +176,7 @@ export async function loadConfig(forceReload = false): Promise<NeroConfig> {
             const merged: NeroConfig = {
                 ...defaultConfig,
                 ...userConfig,
-                licenseKey: process.env.NERO_LICENSE_KEY || userConfig.licenseKey || null,
+                licenseKey: loadEnvLicenseKey() || userConfig.licenseKey || null,
                 tunnelUrl: tunnelUrl || userConfig.tunnelUrl,
                 settings: {
                     ...defaultSettings,
@@ -169,7 +195,7 @@ export async function loadConfig(forceReload = false): Promise<NeroConfig> {
 
     cachedConfig = {
         ...defaultConfig,
-        licenseKey: process.env.NERO_LICENSE_KEY || null,
+        licenseKey: loadEnvLicenseKey() || null,
         tunnelUrl,
     };
     return cachedConfig;

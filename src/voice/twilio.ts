@@ -20,7 +20,7 @@ export async function handleIncomingCall(
 
     console.log(chalk.dim(`[voice] Incoming call (${CallSid})`));
 
-    const tunnelUrl = config.tunnelUrl || `http://localhost:${config.port || 4848}`;
+    const tunnelUrl = config.tunnelUrl || `http://localhost:${config.relayPort || 4848}`;
     const wsHost = tunnelUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
     const wsProtocol = tunnelUrl.startsWith('https') ? 'wss' : 'ws';
 

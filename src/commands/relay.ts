@@ -352,7 +352,7 @@ export function registerRelayCommands(program: Command) {
             console.log(chalk.yellow('`nero tunnel` is deprecated. Use `nero relay` instead.'));
             const config = await loadConfig();
             const defaultPort = config.settings.onlineMode
-                ? String(config.relayPort || 4849)
+                ? String(config.relayPort || 4848)
                 : '4848';
             await runTunnelStart(options, {
                 label: 'Tunnel',
@@ -384,18 +384,18 @@ export function registerRelayCommands(program: Command) {
         .description('Start the relay (starts tunnel under the hood)')
         .option('-n, --ngrok', 'Use ngrok (requires account)')
         .option('-c, --cloudflared', 'Use Cloudflare Tunnel (free, no account)')
-        .option('-p, --port <port>', 'Relay port to expose (default: 4849)')
+        .option('-p, --port <port>', 'Relay port to expose (default: 4848)')
         .action(async (options) => {
             const config = await loadConfig();
             if (!config.settings.onlineMode) {
                 config.settings.onlineMode = true;
             }
             if (!config.relayPort) {
-                config.relayPort = 4849;
+                config.relayPort = 4848;
             }
             await saveConfig(config);
 
-            const defaultPort = options.port || String(config.relayPort || 4849);
+            const defaultPort = options.port || String(config.relayPort || 4848);
             await runTunnelStart(options, {
                 label: 'Relay',
                 stopHint: 'nero relay stop',
@@ -436,39 +436,83 @@ export function registerRelayCommands(program: Command) {
         .action(async () => {
             const config = await loadConfig();
             const intervalMs = 60_000;
+            let consecutiveFailures = 0;
+
+            const isTunnelHealthy = async (url: string): Promise<boolean> => {
+                try {
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 10_000);
+                    const res = await fetch(`${url}/relay/health`, { signal: controller.signal });
+                    clearTimeout(timeout);
+                    return res.ok;
+                } catch {
+                    return false;
+                }
+            };
+
+            const killAndRestart = async (state: TunnelState | null) => {
+                if (state && isProcessRunning(state.pid)) {
+                    try {
+                        process.kill(state.pid, 'SIGTERM');
+                    } catch {}
+                    await new Promise((r) => setTimeout(r, 2_000));
+                    if (isProcessRunning(state.pid)) {
+                        try {
+                            process.kill(state.pid, 'SIGKILL');
+                        } catch {}
+                    }
+                }
+                await clearTunnelState();
+
+                const options: {
+                    ngrok?: boolean;
+                    cloudflared?: boolean;
+                    port?: string;
+                    daemon?: boolean;
+                } = {
+                    daemon: true,
+                    port: String(config.relayPort || 4848),
+                };
+
+                if (state?.tool === 'ngrok') {
+                    options.ngrok = true;
+                } else if (state?.tool === 'cloudflared') {
+                    options.cloudflared = true;
+                }
+
+                await runTunnelStart(options, {
+                    label: 'Relay',
+                    stopHint: 'nero relay stop',
+                    defaultPort: String(config.relayPort || 4848),
+                    keepAlive: true,
+                });
+            };
 
             const loop = async () => {
                 const state = await loadTunnelState();
                 const running = state ? isProcessRunning(state.pid) : false;
 
                 if (!state || !running) {
-                    if (state && !running) {
-                        await clearTunnelState();
-                    }
-
-                    const options: {
-                        ngrok?: boolean;
-                        cloudflared?: boolean;
-                        port?: string;
-                        daemon?: boolean;
-                    } = {
-                        daemon: true,
-                        port: String(config.relayPort || 4849),
-                    };
-
-                    if (state?.tool === 'ngrok') {
-                        options.ngrok = true;
-                    } else if (state?.tool === 'cloudflared') {
-                        options.cloudflared = true;
-                    }
-
-                    await runTunnelStart(options, {
-                        label: 'Relay',
-                        stopHint: 'nero relay stop',
-                        defaultPort: String(config.relayPort || 4849),
-                        keepAlive: true,
-                    });
+                    consecutiveFailures = 0;
+                    await killAndRestart(state);
                     return;
+                }
+
+                const healthy = await isTunnelHealthy(state.url);
+                if (!healthy) {
+                    consecutiveFailures++;
+                    if (consecutiveFailures >= 2) {
+                        console.log(
+                            chalk.yellow(
+                                `[relay-watch] Tunnel unhealthy (${consecutiveFailures} checks), restarting...`,
+                            ),
+                        );
+                        consecutiveFailures = 0;
+                        await killAndRestart(state);
+                        return;
+                    }
+                } else {
+                    consecutiveFailures = 0;
                 }
 
                 try {

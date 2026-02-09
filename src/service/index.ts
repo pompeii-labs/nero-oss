@@ -37,7 +37,8 @@ export class NeroService {
 
     constructor(port: number, config: NeroConfig) {
         this.port = port;
-        this.host = config.settings.onlineMode ? '127.0.0.1' : config.bindHost || '0.0.0.0';
+        const hasRelay = config.settings.onlineMode || !!config.licenseKey;
+        this.host = hasRelay ? '127.0.0.1' : config.bindHost || '0.0.0.0';
         this.config = config;
 
         this.app = express();
@@ -63,7 +64,13 @@ export class NeroService {
             res.on('finish', () => {
                 const duration = Date.now() - start;
                 const status = res.statusCode;
-                if (req.path !== '/health') {
+                const skip =
+                    req.path === '/health' ||
+                    (req.method === 'GET' &&
+                        !req.path.startsWith('/api') &&
+                        !req.path.startsWith('/admin') &&
+                        !req.path.startsWith('/webhook'));
+                if (!skip) {
                     this.logger.debug(`${req.method} ${req.path} ${status} ${duration}ms`);
                 }
             });
@@ -242,8 +249,8 @@ export class NeroService {
     async start(): Promise<void> {
         await this.agent.setup();
 
-        if (this.config.settings.onlineMode) {
-            const relayPort = this.config.relayPort || 4849;
+        if (this.config.settings.onlineMode || this.config.licenseKey) {
+            const relayPort = this.config.relayPort || 4848;
             this.relay = new RelayServer({
                 listenHost: this.config.bindHost || '0.0.0.0',
                 listenPort: relayPort,

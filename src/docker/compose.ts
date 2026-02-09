@@ -32,11 +32,7 @@ function buildNeroService(config: DockerConfig): ComposeService {
     if (isIntegrated) {
         service.network_mode = 'host';
     } else {
-        const ports = [`127.0.0.1:${config.port}:4848`];
-        if (config.relayPort) {
-            ports.push(`${config.relayPort}:${config.relayPort}`);
-        }
-        service.ports = ports;
+        service.ports = [`${config.port}:4848`];
     }
 
     service.depends_on = {

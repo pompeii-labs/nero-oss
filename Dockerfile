@@ -33,6 +33,6 @@ ENV TERM=xterm-256color
 ENV FORCE_COLOR=1
 ENV NODE_ENV=production
 
-EXPOSE 4849
+EXPOSE 4848
 
 CMD ["bun", "run", "dist/service/entrypoint.js"]

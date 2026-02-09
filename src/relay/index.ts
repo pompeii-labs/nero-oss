@@ -62,23 +62,26 @@ export class RelayServer {
 
             if (this.config.licenseKey) {
                 const ip = this.getClientIp(req);
-                if (this.isRateLimited(ip)) {
-                    socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
-                    socket.destroy();
-                    return;
-                }
 
-                const tokenMatch = url.pathname.match(/\/token=([^/]+)/);
-                const token = tokenMatch ? tokenMatch[1] : null;
-                const headerKey = (req.headers['x-license-key'] as string) || '';
-                const tokenValid = token ? verifyWsToken(token, this.config.licenseKey) : false;
-                const headerValid = headerKey.length > 0 && this.verifyLicenseKey(headerKey);
+                if (!this.isPrivateIp(ip)) {
+                    if (this.isRateLimited(ip)) {
+                        socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
+                        socket.destroy();
+                        return;
+                    }
 
-                if (!tokenValid && !headerValid) {
-                    this.recordFailure(ip);
-                    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                    socket.destroy();
-                    return;
+                    const tokenMatch = url.pathname.match(/\/token=([^/]+)/);
+                    const token = tokenMatch ? tokenMatch[1] : null;
+                    const headerKey = (req.headers['x-license-key'] as string) || '';
+                    const tokenValid = token ? verifyWsToken(token, this.config.licenseKey) : false;
+                    const headerValid = headerKey.length > 0 && this.verifyLicenseKey(headerKey);
+
+                    if (!tokenValid && !headerValid) {
+                        this.recordFailure(ip);
+                        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+                        socket.destroy();
+                        return;
+                    }
                 }
             }
 
@@ -161,6 +164,16 @@ export class RelayServer {
         return raw.startsWith('::ffff:') ? raw.slice(7) : raw;
     }
 
+    private isPrivateIp(ip: string): boolean {
+        if (ip === '127.0.0.1' || ip === '::1') return true;
+        const parts = ip.split('.').map(Number);
+        if (parts.length !== 4) return false;
+        if (parts[0] === 10) return true;
+        if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+        if (parts[0] === 192 && parts[1] === 168) return true;
+        return false;
+    }
+
     private isRateLimited(ip: string): boolean {
         const entry = this.rateLimitMap.get(ip);
         if (!entry) return false;
@@ -197,42 +210,34 @@ export class RelayServer {
             return;
         }
 
-        const isWebhook =
-            req.method === 'POST' &&
-            ['/webhook/slack', '/webhook/sms', '/webhook/voice'].includes(url.pathname);
-        const isApi =
-            (url.pathname === '/api' ||
-                url.pathname === '/health' ||
-                url.pathname.startsWith('/api/')) &&
-            !url.pathname.startsWith('/api/admin');
-
-        if (!isWebhook && !isApi) {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Not found' }));
-            return;
-        }
-
         if (this.config.licenseKey) {
             const ip = this.getClientIp(req);
+            const needsAuth =
+                !this.isPrivateIp(ip) &&
+                (url.pathname.startsWith('/api/') ||
+                    url.pathname.startsWith('/admin') ||
+                    (req.method === 'POST' && url.pathname.startsWith('/webhook/')));
 
-            if (this.isRateLimited(ip)) {
-                res.writeHead(429, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Too many requests' }));
-                return;
-            }
+            if (needsAuth) {
+                if (this.isRateLimited(ip)) {
+                    res.writeHead(429, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Too many requests' }));
+                    return;
+                }
 
-            const provided = (req.headers['x-license-key'] as string) || '';
-            if (!provided) {
-                this.recordFailure(ip);
-                res.writeHead(401, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'License key required' }));
-                return;
-            }
-            if (!this.verifyLicenseKey(provided)) {
-                this.recordFailure(ip);
-                res.writeHead(403, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Invalid license key' }));
-                return;
+                const provided = (req.headers['x-license-key'] as string) || '';
+                if (!provided) {
+                    this.recordFailure(ip);
+                    res.writeHead(401, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'License key required' }));
+                    return;
+                }
+                if (!this.verifyLicenseKey(provided)) {
+                    this.recordFailure(ip);
+                    res.writeHead(403, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Invalid license key' }));
+                    return;
+                }
             }
         }
 

@@ -1,6 +1,8 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { loadConfig } from '../config.js';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
+import { loadConfig, getNeroHome } from '../config.js';
 import { openBrowser } from '../mcp/oauth.js';
 
 const BACKEND_API = process.env.BACKEND_URL || 'https://api.magmadeploy.com';
@@ -37,7 +39,15 @@ export function registerLicenseCommands(program: Command) {
                 process.exit(1);
             }
 
-            const tunnelUrl = options.url;
+            let tunnelUrl = options.url;
+
+            if (!tunnelUrl) {
+                try {
+                    const statePath = join(getNeroHome(), '.nero', 'tunnel.json');
+                    const state = JSON.parse(await readFile(statePath, 'utf-8'));
+                    tunnelUrl = state.url;
+                } catch {}
+            }
 
             if (!tunnelUrl) {
                 console.error(chalk.red('No tunnel URL provided.'));

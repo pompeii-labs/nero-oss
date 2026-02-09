@@ -71,7 +71,7 @@ export function registerSetupCommands(program: Command) {
                 const dockerConfig: DockerConfig = {
                     name: options.name,
                     port: options.port,
-                    relayPort: '4849',
+                    relayPort: '4848',
                     mode,
                     image: DEFAULT_IMAGE,
                 };
@@ -100,7 +100,7 @@ export function registerSetupCommands(program: Command) {
                 const dockerConfig: DockerConfig = {
                     name: options.name,
                     port: options.port,
-                    relayPort: '4849',
+                    relayPort: '4848',
                     mode,
                     image: DEFAULT_IMAGE,
                 };

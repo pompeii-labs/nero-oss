@@ -5,8 +5,7 @@ services:
     stdin_open: true
     tty: true
     ports:
-      - "127.0.0.1:4848:4848"
-      - "4849:4849"
+      - "4848:4848"
     environment:
       - DATABASE_URL=postgresql://nero:nero@db:5432/nero
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
