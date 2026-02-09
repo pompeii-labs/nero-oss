@@ -134,6 +134,7 @@ export class Nero extends MagmaAgent {
         }
 
         await this.loadUserInstructions();
+        await this.fetchContextLimit(this.config.settings.model);
         await this.mcpClient.connect();
         await this.loadSkills();
 
@@ -436,9 +437,30 @@ export class Nero extends MagmaAgent {
         return total;
     }
 
+    private contextLimit: number = 200000;
+
+    private async fetchContextLimit(modelId: string): Promise<void> {
+        try {
+            const response = await fetch(
+                `https://openrouter.ai/api/v1/models/${modelId}/endpoints`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                    },
+                },
+            );
+            if (response.ok) {
+                const data = (await response.json()) as { data?: { context_length?: number } };
+                if (data.data?.context_length) {
+                    this.contextLimit = data.data.context_length;
+                }
+            }
+        } catch {}
+    }
+
     getContextUsage(): { tokens: number; limit: number; percentage: number } {
         const tokens = this.estimateTokens();
-        const limit = 200000;
+        const limit = this.contextLimit;
         return {
             tokens,
             limit,
@@ -1187,6 +1209,7 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
                 apiKey: process.env.OPENROUTER_API_KEY!,
             }),
         });
+        this.fetchContextLimit(model);
     }
 
     setPermissionCallback(cb: PermissionCallback): void {
