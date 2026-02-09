@@ -108,6 +108,50 @@ const defaultConfig: NeroConfig = {
 let cachedConfig: NeroConfig | null = null;
 let configPath: string | null = null;
 
+function envBool(key: string): boolean | undefined {
+    const val = process.env[key];
+    if (val === undefined) return undefined;
+    return val === '1' || val === 'true';
+}
+
+function applyEnvOverrides(config: NeroConfig): void {
+    const model = process.env.NERO_MODEL;
+    if (model) config.settings.model = model;
+
+    const streaming = envBool('NERO_STREAMING');
+    if (streaming !== undefined) config.settings.streaming = streaming;
+
+    const verbose = envBool('NERO_VERBOSE');
+    if (verbose !== undefined) config.settings.verbose = verbose;
+
+    const onlineMode = envBool('NERO_ONLINE_MODE');
+    if (onlineMode !== undefined) config.settings.onlineMode = onlineMode;
+
+    const thinkingEnabled = envBool('NERO_THINKING_ENABLED');
+    if (thinkingEnabled !== undefined) config.proactivity.enabled = thinkingEnabled;
+
+    const thinkingNotify = envBool('NERO_THINKING_NOTIFY');
+    if (thinkingNotify !== undefined) config.proactivity.notify = thinkingNotify;
+
+    const thinkingInterval = process.env.NERO_THINKING_INTERVAL;
+    if (thinkingInterval) {
+        const val = parseInt(thinkingInterval, 10);
+        if (!isNaN(val) && val >= 1) config.proactivity.intervalMinutes = val;
+    }
+
+    const voiceEnabled = envBool('NERO_VOICE_ENABLED');
+    if (voiceEnabled !== undefined) config.voice.enabled = voiceEnabled;
+
+    const smsEnabled = envBool('NERO_SMS_ENABLED');
+    if (smsEnabled !== undefined) config.sms.enabled = smsEnabled;
+
+    const port = process.env.NERO_PORT;
+    if (port) {
+        const val = parseInt(port, 10);
+        if (!isNaN(val)) config.port = val;
+    }
+}
+
 export function getNeroHome(): string {
     if (process.env.HOST_HOME) {
         return '/host/home';
@@ -187,6 +231,7 @@ export async function loadConfig(forceReload = false): Promise<NeroConfig> {
                 },
                 proactivity: { ...defaultProactivity, ...userConfig.proactivity },
             };
+            applyEnvOverrides(merged);
             cachedConfig = merged;
             return merged;
         } catch (error) {
@@ -200,6 +245,7 @@ export async function loadConfig(forceReload = false): Promise<NeroConfig> {
         licenseKey: loadEnvLicenseKey() || null,
         tunnelUrl,
     };
+    applyEnvOverrides(cachedConfig);
     return cachedConfig;
 }
 

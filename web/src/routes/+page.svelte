@@ -280,6 +280,22 @@
                     pendingPermissionId = id;
                     pendingActivity = activity;
                     permissionOpen = true;
+                    if (document.hidden) {
+                        const label = activity.tool === 'bash' && activity.args?.command
+                            ? String(activity.args.command)
+                            : activity.displayName || activity.tool;
+                        if (Notification.permission === 'granted') {
+                            new Notification('Nero - Permission Required', { body: label });
+                        } else if (Notification.permission !== 'denied') {
+                            Notification.requestPermission();
+                        }
+                        document.title = '(*) Nero';
+                        const restore = () => {
+                            document.title = 'Nero';
+                            document.removeEventListener('visibilitychange', restore);
+                        };
+                        document.addEventListener('visibilitychange', restore);
+                    }
                 },
                 onDone: (content) => {
                     const finalContent = content || streamingContent;

@@ -140,7 +140,7 @@ function NeroInput({
     if (showPlaceholder) {
         return (
             <Text>
-                <Text inverse> </Text>
+                {focus ? <Text inverse> </Text> : <Text> </Text>}
                 <Text dimColor>{placeholder.slice(1)}</Text>
             </Text>
         );
@@ -153,7 +153,7 @@ function NeroInput({
     return (
         <Text>
             {before}
-            <Text inverse>{cursorChar}</Text>
+            {focus ? <Text inverse>{cursorChar}</Text> : <Text>{cursorChar}</Text>}
             {after}
         </Text>
     );
@@ -729,6 +729,7 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
     const [commandLoading, setCommandLoading] = useState<string | null>(null);
     const [skills, setSkills] = useState<Skill[]>([]);
     const [loadedSkills, setLoadedSkills] = useState<string[]>([]);
+    const [windowFocused, setWindowFocused] = useState(true);
     const processingRef = useRef(false);
     const messageIdRef = useRef(0);
     const lastCtrlCRef = useRef<number>(0);
@@ -748,6 +749,37 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
             .then(setLoadedSkills)
             .catch(() => {});
     }, [nero]);
+
+    useEffect(() => {
+        if (!process.stdin.isTTY) return;
+
+        process.stdout.write('\x1b[?1004h');
+
+        let buf = '';
+        const onData = (data: Buffer) => {
+            buf += data.toString();
+            while (buf.length >= 3) {
+                if (buf.startsWith('\x1b[I')) {
+                    setWindowFocused(true);
+                    buf = buf.slice(3);
+                } else if (buf.startsWith('\x1b[O')) {
+                    setWindowFocused(false);
+                    buf = buf.slice(3);
+                } else if (buf[0] === '\x1b' && buf.length < 3) {
+                    break;
+                } else {
+                    buf = buf.slice(1);
+                }
+            }
+        };
+
+        process.stdin.on('data', onData);
+
+        return () => {
+            process.stdout.write('\x1b[?1004l');
+            process.stdin.removeListener('data', onData);
+        };
+    }, []);
 
     const addMessage = useCallback(
         (role: Message['role'], content: string, toolData?: ToolMessage) => {
@@ -1145,7 +1177,7 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
                             onSubmit={handleSubmit}
                             onCtrlC={handleCtrlC}
                             placeholder={isLoading ? '' : 'Type a message or /help...'}
-                            focus={!isLoading}
+                            focus={!isLoading && windowFocused}
                         />
                     </Box>
                 </Box>
