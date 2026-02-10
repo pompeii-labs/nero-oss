@@ -1,4 +1,3 @@
-import { writable, derived } from 'svelte/store';
 import { AudioRecorder, AudioPlayer } from '$lib/audio';
 import { bufferToInt16Array, int16ArrayToBuffer } from '@pompeii-labs/audio';
 import { Buffer } from 'buffer';
@@ -8,13 +7,13 @@ import type { ToolActivity } from '$lib/actions/chat';
 export type VoiceStatus = 'idle' | 'connecting' | 'connected' | 'error';
 
 function createVoiceStore() {
-    const status = writable<VoiceStatus>('idle');
-    const isMuted = writable(false);
-    const isTalking = writable(false);
-    const rmsLevel = writable(0);
-    const transcript = writable('');
-    const activities = writable<ToolActivity[]>([]);
-    const errorMessage = writable<string | null>(null);
+    let status = $state<VoiceStatus>('idle');
+    let isMuted = $state(false);
+    let isTalking = $state(false);
+    let rmsLevel = $state(0);
+    let transcript = $state('');
+    let activities = $state<ToolActivity[]>([]);
+    let errorMessage = $state<string | null>(null);
 
     let ws: WebSocket | null = null;
     let recorder: AudioRecorder | null = null;
@@ -23,13 +22,13 @@ function createVoiceStore() {
     async function connect() {
         if (ws) return;
 
-        status.set('connecting');
-        errorMessage.set(null);
+        status = 'connecting';
+        errorMessage = null;
 
         try {
             player = new AudioPlayer();
             await player.connect(() => {
-                isTalking.set(false);
+                isTalking = false;
             });
 
             recorder = new AudioRecorder();
@@ -40,7 +39,7 @@ function createVoiceStore() {
             ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
-                status.set('connected');
+                status = 'connected';
                 ws?.send(JSON.stringify({ type: 'medium', data: { medium: 'web-voice' } }));
                 startRecording();
             };
@@ -51,36 +50,38 @@ function createVoiceStore() {
                 if (data.type === 'audio') {
                     const pcm = Buffer.from(data.data.audio, 'base64');
                     player?.play(bufferToInt16Array(pcm));
-                    isTalking.set(true);
+                    isTalking = true;
                 } else if (data.type === 'clear') {
                     player?.clear();
-                    isTalking.set(false);
+                    isTalking = false;
                 } else if (data.type === 'transcript') {
-                    activities.set([]);
-                    transcript.set(data.data.text || '');
+                    activities = [];
+                    transcript = data.data.text || '';
                 } else if (data.type === 'activity') {
-                    activities.update((list) => {
-                        const existing = list.findIndex((a) => a.tool === data.data.tool);
-                        if (existing >= 0) {
-                            list[existing] = data.data;
-                            return [...list];
-                        }
-                        return [...list, data.data];
-                    });
+                    const existing = activities.findIndex((a) => a.tool === data.data.tool);
+                    if (existing >= 0) {
+                        activities = [
+                            ...activities.slice(0, existing),
+                            data.data,
+                            ...activities.slice(existing + 1),
+                        ];
+                    } else {
+                        activities = [...activities, data.data];
+                    }
                 }
             };
 
             ws.onerror = () => {
-                errorMessage.set('Connection failed');
-                status.set('error');
+                errorMessage = 'Connection failed';
+                status = 'error';
             };
 
             ws.onclose = () => {
                 disconnect();
             };
         } catch (err) {
-            errorMessage.set(err instanceof Error ? err.message : 'Failed to connect');
-            status.set('error');
+            errorMessage = err instanceof Error ? err.message : 'Failed to connect';
+            status = 'error';
         }
     }
 
@@ -88,7 +89,7 @@ function createVoiceStore() {
         if (!recorder) return;
 
         await recorder.start((audioData, rms) => {
-            rmsLevel.set(rms);
+            rmsLevel = rms;
 
             if (ws?.readyState !== WebSocket.OPEN) return;
 
@@ -122,12 +123,12 @@ function createVoiceStore() {
         player = null;
         ws = null;
 
-        status.set('idle');
-        isMuted.set(false);
-        isTalking.set(false);
-        rmsLevel.set(0);
-        transcript.set('');
-        activities.set([]);
+        status = 'idle';
+        isMuted = false;
+        isTalking = false;
+        rmsLevel = 0;
+        transcript = '';
+        activities = [];
     }
 
     function toggleMute() {
@@ -135,26 +136,42 @@ function createVoiceStore() {
 
         if (recorder.isMuted) {
             recorder.unmute();
-            isMuted.set(false);
+            isMuted = false;
         } else {
             recorder.mute();
-            isMuted.set(true);
+            isMuted = true;
         }
     }
 
     function clearActivities() {
-        activities.set([]);
+        activities = [];
     }
 
     return {
-        status,
-        isMuted,
-        isTalking,
-        rmsLevel,
-        transcript,
-        activities,
-        errorMessage,
-        isConnected: derived(status, ($s) => $s === 'connected'),
+        get status() {
+            return status;
+        },
+        get isMuted() {
+            return isMuted;
+        },
+        get isTalking() {
+            return isTalking;
+        },
+        get rmsLevel() {
+            return rmsLevel;
+        },
+        get transcript() {
+            return transcript;
+        },
+        get activities() {
+            return activities;
+        },
+        get errorMessage() {
+            return errorMessage;
+        },
+        get isConnected() {
+            return status === 'connected';
+        },
         connect,
         disconnect,
         toggleMute,

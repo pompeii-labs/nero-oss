@@ -14,7 +14,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 </svelte:head>
 
-<div class="flex h-screen w-full bg-background">
+<div class="flex h-screen w-full bg-background font-body">
     <div class="hidden md:flex">
         <Sidebar />
     </div>

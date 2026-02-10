@@ -1,4 +1,4 @@
-import { getServerUrl, buildServerResponse, type ServerResponse } from './helpers';
+import { get, post, type NeroResult } from './helpers';
 
 export type ContextInfo = {
     tokens: number;
@@ -29,69 +29,12 @@ export type ServerInfo = {
     };
 };
 
-export async function getServerInfo(): Promise<ServerResponse<ServerInfo>> {
-    try {
-        const response = await fetch(getServerUrl('/api'));
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        return buildServerResponse({ data });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
-}
-
-export async function getContext(): Promise<ServerResponse<ContextInfo>> {
-    try {
-        const response = await fetch(getServerUrl('/api/context'));
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        return buildServerResponse({ data });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
-}
-
-export async function getHistory(): Promise<ServerResponse<HistoryInfo>> {
-    try {
-        const response = await fetch(getServerUrl('/api/history'));
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        return buildServerResponse({ data });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
-}
-
-export async function reloadConfig(): Promise<
-    ServerResponse<{ mcpTools: number; loadedSkills?: string[] }>
-> {
-    try {
-        const response = await fetch(getServerUrl('/api/reload'), { method: 'POST' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        return buildServerResponse({ data });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
-}
-
 export type HealthInfo = {
     version: string;
     model: string;
     mcpTools: number;
     status: string;
 };
-
-export async function getHealth(): Promise<ServerResponse<HealthInfo>> {
-    try {
-        const response = await fetch(getServerUrl('/health'));
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        return buildServerResponse({ data });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
-}
 
 export type UsageInfo = {
     limit: number | null;
@@ -104,47 +47,11 @@ export type UsageInfo = {
     };
 };
 
-export async function getUsage(): Promise<ServerResponse<UsageInfo>> {
-    try {
-        const response = await fetch(getServerUrl('/api/usage'));
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data: UsageInfo = await response.json();
-        return buildServerResponse({ data });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
-}
-
-export async function installSlack(): Promise<ServerResponse<{ url: string }>> {
-    try {
-        const response = await fetch(getServerUrl('/api/integrations/slack/install'));
-        if (!response.ok) {
-            const data = await response.json().catch(() => ({}));
-            throw new Error(data.error || `HTTP ${response.status}`);
-        }
-        const data = await response.json();
-        return buildServerResponse({ data });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
-}
-
 export type UpdateInfo = {
     current: string;
     latest: string | null;
     updateAvailable: boolean;
 };
-
-export async function checkForUpdates(): Promise<ServerResponse<UpdateInfo>> {
-    try {
-        const response = await fetch(getServerUrl('/api/update-check'));
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        return buildServerResponse({ data });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
-}
 
 export type EnvVarInfo = {
     value: string;
@@ -156,45 +63,48 @@ export type EnvInfo = {
     path: string;
 };
 
-export async function getEnvVars(): Promise<ServerResponse<EnvInfo>> {
-    try {
-        const response = await fetch(getServerUrl('/api/admin/env'));
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        return buildServerResponse({ data });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
+export function getServerInfo(): Promise<NeroResult<ServerInfo>> {
+    return get('/api');
 }
 
-export async function updateEnvVars(
+export function getContext(): Promise<NeroResult<ContextInfo>> {
+    return get('/api/context');
+}
+
+export function getHistory(): Promise<NeroResult<HistoryInfo>> {
+    return get('/api/history');
+}
+
+export function reloadConfig(): Promise<NeroResult<{ mcpTools: number; loadedSkills?: string[] }>> {
+    return post('/api/reload');
+}
+
+export function getHealth(): Promise<NeroResult<HealthInfo>> {
+    return get('/health');
+}
+
+export function getUsage(): Promise<NeroResult<UsageInfo>> {
+    return get('/api/usage');
+}
+
+export function installSlack(): Promise<NeroResult<{ url: string }>> {
+    return get('/api/integrations/slack/install');
+}
+
+export function checkForUpdates(): Promise<NeroResult<UpdateInfo>> {
+    return get('/api/update-check');
+}
+
+export function getEnvVars(): Promise<NeroResult<EnvInfo>> {
+    return get('/api/admin/env');
+}
+
+export function updateEnvVars(
     env: Record<string, string>,
-): Promise<ServerResponse<{ success: boolean; message: string }>> {
-    try {
-        const response = await fetch(getServerUrl('/api/admin/env'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ env }),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        return buildServerResponse({ data });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
+): Promise<NeroResult<{ success: boolean; message: string }>> {
+    return post('/api/admin/env', { env });
 }
 
-export async function restartService(): Promise<
-    ServerResponse<{ success: boolean; message: string }>
-> {
-    try {
-        const response = await fetch(getServerUrl('/api/admin/restart'), {
-            method: 'POST',
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        return buildServerResponse({ data });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
+export function restartService(): Promise<NeroResult<{ success: boolean; message: string }>> {
+    return post('/api/admin/restart');
 }

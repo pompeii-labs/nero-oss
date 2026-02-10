@@ -1,536 +1,465 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,400&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+:root {
+    --nero-blue: #4d94ff;
+    --nero-cyan: #33ccff;
+    --nero-glow: #4d94ff;
 
-@layer base {
-    :root {
-        --nero-blue: 216 100% 68%;
-        --nero-glow: 216 100% 68%;
-        --nero-cyan: 190 100% 60%;
+    --background: #080a0d;
+    --foreground: #e0e5ed;
+    --muted: #141a24;
+    --muted-foreground: #6b7a8d;
+    --popover: #0b0e13;
+    --popover-foreground: #e0e5ed;
+    --card: #0d1117;
+    --card-foreground: #e0e5ed;
+    --border: #1a2030;
+    --input: #141a24;
+    --primary: var(--nero-blue);
+    --primary-foreground: #0a0c10;
+    --secondary: #1a2030;
+    --secondary-foreground: #e0e5ed;
+    --accent: #1a2030;
+    --accent-foreground: #e0e5ed;
+    --destructive: #7f1d1d;
+    --destructive-foreground: #fafafa;
+    --ring: var(--nero-blue);
+    --radius: 0.625rem;
 
-        --background: 222 25% 3%;
-        --foreground: 210 20% 92%;
-        --muted: 222 20% 8%;
-        --muted-foreground: 215 15% 50%;
-        --popover: 222 22% 5%;
-        --popover-foreground: 210 20% 92%;
-        --card: 222 22% 5%;
-        --card-foreground: 210 20% 92%;
-        --border: 222 15% 12%;
-        --input: 222 20% 8%;
-        --primary: var(--nero-blue);
-        --primary-foreground: 222 20% 4%;
-        --secondary: 222 15% 12%;
-        --secondary-foreground: 210 20% 92%;
-        --accent: 222 15% 12%;
-        --accent-foreground: 210 20% 92%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 0% 98%;
-        --ring: 216 100% 68%;
-        --radius: 0.625rem;
-    }
+    --elevated: #111820;
+    --dim: #0a0d12;
+    --accent-subtle: color-mix(in oklch, var(--nero-blue) 8%, transparent);
+    --accent-glow: color-mix(in oklch, var(--nero-blue) 25%, transparent);
 
-    .light {
-        --nero-blue: 216 85% 55%;
-        --nero-cyan: 190 85% 45%;
-
-        --background: 220 20% 95%;
-        --foreground: 222 25% 15%;
-        --muted: 220 15% 90%;
-        --muted-foreground: 215 15% 40%;
-        --popover: 220 15% 97%;
-        --popover-foreground: 222 25% 15%;
-        --card: 220 15% 97%;
-        --card-foreground: 222 25% 15%;
-        --border: 220 15% 85%;
-        --input: 220 15% 92%;
-        --primary: var(--nero-blue);
-        --primary-foreground: 0 0% 100%;
-        --secondary: 220 12% 90%;
-        --secondary-foreground: 222 25% 15%;
-        --accent: 220 12% 88%;
-        --accent-foreground: 222 25% 15%;
-        --destructive: 0 72% 51%;
-        --destructive-foreground: 0 0% 100%;
-        --ring: 216 85% 55%;
-    }
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-body: 'DM Sans', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
-@layer base {
-    * {
-        @apply border-border;
-    }
+.light {
+    --nero-blue: #3374cc;
+    --nero-cyan: #1a99bb;
+    --nero-glow: #3374cc;
 
-    html {
-        font-family: 'Outfit', system-ui, sans-serif;
-    }
+    --background: #f0f2f5;
+    --foreground: #1a2030;
+    --muted: #e2e6ec;
+    --muted-foreground: #5a6578;
+    --popover: #f6f7f9;
+    --popover-foreground: #1a2030;
+    --card: #f6f7f9;
+    --card-foreground: #1a2030;
+    --border: #d4d9e2;
+    --input: #e8eaef;
+    --primary: var(--nero-blue);
+    --primary-foreground: #ffffff;
+    --secondary: #e2e6ec;
+    --secondary-foreground: #1a2030;
+    --accent: #dfe3ea;
+    --accent-foreground: #1a2030;
+    --destructive: #dc2626;
+    --destructive-foreground: #ffffff;
+    --ring: var(--nero-blue);
 
-    body {
-        @apply bg-background text-foreground;
-        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-        background:
-            radial-gradient(ellipse 100% 80% at 50% -30%, hsl(var(--nero-blue) / 0.12), transparent 60%),
-            radial-gradient(ellipse 60% 40% at 100% 100%, hsl(var(--nero-cyan) / 0.05), transparent 50%),
-            linear-gradient(to bottom, hsl(var(--background)), hsl(var(--background)));
-        background-attachment: fixed;
-        min-height: 100vh;
-    }
-
-    .light body {
-        background:
-            radial-gradient(ellipse 100% 80% at 50% -30%, hsl(var(--nero-blue) / 0.1), transparent 60%),
-            radial-gradient(ellipse 60% 40% at 100% 100%, hsl(var(--nero-cyan) / 0.06), transparent 50%),
-            linear-gradient(to bottom, hsl(var(--background)), hsl(220 18% 92%));
-    }
-
-    ::selection {
-        background: hsl(var(--nero-blue) / 0.3);
-        color: hsl(var(--foreground));
-    }
+    --elevated: #ffffff;
+    --dim: #eaecf0;
+    --accent-subtle: color-mix(in oklch, var(--nero-blue) 6%, transparent);
+    --accent-glow: color-mix(in oklch, var(--nero-blue) 15%, transparent);
 }
 
-@layer utilities {
-    .font-mono {
-        font-family: 'JetBrains Mono', ui-monospace, monospace;
-    }
+@theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-ring: var(--ring);
+    --color-nero-blue: var(--nero-blue);
+    --color-nero-cyan: var(--nero-cyan);
+    --color-elevated: var(--elevated);
+    --color-dim: var(--dim);
+    --color-accent-subtle: var(--accent-subtle);
+    --color-accent-glow: var(--accent-glow);
 
-    .glitch-text {
-        animation: glitch 2s infinite;
-    }
+    --font-display: var(--font-display);
+    --font-body: var(--font-body);
+    --font-mono: var(--font-mono);
 
-    .glitch-flicker {
-        animation: flicker 4s infinite;
-    }
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
 
-    .nero-glow {
-        filter: drop-shadow(0 0 8px hsl(var(--nero-blue) / 0.5))
-                drop-shadow(0 0 20px hsl(var(--nero-blue) / 0.3));
-    }
-
-    .nero-glow-subtle {
-        filter: drop-shadow(0 0 4px hsl(var(--nero-blue) / 0.4));
-    }
-
-    .nero-glow-strong {
-        filter: drop-shadow(0 0 12px hsl(var(--nero-blue) / 0.7))
-                drop-shadow(0 0 30px hsl(var(--nero-blue) / 0.4));
-    }
-
-    .message-appear {
-        animation: messageSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    }
-
-    .message-appear-user {
-        animation: messageSlideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    }
-
-    .glass-panel {
-        background: linear-gradient(
-            135deg,
-            hsl(var(--nero-blue) / 0.08) 0%,
-            hsl(222 25% 6% / 0.9) 50%,
-            hsl(var(--nero-cyan) / 0.03) 100%
-        );
-        backdrop-filter: blur(20px);
-        border: 1px solid hsl(var(--nero-blue) / 0.15);
-        box-shadow:
-            0 0 0 1px hsl(var(--nero-blue) / 0.05) inset,
-            0 8px 32px -8px hsl(222 50% 2% / 0.8),
-            0 0 60px -20px hsl(var(--nero-blue) / 0.3);
-    }
-
-    .glass-panel-user {
-        background: linear-gradient(
-            135deg,
-            hsl(var(--nero-blue) / 0.35) 0%,
-            hsl(var(--nero-blue) / 0.25) 100%
-        );
-        backdrop-filter: blur(20px);
-        border: 1px solid hsl(var(--nero-blue) / 0.4);
-        box-shadow:
-            0 0 0 1px hsl(var(--nero-blue) / 0.15) inset,
-            0 8px 32px -8px hsl(222 50% 2% / 0.6),
-            0 0 40px -10px hsl(var(--nero-blue) / 0.5);
-    }
-
-    .holo-ring {
-        position: relative;
-    }
-
-    .holo-ring::before {
-        content: '';
-        position: absolute;
-        inset: -2px;
-        border-radius: 50%;
-        background: conic-gradient(
-            from 0deg,
-            hsl(var(--nero-blue) / 0.5),
-            hsl(var(--nero-cyan) / 0.3),
-            hsl(var(--nero-blue) / 0.1),
-            hsl(var(--nero-cyan) / 0.3),
-            hsl(var(--nero-blue) / 0.5)
-        );
-        animation: holoSpin 8s linear infinite;
-        opacity: 0.6;
-    }
-
-    .holo-ring::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        border-radius: 50%;
-        background: hsl(var(--background));
-    }
-
-    .arc-border {
-        position: relative;
-    }
-
-    .arc-border::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        padding: 1px;
-        background: linear-gradient(
-            135deg,
-            hsl(var(--nero-blue) / 0.6),
-            hsl(var(--nero-blue) / 0.1) 30%,
-            transparent 50%,
-            hsl(var(--nero-cyan) / 0.1) 70%,
-            hsl(var(--nero-cyan) / 0.4)
-        );
-        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        -webkit-mask-composite: xor;
-        mask-composite: exclude;
-        pointer-events: none;
-    }
-
-    .scanline {
-        position: relative;
-        overflow: hidden;
-    }
-
-    .scanline::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background: repeating-linear-gradient(
-            0deg,
-            transparent,
-            transparent 2px,
-            hsl(var(--nero-blue) / 0.015) 2px,
-            hsl(var(--nero-blue) / 0.015) 4px
-        );
-        pointer-events: none;
-    }
-
-    .text-gradient-nero {
-        background: linear-gradient(135deg, hsl(var(--nero-blue)) 0%, hsl(var(--nero-cyan)) 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-
-    .border-glow {
-        box-shadow:
-            inset 0 0 0 1px hsl(var(--nero-blue) / 0.1),
-            0 0 20px -5px hsl(var(--nero-blue) / 0.2);
-    }
-
-    .input-glow {
-        background: linear-gradient(
-            to bottom,
-            hsl(222 25% 6% / 0.95),
-            hsl(222 28% 4% / 0.98)
-        );
-        border: 1px solid hsl(var(--nero-blue) / 0.2);
-        box-shadow:
-            0 0 0 1px hsl(var(--nero-blue) / 0.05) inset,
-            0 -4px 30px -10px hsl(var(--nero-blue) / 0.15),
-            0 4px 20px -5px hsl(222 50% 2% / 0.8);
-        transition: all 0.3s ease;
-    }
-
-    .input-glow:focus-within {
-        border-color: hsl(var(--nero-blue) / 0.4);
-        box-shadow:
-            0 0 0 1px hsl(var(--nero-blue) / 0.1) inset,
-            0 0 40px -10px hsl(var(--nero-blue) / 0.3),
-            0 4px 20px -5px hsl(222 50% 2% / 0.8);
-    }
-
-    .floating-input {
-        position: relative;
-    }
-
-    .floating-input::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 10%;
-        right: 10%;
-        height: 1px;
-        background: linear-gradient(
-            90deg,
-            transparent,
-            hsl(var(--nero-blue) / 0.5) 20%,
-            hsl(var(--nero-blue) / 0.5) 80%,
-            transparent
-        );
-    }
-
-    .chat-grid {
-        background-image:
-            linear-gradient(hsl(var(--nero-blue) / 0.02) 1px, transparent 1px),
-            linear-gradient(90deg, hsl(var(--nero-blue) / 0.02) 1px, transparent 1px);
-        background-size: 40px 40px;
-    }
-
-    .bg-noise {
-        position: relative;
-    }
-
-    .bg-noise::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-        opacity: 0.015;
-        pointer-events: none;
-        mix-blend-mode: overlay;
-    }
-
-    .light .glass-panel {
-        background: linear-gradient(
-            135deg,
-            hsl(var(--nero-blue) / 0.06) 0%,
-            hsl(220 20% 98% / 0.9) 50%,
-            hsl(var(--nero-cyan) / 0.04) 100%
-        );
-        border: 1px solid hsl(var(--nero-blue) / 0.15);
-        box-shadow:
-            0 0 0 1px hsl(220 20% 100% / 0.5) inset,
-            0 8px 32px -8px hsl(220 30% 60% / 0.15),
-            0 0 40px -20px hsl(var(--nero-blue) / 0.15);
-    }
-
-    .light .glass-panel-user {
-        background: linear-gradient(
-            135deg,
-            hsl(var(--nero-blue) / 0.85) 0%,
-            hsl(var(--nero-blue) / 0.75) 100%
-        );
-        border: 1px solid hsl(var(--nero-blue) / 0.3);
-        box-shadow:
-            0 0 0 1px hsl(0 0% 100% / 0.2) inset,
-            0 8px 32px -8px hsl(222 30% 50% / 0.3),
-            0 0 30px -10px hsl(var(--nero-blue) / 0.4);
-    }
-
-    .light .input-glow {
-        background: linear-gradient(
-            to bottom,
-            hsl(220 20% 99% / 0.95),
-            hsl(220 18% 97% / 0.98)
-        );
-        border: 1px solid hsl(var(--nero-blue) / 0.2);
-        box-shadow:
-            0 0 0 1px hsl(220 20% 100% / 0.5) inset,
-            0 -4px 30px -10px hsl(var(--nero-blue) / 0.08),
-            0 4px 20px -5px hsl(220 30% 60% / 0.1);
-    }
-
-    .light .input-glow:focus-within {
-        border-color: hsl(var(--nero-blue) / 0.4);
-        box-shadow:
-            0 0 0 1px hsl(var(--nero-blue) / 0.08) inset,
-            0 0 40px -10px hsl(var(--nero-blue) / 0.15),
-            0 4px 20px -5px hsl(220 30% 60% / 0.15);
-    }
-
-    .light .holo-ring::after {
-        background: hsl(220 20% 98%);
-    }
-
-    .light .chat-grid {
-        background-image:
-            linear-gradient(hsl(var(--nero-blue) / 0.04) 1px, transparent 1px),
-            linear-gradient(90deg, hsl(var(--nero-blue) / 0.04) 1px, transparent 1px);
-    }
+    --animate-in: enter 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    --animate-out: exit 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes holoSpin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+* {
+    border-color: var(--border);
 }
 
-@keyframes glitch {
-    0%, 90%, 100% {
-        opacity: 1;
-        transform: translate(0);
-    }
-    92% {
-        opacity: 0.8;
-        transform: translate(-2px, 1px);
-    }
-    94% {
-        opacity: 1;
-        transform: translate(2px, -1px);
-    }
-    96% {
-        opacity: 0.9;
-        transform: translate(-1px, -1px);
-    }
-    98% {
-        opacity: 1;
-        transform: translate(1px, 1px);
-    }
+html {
+    font-size: 15px;
 }
 
-@keyframes flicker {
-    0%, 92%, 100% {
-        opacity: 1;
-    }
-    93% {
-        opacity: 0.7;
-    }
-    95% {
-        opacity: 0.9;
-    }
-    97% {
-        opacity: 0.5;
-    }
-    98% {
-        opacity: 1;
-    }
+body {
+    font-family: var(--font-body);
+    background-color: var(--background);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    background-image:
+        radial-gradient(in oklch, ellipse 100% 80% at 50% -30%, color-mix(in oklch, var(--nero-blue) 6%, transparent), transparent 60%),
+        radial-gradient(in oklch, ellipse 60% 40% at 100% 100%, color-mix(in oklch, var(--nero-cyan) 3%, transparent), transparent 50%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    position: relative;
 }
 
-@keyframes pulse-glow {
-    0%, 100% {
-        filter: drop-shadow(0 0 8px hsl(var(--nero-blue) / 0.5))
-                drop-shadow(0 0 20px hsl(var(--nero-blue) / 0.3));
-    }
-    50% {
-        filter: drop-shadow(0 0 16px hsl(var(--nero-blue) / 0.7))
-                drop-shadow(0 0 40px hsl(var(--nero-blue) / 0.4));
-    }
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    opacity: 0.035;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+    z-index: 0;
 }
 
-@keyframes typing-cursor {
-    0%, 100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0;
-    }
+.light body {
+    background-image:
+        radial-gradient(in oklch, ellipse 100% 80% at 50% -30%, color-mix(in oklch, var(--nero-blue) 5%, transparent), transparent 60%),
+        radial-gradient(in oklch, ellipse 60% 40% at 100% 100%, color-mix(in oklch, var(--nero-cyan) 3%, transparent), transparent 50%);
 }
 
-@keyframes messageSlideIn {
-    from {
-        opacity: 0;
-        transform: translateY(16px) translateX(-12px) scale(0.98);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) translateX(0) scale(1);
-    }
+::selection {
+    background: color-mix(in oklch, var(--nero-blue) 30%, transparent);
+    color: var(--foreground);
 }
 
-@keyframes messageSlideInRight {
-    from {
-        opacity: 0;
-        transform: translateY(16px) translateX(12px) scale(0.98);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) translateX(0) scale(1);
-    }
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+::-webkit-scrollbar-track {
+    background: transparent;
 }
 
-@keyframes scaleIn {
-    from {
-        opacity: 0;
-        transform: scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
+::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--foreground) 15%, transparent);
+    border-radius: 9999px;
 }
 
-@keyframes floatUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklch, var(--foreground) 25%, transparent);
 }
 
-@keyframes iconPulse {
-    0%, 100% {
-        transform: scale(1);
-        filter: drop-shadow(0 0 12px hsl(var(--nero-blue) / 0.6));
-    }
-    50% {
-        transform: scale(1.02);
-        filter: drop-shadow(0 0 24px hsl(var(--nero-blue) / 0.8));
-    }
+@utility font-display {
+    font-family: var(--font-display);
 }
 
-@keyframes borderGlow {
-    0%, 100% {
-        border-color: hsl(var(--nero-blue) / 0.2);
-        box-shadow: 0 0 20px -5px hsl(var(--nero-blue) / 0.1);
-    }
-    50% {
-        border-color: hsl(var(--nero-blue) / 0.4);
-        box-shadow: 0 0 30px -5px hsl(var(--nero-blue) / 0.2);
-    }
+@utility font-body {
+    font-family: var(--font-body);
 }
 
-@keyframes arcPulse {
-    0%, 100% {
-        opacity: 0.6;
-    }
-    50% {
-        opacity: 1;
-    }
+@utility font-mono {
+    font-family: var(--font-mono);
 }
 
-@keyframes orbitRing {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+@utility glitch-text {
+    animation: glitch 2s infinite;
 }
 
-.animate-icon-pulse {
+@utility glitch-flicker {
+    animation: flicker 4s infinite;
+}
+
+@utility nero-glow {
+    filter: drop-shadow(0 0 8px color-mix(in oklch, var(--nero-blue) 50%, transparent))
+            drop-shadow(0 0 20px color-mix(in oklch, var(--nero-blue) 30%, transparent));
+}
+
+@utility nero-glow-subtle {
+    filter: drop-shadow(0 0 4px color-mix(in oklch, var(--nero-blue) 40%, transparent));
+}
+
+@utility nero-glow-strong {
+    filter: drop-shadow(0 0 12px color-mix(in oklch, var(--nero-blue) 70%, transparent))
+            drop-shadow(0 0 30px color-mix(in oklch, var(--nero-blue) 40%, transparent));
+}
+
+@utility message-appear {
+    animation: messageSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@utility message-appear-user {
+    animation: messageSlideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@utility glass-panel {
+    background: linear-gradient(
+        in oklch 135deg,
+        color-mix(in oklch, var(--nero-blue) 5%, transparent) 0%,
+        color-mix(in oklch, #0d1117 90%, transparent) 50%,
+        color-mix(in oklch, var(--nero-cyan) 2%, transparent) 100%
+    );
+    backdrop-filter: blur(20px);
+    border: 1px solid color-mix(in oklch, var(--nero-blue) 12%, transparent);
+    box-shadow:
+        0 0 0 1px color-mix(in oklch, var(--nero-blue) 3%, transparent) inset,
+        0 4px 16px -6px color-mix(in oklch, #030508 60%, transparent);
+}
+
+@utility glass-panel-user {
+    background: linear-gradient(
+        in oklch 135deg,
+        color-mix(in oklch, var(--nero-blue) 30%, transparent) 0%,
+        color-mix(in oklch, var(--nero-blue) 22%, transparent) 100%
+    );
+    backdrop-filter: blur(20px);
+    border: 1px solid color-mix(in oklch, var(--nero-blue) 30%, transparent);
+    box-shadow:
+        0 0 0 1px color-mix(in oklch, var(--nero-blue) 10%, transparent) inset,
+        0 4px 16px -6px color-mix(in oklch, #030508 50%, transparent);
+}
+
+@utility holo-ring {
+    position: relative;
+}
+
+@utility arc-border {
+    position: relative;
+}
+
+@utility scanline {
+    position: relative;
+    overflow: hidden;
+}
+
+@utility text-gradient-nero {
+    background: linear-gradient(in oklch 135deg, var(--nero-blue) 0%, var(--nero-cyan) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+@utility border-glow {
+    box-shadow:
+        inset 0 0 0 1px color-mix(in oklch, var(--nero-blue) 10%, transparent),
+        0 0 20px -5px color-mix(in oklch, var(--nero-blue) 20%, transparent);
+}
+
+@utility input-glow {
+    background: linear-gradient(
+        in oklch to bottom,
+        color-mix(in oklch, #0d1117 95%, transparent),
+        color-mix(in oklch, #080a0d 98%, transparent)
+    );
+    border: 1px solid color-mix(in oklch, var(--nero-blue) 20%, transparent);
+    box-shadow:
+        0 0 0 1px color-mix(in oklch, var(--nero-blue) 5%, transparent) inset,
+        0 -4px 30px -10px color-mix(in oklch, var(--nero-blue) 15%, transparent),
+        0 4px 20px -5px color-mix(in oklch, #030508 80%, transparent);
+    transition: all 0.3s ease;
+}
+
+@utility floating-input {
+    position: relative;
+}
+
+@utility chat-grid {
+    background-image:
+        linear-gradient(in oklch, color-mix(in oklch, var(--nero-blue) 2%, transparent) 1px, transparent 1px),
+        linear-gradient(in oklch 90deg, color-mix(in oklch, var(--nero-blue) 2%, transparent) 1px, transparent 1px);
+    background-size: 40px 40px;
+}
+
+@utility bg-noise {
+    position: relative;
+}
+
+@utility animate-icon-pulse {
     animation: iconPulse 3s ease-in-out infinite;
 }
 
-.animate-border-glow {
+@utility animate-border-glow {
     animation: borderGlow 4s ease-in-out infinite;
 }
 
-.animate-arc-pulse {
+@utility animate-arc-pulse {
     animation: arcPulse 2s ease-in-out infinite;
 }
 
-.animate-orbit {
+@utility animate-orbit {
     animation: orbitRing 20s linear infinite;
+}
+
+.holo-ring::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    background: conic-gradient(
+        in oklch from 0deg,
+        color-mix(in oklch, var(--nero-blue) 50%, transparent),
+        color-mix(in oklch, var(--nero-cyan) 30%, transparent),
+        color-mix(in oklch, var(--nero-blue) 10%, transparent),
+        color-mix(in oklch, var(--nero-cyan) 30%, transparent),
+        color-mix(in oklch, var(--nero-blue) 50%, transparent)
+    );
+    animation: holoSpin 8s linear infinite;
+    opacity: 0.6;
+}
+
+.holo-ring::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--background);
+}
+
+.arc-border::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+        in oklch 135deg,
+        color-mix(in oklch, var(--nero-blue) 30%, transparent),
+        color-mix(in oklch, var(--nero-blue) 6%, transparent) 30%,
+        transparent 50%,
+        color-mix(in oklch, var(--nero-cyan) 6%, transparent) 70%,
+        color-mix(in oklch, var(--nero-cyan) 20%, transparent)
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+}
+
+.scanline::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        in oklch 0deg,
+        transparent,
+        transparent 2px,
+        color-mix(in oklch, var(--nero-blue) 1.5%, transparent) 2px,
+        color-mix(in oklch, var(--nero-blue) 1.5%, transparent) 4px
+    );
+    pointer-events: none;
+}
+
+.bg-noise::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    opacity: 0.035;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+}
+
+.input-glow:focus-within {
+    border-color: color-mix(in oklch, var(--nero-blue) 40%, transparent);
+    box-shadow:
+        0 0 0 1px color-mix(in oklch, var(--nero-blue) 10%, transparent) inset,
+        0 0 40px -10px color-mix(in oklch, var(--nero-blue) 30%, transparent),
+        0 4px 20px -5px color-mix(in oklch, #030508 80%, transparent);
+}
+
+.floating-input::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 10%;
+    right: 10%;
+    height: 1px;
+    background: linear-gradient(
+        in oklch 90deg,
+        transparent,
+        color-mix(in oklch, var(--nero-blue) 50%, transparent) 20%,
+        color-mix(in oklch, var(--nero-blue) 50%, transparent) 80%,
+        transparent
+    );
+}
+
+.light .glass-panel {
+    background: linear-gradient(
+        in oklch 135deg,
+        color-mix(in oklch, var(--nero-blue) 4%, transparent) 0%,
+        color-mix(in oklch, #f6f7f9 90%, transparent) 50%,
+        color-mix(in oklch, var(--nero-cyan) 2%, transparent) 100%
+    );
+    border: 1px solid color-mix(in oklch, var(--nero-blue) 12%, transparent);
+    box-shadow:
+        0 0 0 1px color-mix(in oklch, white 50%, transparent) inset,
+        0 4px 16px -6px color-mix(in oklch, #8090a0 10%, transparent);
+}
+
+.light .glass-panel-user {
+    background: linear-gradient(
+        in oklch 135deg,
+        color-mix(in oklch, var(--nero-blue) 85%, transparent) 0%,
+        color-mix(in oklch, var(--nero-blue) 75%, transparent) 100%
+    );
+    border: 1px solid color-mix(in oklch, var(--nero-blue) 25%, transparent);
+    box-shadow:
+        0 0 0 1px color-mix(in oklch, white 15%, transparent) inset,
+        0 4px 16px -6px color-mix(in oklch, #5070a0 20%, transparent);
+}
+
+.light .input-glow {
+    background: linear-gradient(
+        in oklch to bottom,
+        color-mix(in oklch, #f8f9fb 95%, transparent),
+        color-mix(in oklch, #f2f4f7 98%, transparent)
+    );
+    border: 1px solid color-mix(in oklch, var(--nero-blue) 20%, transparent);
+    box-shadow:
+        0 0 0 1px color-mix(in oklch, white 50%, transparent) inset,
+        0 -4px 30px -10px color-mix(in oklch, var(--nero-blue) 8%, transparent),
+        0 4px 20px -5px color-mix(in oklch, #8090a0 10%, transparent);
+}
+
+.light .input-glow:focus-within {
+    border-color: color-mix(in oklch, var(--nero-blue) 40%, transparent);
+    box-shadow:
+        0 0 0 1px color-mix(in oklch, var(--nero-blue) 8%, transparent) inset,
+        0 0 40px -10px color-mix(in oklch, var(--nero-blue) 15%, transparent),
+        0 4px 20px -5px color-mix(in oklch, #8090a0 15%, transparent);
+}
+
+.light .holo-ring::after {
+    background: #f6f7f9;
+}
+
+.light .chat-grid {
+    background-image:
+        linear-gradient(in oklch, color-mix(in oklch, var(--nero-blue) 4%, transparent) 1px, transparent 1px),
+        linear-gradient(in oklch 90deg, color-mix(in oklch, var(--nero-blue) 4%, transparent) 1px, transparent 1px);
 }
 
 .stagger-1 { animation-delay: 0.1s; }
@@ -539,8 +468,104 @@
 .stagger-4 { animation-delay: 0.4s; }
 .stagger-5 { animation-delay: 0.5s; }
 
+@keyframes holoSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes glitch {
+    0%, 90%, 100% { opacity: 1; transform: translate(0); }
+    92% { opacity: 0.8; transform: translate(-2px, 1px); }
+    94% { opacity: 1; transform: translate(2px, -1px); }
+    96% { opacity: 0.9; transform: translate(-1px, -1px); }
+    98% { opacity: 1; transform: translate(1px, 1px); }
+}
+
+@keyframes flicker {
+    0%, 92%, 100% { opacity: 1; }
+    93% { opacity: 0.7; }
+    95% { opacity: 0.9; }
+    97% { opacity: 0.5; }
+    98% { opacity: 1; }
+}
+
+@keyframes pulse-glow {
+    0%, 100% {
+        filter: drop-shadow(0 0 8px color-mix(in oklch, var(--nero-blue) 50%, transparent))
+                drop-shadow(0 0 20px color-mix(in oklch, var(--nero-blue) 30%, transparent));
+    }
+    50% {
+        filter: drop-shadow(0 0 16px color-mix(in oklch, var(--nero-blue) 70%, transparent))
+                drop-shadow(0 0 40px color-mix(in oklch, var(--nero-blue) 40%, transparent));
+    }
+}
+
+@keyframes typing-cursor {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+@keyframes messageSlideIn {
+    from { opacity: 0; transform: translateY(16px) translateX(-12px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) translateX(0) scale(1); }
+}
+
+@keyframes messageSlideInRight {
+    from { opacity: 0; transform: translateY(16px) translateX(12px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) translateX(0) scale(1); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes floatUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes iconPulse {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 12px color-mix(in oklch, var(--nero-blue) 60%, transparent)); }
+    50% { transform: scale(1.02); filter: drop-shadow(0 0 24px color-mix(in oklch, var(--nero-blue) 80%, transparent)); }
+}
+
+@keyframes borderGlow {
+    0%, 100% {
+        border-color: color-mix(in oklch, var(--nero-blue) 20%, transparent);
+        box-shadow: 0 0 20px -5px color-mix(in oklch, var(--nero-blue) 10%, transparent);
+    }
+    50% {
+        border-color: color-mix(in oklch, var(--nero-blue) 40%, transparent);
+        box-shadow: 0 0 30px -5px color-mix(in oklch, var(--nero-blue) 20%, transparent);
+    }
+}
+
+@keyframes arcPulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+@keyframes orbitRing {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes enter {
+    from { opacity: 0; transform: scale(0.95) translateY(4px); }
+}
+
+@keyframes exit {
+    to { opacity: 0; transform: scale(0.95) translateY(4px); }
+}
+
 .prose {
-    color: hsl(var(--foreground) / 0.9);
+    color: color-mix(in oklch, var(--foreground) 90%, transparent);
 }
 
 .prose p {
@@ -552,18 +577,18 @@
 }
 
 .prose code {
-    background: hsl(var(--nero-blue) / 0.1);
-    border: 1px solid hsl(var(--nero-blue) / 0.2);
+    background: color-mix(in oklch, var(--nero-blue) 10%, transparent);
+    border: 1px solid color-mix(in oklch, var(--nero-blue) 20%, transparent);
     padding: 0.15em 0.4em;
     border-radius: 0.375rem;
     font-size: 0.875em;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    color: hsl(var(--nero-blue));
+    font-family: var(--font-mono);
+    color: var(--nero-blue);
 }
 
 .prose pre {
-    background: hsl(222 25% 6% / 0.8);
-    border: 1px solid hsl(var(--nero-blue) / 0.15);
+    background: color-mix(in oklch, #0d1117 80%, transparent);
+    border: 1px solid color-mix(in oklch, var(--nero-blue) 15%, transparent);
     border-radius: 0.75rem;
     padding: 1rem;
     overflow-x: auto;
@@ -574,22 +599,22 @@
     background: none;
     border: none;
     padding: 0;
-    color: hsl(var(--foreground) / 0.85);
+    color: color-mix(in oklch, var(--foreground) 85%, transparent);
     font-size: 0.8125em;
 }
 
 .prose a {
-    color: hsl(var(--nero-blue));
+    color: var(--nero-blue);
     text-decoration: underline;
     text-underline-offset: 2px;
 }
 
 .prose a:hover {
-    color: hsl(var(--nero-cyan));
+    color: var(--nero-cyan);
 }
 
 .prose strong {
-    color: hsl(var(--foreground));
+    color: var(--foreground);
     font-weight: 600;
 }
 
@@ -603,15 +628,15 @@
 }
 
 .prose blockquote {
-    border-left: 3px solid hsl(var(--nero-blue) / 0.4);
+    border-left: 3px solid color-mix(in oklch, var(--nero-blue) 40%, transparent);
     padding-left: 1em;
     margin: 0.75em 0;
-    color: hsl(var(--foreground) / 0.7);
+    color: color-mix(in oklch, var(--foreground) 70%, transparent);
     font-style: italic;
 }
 
 .prose h1, .prose h2, .prose h3, .prose h4 {
-    color: hsl(var(--foreground));
+    color: var(--foreground);
     font-weight: 600;
     margin-top: 1em;
     margin-bottom: 0.5em;
@@ -622,16 +647,16 @@
 }
 
 .light .prose pre {
-    background: hsl(220 18% 92%);
-    border: 1px solid hsl(220 15% 85%);
+    background: #e8eaef;
+    border: 1px solid #d4d9e2;
 }
 
 .light .prose pre code {
-    color: hsl(222 25% 25%);
+    color: #2a3040;
 }
 
 .light .prose code {
-    background: hsl(var(--nero-blue) / 0.1);
-    border: 1px solid hsl(var(--nero-blue) / 0.12);
-    color: hsl(216 75% 45%);
+    background: color-mix(in oklch, var(--nero-blue) 10%, transparent);
+    border: 1px solid color-mix(in oklch, var(--nero-blue) 12%, transparent);
+    color: #2a5ea0;
 }

@@ -170,7 +170,7 @@
 <div class="flex h-full flex-col">
     <div class="border-b border-border/50 bg-card/30 backdrop-blur-sm p-6">
         <div class="mx-auto max-w-4xl">
-            <h1 class="text-2xl font-semibold tracking-tight">
+            <h1 class="text-2xl font-semibold tracking-tight font-display">
                 <span class="text-gradient-nero">Settings</span>
             </h1>
             <p class="text-sm text-muted-foreground mt-1">Configure Nero preferences</p>

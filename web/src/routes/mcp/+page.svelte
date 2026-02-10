@@ -138,7 +138,7 @@
         <div class="mx-auto max-w-4xl">
             <div class="flex items-start justify-between gap-4">
                 <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">
+                    <h1 class="text-2xl font-semibold tracking-tight font-display">
                         <span class="text-gradient-nero">MCP Servers</span>
                     </h1>
                     <p class="text-sm text-muted-foreground mt-1">Manage Model Context Protocol servers</p>

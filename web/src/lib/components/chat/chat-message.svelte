@@ -70,7 +70,7 @@
         </div>
 
         <div class="max-w-[75%] relative group">
-            <div class="absolute -inset-1 rounded-2xl bg-primary/20 blur-xl opacity-60 group-hover:opacity-80 transition-opacity"></div>
+            <div class="absolute -inset-1 rounded-2xl bg-primary/10 blur-xl opacity-40 group-hover:opacity-60 transition-opacity"></div>
             <div class="relative glass-panel-user rounded-2xl rounded-br-md px-4 py-3">
                 {#if showMedium}
                     {@const config = mediumConfig[medium!]!}
@@ -89,7 +89,7 @@
     <div class="message-appear flex gap-4 items-end">
         <div class="relative flex h-10 w-10 shrink-0 items-center justify-center group/icon">
             <div class="absolute inset-0 rounded-full bg-gradient-to-br from-muted to-background border border-primary/20"></div>
-            <div class="absolute inset-0 rounded-full bg-primary/10 blur-xl opacity-60 group-hover/icon:opacity-100 transition-opacity"></div>
+            <div class="absolute inset-0 rounded-full bg-primary/5 blur-lg opacity-40 group-hover/icon:opacity-70 transition-opacity"></div>
 
             <div class="absolute inset-[-4px] rounded-full border border-primary/10 animate-arc-pulse"></div>
             <div class="absolute inset-[-8px] rounded-full border border-primary/5 opacity-50"></div>
@@ -98,7 +98,7 @@
         </div>
 
         <div class="max-w-[75%] relative group/msg">
-            <div class="absolute -inset-1 rounded-2xl bg-primary/5 blur-xl opacity-0 group-hover/msg:opacity-60 transition-opacity"></div>
+            <div class="absolute -inset-1 rounded-2xl bg-primary/3 blur-xl opacity-0 group-hover/msg:opacity-40 transition-opacity"></div>
             <div class="relative glass-panel rounded-2xl rounded-bl-md px-4 py-3 arc-border">
                 {#if showMedium}
                     {@const config = mediumConfig[medium!]!}

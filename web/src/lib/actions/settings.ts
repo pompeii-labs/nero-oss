@@ -1,4 +1,4 @@
-import { getServerUrl, buildServerResponse, type ServerResponse } from './helpers';
+import { get, put, del, type NeroResult } from './helpers';
 
 export type NeroSettings = {
     streaming: boolean;
@@ -23,83 +23,34 @@ export type NeroConfig = {
     allowedTools?: string[];
 };
 
-export async function getSettings(): Promise<ServerResponse<NeroConfig>> {
-    try {
-        const response = await fetch(getServerUrl('/api/settings'));
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        return buildServerResponse({ data });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
+export function getSettings(): Promise<NeroResult<NeroConfig>> {
+    return get('/api/settings');
 }
 
-export async function updateSettings(
-    settings: Partial<NeroSettings>,
-): Promise<ServerResponse<NeroConfig>> {
-    try {
-        const response = await fetch(getServerUrl('/api/settings'), {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ settings }),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        return buildServerResponse({ data });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
+export function updateSettings(settings: Partial<NeroSettings>): Promise<NeroResult<NeroConfig>> {
+    return put('/api/settings', { settings });
 }
 
-export async function updateLicenseKey(licenseKey: string | null): Promise<ServerResponse<void>> {
-    try {
-        const response = await fetch(getServerUrl('/api/settings/license'), {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ licenseKey }),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return buildServerResponse({ data: undefined });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
+export function updateLicenseKey(licenseKey: string | null): Promise<NeroResult<void>> {
+    return put('/api/settings/license', { licenseKey });
 }
 
-export async function getAllowedTools(): Promise<ServerResponse<string[]>> {
-    try {
-        const response = await fetch(getServerUrl('/api/settings/allowed-tools'));
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        return buildServerResponse({ data: data.tools });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
+export async function getAllowedTools(): Promise<NeroResult<string[]>> {
+    const result = await get<{ tools: string[] }>('/api/settings/allowed-tools');
+    if (result.success) {
+        return { success: true, data: result.data.tools };
     }
+    return result;
 }
 
-export async function revokeAllowedTool(tool: string): Promise<ServerResponse<void>> {
-    try {
-        const response = await fetch(
-            getServerUrl(`/api/settings/allowed-tools/${encodeURIComponent(tool)}`),
-            {
-                method: 'DELETE',
-            },
-        );
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return buildServerResponse({ data: undefined });
-    } catch (e) {
-        return buildServerResponse({ error: (e as Error).message });
-    }
+export function revokeAllowedTool(tool: string): Promise<NeroResult<void>> {
+    return del(`/api/settings/allowed-tools/${encodeURIComponent(tool)}`);
 }
 
 export async function validateModel(modelId: string): Promise<boolean> {
-    try {
-        const response = await fetch(
-            getServerUrl(`/api/models/validate/${encodeURIComponent(modelId)}`),
-        );
-        if (!response.ok) return true;
-        const data = await response.json();
-        return data.valid;
-    } catch {
-        return true;
-    }
+    const result = await get<{ valid: boolean }>(
+        `/api/models/validate/${encodeURIComponent(modelId)}`,
+    );
+    if (result.success) return result.data.valid;
+    return true;
 }

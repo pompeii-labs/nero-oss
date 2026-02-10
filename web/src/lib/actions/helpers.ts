@@ -5,14 +5,48 @@ export function getServerUrl(route: string = ''): string {
     return `${baseUrl}${route}`;
 }
 
-export type ServerResponse<T> = { success: true; data: T } | { success: false; error: string };
+export type NeroResult<T> =
+    | { success: true; data: T }
+    | { success: false; error: { message: string; status?: number } };
 
-export function buildServerResponse<T>(params: { data: T }): ServerResponse<T>;
-export function buildServerResponse<T>(params: { error: string }): ServerResponse<T>;
-export function buildServerResponse<T>(params: { data: T } | { error: string }): ServerResponse<T> {
-    if ('data' in params) {
-        return { success: true, data: params.data };
-    } else {
-        return { success: false, error: params.error };
+async function request<T>(path: string, options: RequestInit = {}): Promise<NeroResult<T>> {
+    try {
+        const res = await fetch(getServerUrl(path), {
+            ...options,
+            headers: { 'Content-Type': 'application/json', ...options.headers },
+        });
+        if (!res.ok) {
+            const errorText = await res.text().catch(() => 'Request failed');
+            return { success: false, error: { message: errorText, status: res.status } };
+        }
+        const data = await res.json();
+        return { success: true, data };
+    } catch (err) {
+        return {
+            success: false,
+            error: { message: err instanceof Error ? err.message : 'Request failed' },
+        };
     }
+}
+
+export function get<T>(path: string): Promise<NeroResult<T>> {
+    return request<T>(path, { method: 'GET' });
+}
+
+export function post<T>(path: string, body?: unknown): Promise<NeroResult<T>> {
+    return request<T>(path, {
+        method: 'POST',
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+}
+
+export function put<T>(path: string, body?: unknown): Promise<NeroResult<T>> {
+    return request<T>(path, {
+        method: 'PUT',
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+}
+
+export function del<T>(path: string): Promise<NeroResult<T>> {
+    return request<T>(path, { method: 'DELETE' });
 }

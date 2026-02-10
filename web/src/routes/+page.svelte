@@ -351,7 +351,7 @@
 <div class="flex h-full flex-col relative">
     <div class="absolute inset-0 pointer-events-none overflow-hidden">
         <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl"></div>
-        <div class="absolute bottom-1/3 right-1/4 w-64 h-64 bg-[hsl(var(--nero-cyan))]/3 rounded-full blur-3xl"></div>
+        <div class="absolute bottom-1/3 right-1/4 w-64 h-64 bg-nero-cyan/3 rounded-full blur-3xl"></div>
     </div>
 
     <div
@@ -378,7 +378,7 @@
                         </div>
                     </div>
 
-                    <h1 class="text-4xl font-semibold tracking-tight mb-3 opacity-0 animate-[floatUp_0.6s_ease-out_0.2s_forwards]">
+                    <h1 class="text-4xl font-semibold tracking-tight mb-3 opacity-0 animate-[floatUp_0.6s_ease-out_0.2s_forwards] font-display">
                         <span class="text-gradient-nero">Nero</span>
                     </h1>
 
@@ -488,13 +488,13 @@
 
             {#if connectionError}
                 <div class="message-appear">
-                    <div class="glass-panel rounded-xl p-4 border-red-500/40 dark:border-red-500/30 bg-red-500/5">
+                    <div class="glass-panel rounded-xl p-4 border-red-500/30 bg-red-500/5">
                         <div class="flex items-start gap-3">
-                            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 shrink-0">
+                            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-400 shrink-0">
                                 <AlertCircle class="h-4 w-4" />
                             </div>
                             <div class="flex-1 min-w-0">
-                                <p class="text-sm text-red-600 dark:text-red-400 font-medium">Connection Error</p>
+                                <p class="text-sm text-red-400 font-medium">Connection Error</p>
                                 <p class="text-sm text-muted-foreground mt-1">{connectionError}</p>
                             </div>
                             <button

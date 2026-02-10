@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { voice } from '$lib/stores/voice';
+    import { voice } from '$lib/stores/voice.svelte';
     import { cn } from '$lib/utils';
     import NeroIcon from '$lib/components/icons/nero-icon.svelte';
     import ToolActivityComponent from '$lib/components/chat/tool-activity.svelte';
@@ -15,19 +15,6 @@
     import Copy from '@lucide/svelte/icons/copy';
     import Key from '@lucide/svelte/icons/key';
 
-    const {
-        status,
-        isMuted,
-        isTalking,
-        rmsLevel,
-        transcript,
-        activities,
-        errorMessage,
-        connect,
-        disconnect,
-        toggleMute
-    } = voice;
-
     let serverInfo: ServerInfo | null = $state(null);
     let loading = $state(true);
 
@@ -40,10 +27,10 @@
     });
 
     function handleToggleConnection() {
-        if ($status === 'connected' || $status === 'connecting') {
-            disconnect();
+        if (voice.status === 'connected' || voice.status === 'connecting') {
+            voice.disconnect();
         } else {
-            connect();
+            voice.connect();
         }
     }
 
@@ -52,8 +39,8 @@
         toast.success('Copied to clipboard');
     }
 
-    const ringScale = $derived(1 + Math.min($rmsLevel * 8, 0.5));
-    const recentActivities = $derived($activities.slice(-3));
+    const ringScale = $derived(1 + Math.min(voice.rmsLevel * 8, 0.5));
+    const recentActivities = $derived(voice.activities.slice(-3));
     const isVoiceEnabled = $derived(serverInfo?.features.voice ?? false);
 </script>
 
@@ -69,7 +56,7 @@
     <div class="flex h-full flex-col">
         <div class="border-b border-border/50 bg-card/30 backdrop-blur-sm p-6">
             <div class="mx-auto max-w-4xl">
-                <h1 class="text-2xl font-semibold tracking-tight">
+                <h1 class="text-2xl font-semibold tracking-tight font-display">
                     <span class="text-gradient-nero">Voice</span>
                 </h1>
                 <p class="text-sm text-muted-foreground mt-1">Talk to Nero using voice</p>
@@ -83,8 +70,8 @@
                 >
                     <div class="p-4 border-b border-border/30">
                         <div class="flex items-center gap-3">
-                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-500/5 border border-amber-500/30 dark:border-amber-500/20">
-                                <Mic class="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-500/5 border border-amber-500/20">
+                                <Mic class="h-5 w-5 text-amber-400" />
                             </div>
                             <div>
                                 <h2 class="font-medium text-foreground">Voice Not Configured</h2>
@@ -198,12 +185,12 @@
     <div class="flex h-full flex-col items-center justify-center relative overflow-hidden">
         <div class="absolute inset-0 pointer-events-none">
             <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl"></div>
-            <div class="absolute bottom-1/3 right-1/4 w-64 h-64 bg-[hsl(var(--nero-cyan))]/3 rounded-full blur-3xl"></div>
+            <div class="absolute bottom-1/3 right-1/4 w-64 h-64 bg-nero-cyan/3 rounded-full blur-3xl"></div>
         </div>
 
         <div class="flex-1 flex flex-col items-center justify-center gap-8 relative z-10">
             <div class="relative">
-                {#if $status === 'connected'}
+                {#if voice.status === 'connected'}
                     <div
                         class="absolute inset-[-30px] rounded-full border-2 border-primary/30 transition-transform duration-75"
                         style="transform: scale({ringScale})"
@@ -218,25 +205,25 @@
                     ></div>
                 {/if}
 
-                {#if $isTalking}
+                {#if voice.isTalking}
                     <div class="absolute inset-[-20px] rounded-full bg-primary/20 blur-xl animate-pulse"></div>
                 {/if}
 
                 <button
                     type="button"
                     onclick={handleToggleConnection}
-                    disabled={$status === 'connecting'}
+                    disabled={voice.status === 'connecting'}
                     class={cn(
                         'relative flex h-32 w-32 items-center justify-center rounded-full transition-all',
-                        $status === 'connected'
+                        voice.status === 'connected'
                             ? 'bg-gradient-to-br from-primary to-primary/80 nero-glow-strong'
                             : 'glass-panel hover:border-primary/40',
-                        $status === 'connecting' && 'opacity-70'
+                        voice.status === 'connecting' && 'opacity-70'
                     )}
                 >
-                    {#if $status === 'connecting'}
+                    {#if voice.status === 'connecting'}
                         <Loader2 class="h-12 w-12 text-primary animate-spin" />
-                    {:else if $status === 'connected'}
+                    {:else if voice.status === 'connected'}
                         <NeroIcon class="h-16 w-12 text-primary-foreground" />
                     {:else}
                         <Phone class="h-10 w-10 text-primary" />
@@ -245,40 +232,40 @@
             </div>
 
             <div class="text-center space-y-2">
-                {#if $status === 'idle'}
+                {#if voice.status === 'idle'}
                     <h2 class="text-2xl font-semibold text-foreground">Voice Mode</h2>
                     <p class="text-muted-foreground">Tap to start talking with Nero</p>
-                {:else if $status === 'connecting'}
+                {:else if voice.status === 'connecting'}
                     <h2 class="text-2xl font-semibold text-foreground">Connecting...</h2>
                     <p class="text-muted-foreground">Setting up voice connection</p>
-                {:else if $status === 'connected'}
+                {:else if voice.status === 'connected'}
                     <h2 class="text-2xl font-semibold text-gradient-nero">
-                        {$isTalking ? 'Nero is speaking' : $isMuted ? 'Muted' : 'Listening'}
+                        {voice.isTalking ? 'Nero is speaking' : voice.isMuted ? 'Muted' : 'Listening'}
                     </h2>
-                    {#if $transcript}
-                        <p class="text-muted-foreground max-w-md">{$transcript}</p>
+                    {#if voice.transcript}
+                        <p class="text-muted-foreground max-w-md">{voice.transcript}</p>
                     {:else}
                         <p class="text-muted-foreground">Say something to Nero</p>
                     {/if}
-                {:else if $status === 'error'}
-                    <h2 class="text-2xl font-semibold text-red-600 dark:text-red-400">Connection Error</h2>
-                    <p class="text-muted-foreground">{$errorMessage || 'Something went wrong'}</p>
+                {:else if voice.status === 'error'}
+                    <h2 class="text-2xl font-semibold text-red-400">Connection Error</h2>
+                    <p class="text-muted-foreground">{voice.errorMessage || 'Something went wrong'}</p>
                 {/if}
             </div>
 
-            {#if $status === 'connected'}
+            {#if voice.status === 'connected'}
                 <div class="flex items-center gap-4">
                     <button
                         type="button"
-                        onclick={toggleMute}
+                        onclick={voice.toggleMute}
                         class={cn(
                             'flex h-14 w-14 items-center justify-center rounded-full transition-all',
-                            $isMuted
+                            voice.isMuted
                                 ? 'bg-red-500/20 border border-red-500/40 text-red-400'
                                 : 'glass-panel text-primary hover:border-primary/40'
                         )}
                     >
-                        {#if $isMuted}
+                        {#if voice.isMuted}
                             <MicOff class="h-6 w-6" />
                         {:else}
                             <Mic class="h-6 w-6" />
@@ -287,7 +274,7 @@
 
                     <button
                         type="button"
-                        onclick={disconnect}
+                        onclick={voice.disconnect}
                         class="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 border border-red-500/40 text-red-400 transition-all hover:bg-red-500/30"
                     >
                         <PhoneOff class="h-6 w-6" />

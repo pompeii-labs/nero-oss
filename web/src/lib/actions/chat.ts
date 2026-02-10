@@ -1,4 +1,4 @@
-import { getServerUrl } from './helpers';
+import { getServerUrl, post, del, type NeroResult } from './helpers';
 
 export type ToolActivity = {
     id: string;
@@ -44,7 +44,7 @@ export async function streamChat(args: {
     });
 
     if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = await response.text().catch(() => `HTTP ${response.status}`);
         args.callbacks.onError?.(errorText || `HTTP ${response.status}`);
         return;
     }
@@ -112,79 +112,43 @@ export async function respondToPermission(
     approved: boolean,
     alwaysAllow = false,
 ): Promise<boolean> {
-    const url = getServerUrl(`/api/permission/${id}`);
-
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approved, alwaysAllow }),
-    });
-
-    return response.ok;
+    const result = await post(`/api/permission/${id}`, { approved, alwaysAllow });
+    return result.success;
 }
 
 export async function addAlwaysAllowTool(tool: string): Promise<boolean> {
-    const url = getServerUrl('/api/permissions/allow');
-
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tool }),
-    });
-
-    return response.ok;
+    const result = await post('/api/permissions/allow', { tool });
+    return result.success;
 }
 
 export async function getAllowedTools(): Promise<string[]> {
-    const url = getServerUrl('/api/permissions');
-
-    const response = await fetch(url);
-    if (!response.ok) return [];
-
-    const data = await response.json();
-    return data.allowed || [];
+    const result = await import('./helpers').then((h) =>
+        h.get<{ allowed: string[] }>('/api/permissions'),
+    );
+    if (result.success) return result.data.allowed || [];
+    return [];
 }
 
 export async function removeAllowedTool(tool: string): Promise<boolean> {
-    const url = getServerUrl(`/api/permissions/allow/${encodeURIComponent(tool)}`);
-
-    const response = await fetch(url, { method: 'DELETE' });
-
-    return response.ok;
+    const result = await del(`/api/permissions/allow/${encodeURIComponent(tool)}`);
+    return result.success;
 }
 
 export async function compactContext(): Promise<{ success: boolean; summary?: string }> {
-    const url = getServerUrl('/api/compact');
-
-    const response = await fetch(url, { method: 'POST' });
-
-    if (!response.ok) {
-        return { success: false };
-    }
-
-    const data = await response.json();
-    return { success: true, summary: data.summary };
+    const result = await post<{ summary: string }>('/api/compact');
+    if (result.success) return { success: true, summary: result.data.summary };
+    return { success: false };
 }
 
 export async function clearHistory(): Promise<{ success: boolean }> {
-    const url = getServerUrl('/api/clear');
-
-    const response = await fetch(url, { method: 'POST' });
-
-    return { success: response.ok };
+    const result = await post('/api/clear');
+    return { success: result.success };
 }
 
 export async function abortChat(): Promise<{ success: boolean; message?: string }> {
-    const url = getServerUrl('/api/abort');
-
-    const response = await fetch(url, { method: 'POST' });
-
-    if (!response.ok) {
-        return { success: false };
-    }
-
-    const data = await response.json();
-    return { success: true, message: data.message };
+    const result = await post<{ message: string }>('/api/abort');
+    if (result.success) return { success: true, message: result.data.message };
+    return { success: false };
 }
 
 export type ThinkSSEEvent =
@@ -215,7 +179,7 @@ export async function streamThink(args: {
     });
 
     if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = await response.text().catch(() => `HTTP ${response.status}`);
         args.callbacks.onError?.(errorText || `HTTP ${response.status}`);
         return;
     }

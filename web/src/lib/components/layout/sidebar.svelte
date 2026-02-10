@@ -14,9 +14,9 @@
     import RefreshCw from '@lucide/svelte/icons/refresh-cw';
     import PanelLeftClose from '@lucide/svelte/icons/panel-left-close';
     import PanelLeft from '@lucide/svelte/icons/panel-left';
-    import { connectionStatus, startConnectionMonitor, checkConnection } from '$lib/stores/connection';
-    import { theme, toggleTheme, initTheme } from '$lib/stores/theme';
-    import { sidebarCollapsed, toggleSidebar } from '$lib/stores/sidebar';
+    import { connection } from '$lib/stores/connection.svelte';
+    import { theme } from '$lib/stores/theme.svelte';
+    import { sidebar } from '$lib/stores/sidebar.svelte';
 
     type NavItem = {
         href: string;
@@ -39,28 +39,26 @@
     }
 
     async function reconnect() {
-        connectionStatus.set('connecting');
-        const ok = await checkConnection();
-        connectionStatus.set(ok ? 'connected' : 'disconnected');
+        await connection.retry();
     }
 
     onMount(() => {
-        initTheme();
-        startConnectionMonitor();
+        theme.init();
+        connection.start();
     });
 </script>
 
 <aside class={cn(
     "flex h-full flex-col border-r border-border bg-card transition-all duration-200",
-    $sidebarCollapsed ? "w-16" : "w-64"
+    sidebar.collapsed ? "w-16" : "w-64"
 )}>
     <div class={cn(
         "flex items-center border-b border-border px-4 py-4",
-        $sidebarCollapsed ? "justify-center" : "gap-3"
+        sidebar.collapsed ? "justify-center" : "gap-3"
     )}>
         <NeroIcon class="h-8 w-6 text-primary flex-shrink-0" />
-        {#if !$sidebarCollapsed}
-            <span class="text-lg font-semibold text-foreground">Nero</span>
+        {#if !sidebar.collapsed}
+            <span class="text-lg font-semibold text-foreground font-display">Nero</span>
         {/if}
     </div>
 
@@ -69,17 +67,17 @@
             {@const active = isActive(item.href, $page.url.pathname)}
             <a
                 href={item.href}
-                title={$sidebarCollapsed ? item.label : undefined}
+                title={sidebar.collapsed ? item.label : undefined}
                 class={cn(
                     'flex items-center rounded-md text-sm font-medium transition-colors',
-                    $sidebarCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2',
+                    sidebar.collapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2',
                     active
                         ? 'bg-primary/10 text-primary'
                         : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                 )}
             >
                 <item.icon class="h-4 w-4 flex-shrink-0" />
-                {#if !$sidebarCollapsed}
+                {#if !sidebar.collapsed}
                     {item.label}
                 {/if}
             </a>
@@ -89,14 +87,14 @@
     <div class="border-t border-border p-3 space-y-2">
         <button
             type="button"
-            onclick={toggleSidebar}
-            title={$sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onclick={sidebar.toggle}
+            title={sidebar.collapsed ? "Expand sidebar" : "Collapse sidebar"}
             class={cn(
                 "flex w-full items-center rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors",
-                $sidebarCollapsed ? "justify-center px-2 py-2" : "gap-3 px-3 py-2"
+                sidebar.collapsed ? "justify-center px-2 py-2" : "gap-3 px-3 py-2"
             )}
         >
-            {#if $sidebarCollapsed}
+            {#if sidebar.collapsed}
                 <PanelLeft class="h-4 w-4" />
             {:else}
                 <PanelLeftClose class="h-4 w-4" />
@@ -106,21 +104,21 @@
 
         <button
             type="button"
-            onclick={toggleTheme}
-            title={$sidebarCollapsed ? ($theme === 'dark' ? 'Light Mode' : 'Dark Mode') : undefined}
+            onclick={theme.toggle}
+            title={sidebar.collapsed ? (theme.value === 'dark' ? 'Light Mode' : 'Dark Mode') : undefined}
             class={cn(
                 "flex w-full items-center rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors",
-                $sidebarCollapsed ? "justify-center px-2 py-2" : "gap-3 px-3 py-2"
+                sidebar.collapsed ? "justify-center px-2 py-2" : "gap-3 px-3 py-2"
             )}
         >
-            {#if $theme === 'dark'}
+            {#if theme.value === 'dark'}
                 <Sun class="h-4 w-4 flex-shrink-0" />
-                {#if !$sidebarCollapsed}
+                {#if !sidebar.collapsed}
                     <span>Light Mode</span>
                 {/if}
             {:else}
                 <Moon class="h-4 w-4 flex-shrink-0" />
-                {#if !$sidebarCollapsed}
+                {#if !sidebar.collapsed}
                     <span>Dark Mode</span>
                 {/if}
             {/if}
@@ -128,27 +126,27 @@
 
         <div class={cn(
             "flex items-center rounded-md bg-muted/50",
-            $sidebarCollapsed ? "justify-center px-2 py-2" : "justify-between px-3 py-2"
+            sidebar.collapsed ? "justify-center px-2 py-2" : "justify-between px-3 py-2"
         )}>
             <div class="flex items-center gap-2">
-                {#if $connectionStatus === 'connected'}
+                {#if connection.value === 'connected'}
                     <div class="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
-                    {#if !$sidebarCollapsed}
+                    {#if !sidebar.collapsed}
                         <span class="text-xs text-muted-foreground">Connected</span>
                     {/if}
-                {:else if $connectionStatus === 'connecting'}
-                    <RefreshCw class="h-3 w-3 text-amber-600 dark:text-amber-400 animate-spin" />
-                    {#if !$sidebarCollapsed}
-                        <span class="text-xs text-amber-600 dark:text-amber-400">Connecting...</span>
+                {:else if connection.value === 'connecting'}
+                    <RefreshCw class="h-3 w-3 text-amber-400 animate-spin" />
+                    {#if !sidebar.collapsed}
+                        <span class="text-xs text-amber-400">Connecting...</span>
                     {/if}
                 {:else}
                     <div class="h-2 w-2 rounded-full bg-red-500"></div>
-                    {#if !$sidebarCollapsed}
-                        <span class="text-xs text-red-600 dark:text-red-400">Disconnected</span>
+                    {#if !sidebar.collapsed}
+                        <span class="text-xs text-red-400">Disconnected</span>
                     {/if}
                 {/if}
             </div>
-            {#if $connectionStatus === 'disconnected' && !$sidebarCollapsed}
+            {#if connection.value === 'disconnected' && !sidebar.collapsed}
                 <button
                     type="button"
                     onclick={reconnect}
