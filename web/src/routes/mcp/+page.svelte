@@ -5,6 +5,9 @@
         addMcpServer,
         removeMcpServer,
         toggleMcpServer,
+        startMcpAuth,
+        getMcpAuthStatus,
+        logoutMcpServer,
         type McpServerConfig
     } from '$lib/actions/mcp';
     import { reloadConfig } from '$lib/actions/health';
@@ -26,6 +29,8 @@
     import ChevronDown from '@lucide/svelte/icons/chevron-down';
     import ChevronRight from '@lucide/svelte/icons/chevron-right';
     import Cpu from '@lucide/svelte/icons/cpu';
+    import Lock from '@lucide/svelte/icons/lock';
+    import LockOpen from '@lucide/svelte/icons/lock-open';
     import { cn } from '$lib/utils';
 
     let servers: Record<string, McpServerConfig> = $state({});
@@ -39,6 +44,9 @@
     let newServerArgs = $state('');
     let saving = $state(false);
 
+    let authStatus: Record<string, boolean> = $state({});
+    let authenticating: Set<string> = $state(new Set());
+
     let expandedServers: Set<string> = $state(new Set());
 
     onMount(async () => {
@@ -51,6 +59,7 @@
         if (response.success) {
             servers = response.data.servers;
             tools = response.data.tools;
+            authStatus = response.data.authStatus || {};
         } else {
             toast.error('Failed to load MCP servers');
         }
@@ -126,6 +135,51 @@
             newSet.add(name);
         }
         expandedServers = newSet;
+    }
+
+    async function handleAuth(name: string) {
+        authenticating = new Set([...authenticating, name]);
+
+        const response = await startMcpAuth(name);
+        if (!response.success) {
+            toast.error(response.error.message || 'Failed to start authentication');
+            authenticating = new Set([...authenticating].filter(n => n !== name));
+            return;
+        }
+
+        window.open(response.data.authUrl, '_blank');
+
+        const maxAttempts = 150;
+        let attempts = 0;
+        const poll = setInterval(async () => {
+            attempts++;
+            const status = await getMcpAuthStatus(name);
+            if (status.success && status.data.authenticated) {
+                clearInterval(poll);
+                authenticating = new Set([...authenticating].filter(n => n !== name));
+                authStatus = { ...authStatus, [name]: true };
+                toast.success(`${name} authenticated`);
+                await loadServers();
+            } else if (status.success && status.data.error) {
+                clearInterval(poll);
+                authenticating = new Set([...authenticating].filter(n => n !== name));
+                toast.error(`Authentication failed: ${status.data.error}`);
+            } else if (attempts >= maxAttempts) {
+                clearInterval(poll);
+                authenticating = new Set([...authenticating].filter(n => n !== name));
+                toast.error('Authentication timed out');
+            }
+        }, 2000);
+    }
+
+    async function handleLogout(name: string) {
+        const response = await logoutMcpServer(name);
+        if (response.success) {
+            authStatus = { ...authStatus, [name]: false };
+            toast.success(`${name} logged out`);
+        } else {
+            toast.error('Failed to logout');
+        }
     }
 
     function getServerTools(name: string): string[] {
@@ -294,7 +348,11 @@
                                                 {/if}
                                             </div>
                                             <p class="mt-0.5 text-xs text-muted-foreground font-mono truncate">
-                                                {config.command} {config.args?.join(' ') || ''}
+                                                {#if config.transport === 'http'}
+                                                    {config.url || ''}
+                                                {:else}
+                                                    {config.command} {config.args?.join(' ') || ''}
+                                                {/if}
                                             </p>
                                             {#if serverTools.length > 0}
                                                 <div class="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -305,6 +363,38 @@
                                         </div>
                                     </button>
                                     <div class="flex items-center gap-1">
+                                        {#if config.transport === 'http'}
+                                            {#if authStatus[name]}
+                                                <span class="rounded-full bg-green-500/10 border border-green-500/20 px-2 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400 uppercase tracking-wide flex items-center gap-1">
+                                                    <Lock class="h-3 w-3" />
+                                                    Authenticated
+                                                </span>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    class="h-8 w-8 text-muted-foreground"
+                                                    onclick={() => handleLogout(name)}
+                                                >
+                                                    <LockOpen class="h-4 w-4" />
+                                                </Button>
+                                            {:else}
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="h-7 text-xs gap-1.5"
+                                                    disabled={authenticating.has(name)}
+                                                    onclick={() => handleAuth(name)}
+                                                >
+                                                    {#if authenticating.has(name)}
+                                                        <Loader2 class="h-3 w-3 animate-spin" />
+                                                        Waiting...
+                                                    {:else}
+                                                        <Lock class="h-3 w-3" />
+                                                        Authenticate
+                                                    {/if}
+                                                </Button>
+                                            {/if}
+                                        {/if}
                                         <Button
                                             variant="ghost"
                                             size="icon"

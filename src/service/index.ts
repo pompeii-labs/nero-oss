@@ -137,7 +137,7 @@ export class NeroService {
 
         this.app.use('/api', createHealthRouter(this.agent));
         this.app.use('/api', createChatRouter(this.agent));
-        this.app.use('/api', createWebRouter(this.agent));
+        this.app.use('/api', createWebRouter(this.agent, this.port));
 
         this.app.use((req: Request, res: Response, next) => {
             if (req.path.startsWith('/api/admin') && !this.isLocalRequest(req)) {

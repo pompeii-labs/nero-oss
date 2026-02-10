@@ -13,6 +13,7 @@ export type McpServerConfig = {
 export type McpServersResponse = {
     servers: Record<string, McpServerConfig>;
     tools: string[];
+    authStatus: Record<string, boolean>;
 };
 
 export function getMcpServers(): Promise<NeroResult<McpServersResponse>> {
@@ -29,4 +30,18 @@ export function removeMcpServer(name: string): Promise<NeroResult<void>> {
 
 export function toggleMcpServer(name: string, disabled: boolean): Promise<NeroResult<void>> {
     return post(`/api/mcp/servers/${encodeURIComponent(name)}/toggle`, { disabled });
+}
+
+export function startMcpAuth(name: string): Promise<NeroResult<{ authUrl: string }>> {
+    return post(`/api/mcp/servers/${encodeURIComponent(name)}/auth`);
+}
+
+export function getMcpAuthStatus(
+    name: string,
+): Promise<NeroResult<{ authenticated: boolean; error?: string }>> {
+    return get(`/api/mcp/servers/${encodeURIComponent(name)}/auth/status`);
+}
+
+export function logoutMcpServer(name: string): Promise<NeroResult<{ success: boolean }>> {
+    return post(`/api/mcp/servers/${encodeURIComponent(name)}/logout`);
 }

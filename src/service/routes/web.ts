@@ -19,10 +19,31 @@ import {
     getSkillsDir,
     findSkill,
 } from '../../skills/index.js';
+import {
+    discoverOAuthMetadata,
+    registerClient,
+    buildAuthorizationUrl,
+    exchangeCodeForTokens,
+    type OAuthClientRegistration,
+    type OAuthAuthorizationServerMetadata,
+} from '../../mcp/oauth.js';
+import { updateMcpServerOAuth } from '../../config.js';
+import type { StoredOAuthData } from '../../mcp/oauth.js';
 
-export function createWebRouter(agent: Nero) {
+interface PendingAuth {
+    serverName: string;
+    codeVerifier: string;
+    redirectUri: string;
+    clientRegistration: OAuthClientRegistration;
+    authServerMetadata: OAuthAuthorizationServerMetadata;
+    completed: boolean;
+    error?: string;
+}
+
+export function createWebRouter(agent: Nero, port?: number) {
     const router = Router();
     const logger = new Logger('Web');
+    const pendingAuths = new Map<string, PendingAuth>();
 
     router.get('/memories', async (req: Request, res: Response) => {
         if (!isDbConnected()) {
@@ -88,9 +109,16 @@ export function createWebRouter(agent: Nero) {
     router.get('/mcp/servers', async (req: Request, res: Response) => {
         try {
             const config = await loadConfig();
+            const authStatus: Record<string, boolean> = {};
+            for (const [name, cfg] of Object.entries(config.mcpServers)) {
+                if (cfg.transport === 'http') {
+                    authStatus[name] = !!cfg.oauth?.tokens;
+                }
+            }
             res.json({
                 servers: config.mcpServers,
                 tools: agent.getMcpToolNames(),
+                authStatus,
             });
         } catch (error) {
             logger.error(`Failed to get MCP servers: ${(error as Error).message}`);
@@ -341,6 +369,185 @@ export function createWebRouter(agent: Nero) {
         } catch (error) {
             logger.error(`Failed to invoke skill: ${(error as Error).message}`);
             res.status(500).json({ error: 'Failed to invoke skill' });
+        }
+    });
+
+    router.post('/mcp/servers/:name/auth', async (req: Request, res: Response) => {
+        const name = decodeURIComponent(req.params.name as string);
+
+        try {
+            const config = await loadConfig();
+            const serverConfig = config.mcpServers[name];
+            if (!serverConfig) {
+                res.status(404).json({ error: 'Server not found' });
+                return;
+            }
+            if (serverConfig.transport !== 'http' || !serverConfig.url) {
+                res.status(400).json({ error: 'Server is not an HTTP transport server' });
+                return;
+            }
+
+            const metadata = await discoverOAuthMetadata(serverConfig.url);
+            if (!metadata?.authServer) {
+                res.status(400).json({ error: 'No OAuth metadata found for this server' });
+                return;
+            }
+
+            const servicePort = port || 4847;
+            const redirectUri = `http://localhost:${servicePort}/api/mcp/oauth/callback`;
+
+            let clientReg = serverConfig.oauth?.clientRegistration || null;
+            if (!clientReg) {
+                clientReg = await registerClient(metadata.authServer, 'Nero', redirectUri);
+                if (!clientReg) {
+                    res.status(500).json({ error: 'Failed to register OAuth client' });
+                    return;
+                }
+            }
+
+            const authResult = buildAuthorizationUrl({
+                authServerMetadata: metadata.authServer,
+                clientId: clientReg.client_id,
+                redirectUri,
+            });
+
+            pendingAuths.set(authResult.state, {
+                serverName: name,
+                codeVerifier: authResult.codeVerifier,
+                redirectUri,
+                clientRegistration: clientReg,
+                authServerMetadata: metadata.authServer,
+                completed: false,
+            });
+
+            setTimeout(() => pendingAuths.delete(authResult.state), 5 * 60 * 1000);
+
+            res.json({ authUrl: authResult.authUrl });
+        } catch (error) {
+            logger.error(`Failed to start OAuth flow: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to start OAuth flow' });
+        }
+    });
+
+    router.get('/mcp/oauth/callback', async (req: Request, res: Response) => {
+        const state = req.query.state as string;
+        const code = req.query.code as string;
+        const error = req.query.error as string;
+
+        if (!state || !pendingAuths.has(state)) {
+            res.status(400).send(
+                '<html><body><h1>Invalid or expired OAuth state</h1><p>Please try again from the Nero dashboard.</p></body></html>',
+            );
+            return;
+        }
+
+        const pending = pendingAuths.get(state)!;
+
+        if (error) {
+            pending.error = error;
+            pending.completed = true;
+            res.send(
+                '<html><body><h1>Authentication failed</h1><p>You can close this tab.</p></body></html>',
+            );
+            return;
+        }
+
+        if (!code) {
+            pending.error = 'No authorization code received';
+            pending.completed = true;
+            res.status(400).send(
+                '<html><body><h1>No authorization code</h1><p>You can close this tab.</p></body></html>',
+            );
+            return;
+        }
+
+        try {
+            const tokens = await exchangeCodeForTokens(
+                pending.authServerMetadata,
+                pending.clientRegistration.client_id,
+                code,
+                pending.codeVerifier,
+                pending.redirectUri,
+            );
+
+            if (!tokens) {
+                pending.error = 'Token exchange failed';
+                pending.completed = true;
+                res.send(
+                    '<html><body><h1>Token exchange failed</h1><p>You can close this tab.</p></body></html>',
+                );
+                return;
+            }
+
+            const oauthData: StoredOAuthData = {
+                serverUrl: (await loadConfig()).mcpServers[pending.serverName]?.url || '',
+                clientRegistration: pending.clientRegistration,
+                tokens,
+                authServerMetadata: pending.authServerMetadata,
+            };
+            await updateMcpServerOAuth(pending.serverName, oauthData);
+
+            pending.completed = true;
+            logger.info(`OAuth completed for MCP server: ${pending.serverName}`);
+            res.send(
+                '<html><body><h1>Authentication successful</h1><p>You can close this tab and return to the Nero dashboard.</p></body></html>',
+            );
+        } catch (err) {
+            pending.error = (err as Error).message;
+            pending.completed = true;
+            logger.error(`OAuth callback error: ${(err as Error).message}`);
+            res.send(
+                '<html><body><h1>Authentication error</h1><p>You can close this tab.</p></body></html>',
+            );
+        }
+    });
+
+    router.get('/mcp/servers/:name/auth/status', async (req: Request, res: Response) => {
+        const name = decodeURIComponent(req.params.name as string);
+
+        try {
+            for (const [, pending] of pendingAuths) {
+                if (pending.serverName === name && pending.completed) {
+                    if (pending.error) {
+                        res.json({ authenticated: false, error: pending.error });
+                        return;
+                    }
+                    res.json({ authenticated: true });
+                    return;
+                }
+            }
+
+            const config = await loadConfig();
+            const serverConfig = config.mcpServers[name];
+            if (serverConfig?.oauth?.tokens) {
+                res.json({ authenticated: true });
+                return;
+            }
+
+            res.json({ authenticated: false });
+        } catch (error) {
+            logger.error(`Failed to check auth status: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to check auth status' });
+        }
+    });
+
+    router.post('/mcp/servers/:name/logout', async (req: Request, res: Response) => {
+        const name = decodeURIComponent(req.params.name as string);
+
+        try {
+            const config = await loadConfig();
+            if (!config.mcpServers[name]) {
+                res.status(404).json({ error: 'Server not found' });
+                return;
+            }
+
+            delete config.mcpServers[name].oauth;
+            await saveConfig(config);
+            logger.info(`OAuth tokens cleared for MCP server: ${name}`);
+            res.json({ success: true });
+        } catch (error) {
+            logger.error(`Failed to logout MCP server: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to logout' });
         }
     });
 
