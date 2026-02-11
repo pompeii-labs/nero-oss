@@ -121,9 +121,8 @@ export class NeroProxy {
         return [];
     }
 
-    async getActions(): Promise<Array<{ request: string; timestamp: string }>> {
-        // TODO: Call service endpoint
-        return [];
+    async getActions(): Promise<any[]> {
+        return this.client.getActions();
     }
 
     getMcpToolNames(): string[] {

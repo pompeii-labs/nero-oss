@@ -25,11 +25,13 @@ import {
     Message,
     Memory,
     Action,
+    type ActionData,
     Summary,
     Note,
     BackgroundLog,
     type BackgroundLogData,
 } from '../models/index.js';
+import { describeRecurrence, parseRecurrence } from '../actions/recurrence.js';
 import { generateDiff } from '../util/diff.js';
 import { hostToContainer, containerToHost } from '../util/paths.js';
 import { formatSessionAge } from '../util/temporal.js';
@@ -929,6 +931,72 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
         }
     }
 
+    async runAction(action: ActionData): Promise<string | null> {
+        const savedMessages = this.getMessages();
+        this.backgroundMode = true;
+        this.stream = false;
+
+        try {
+            this.setMessages([]);
+
+            const timezone =
+                this.config.settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const now = new Date();
+            const localTime = now.toLocaleString('en-US', {
+                timeZone: timezone,
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+            });
+
+            const memories = this.getCurrentMemories().slice(0, 10);
+            const memoriesText =
+                memories.length > 0 ? toon(memories.map((m) => m.body)) : '(no memories)';
+
+            const rule = parseRecurrence(action.recurrence);
+            const recurrenceText = rule ? `\n- Recurring: ${describeRecurrence(rule)}` : '';
+
+            const stepsText =
+                action.steps && action.steps.length > 0
+                    ? `\n## Suggested Approach\nThe user outlined these steps when creating this action:\n${action.steps.map((s) => `- ${s}`).join('\n')}\nUse these as guidance, not rigid instructions. Adapt if needed.\n`
+                    : '';
+
+            const actionPrompt = `You have a scheduled action to complete. The user set this up in advance and it's now due.
+
+## Action
+${action.request}
+${stepsText}
+## Context
+- Current time: ${localTime} (${timezone})
+- Scheduled for: ${new Date(action.timestamp).toLocaleString('en-US', { timeZone: timezone })}
+- Created: ${new Date(action.created_at).toLocaleString('en-US', { timeZone: timezone })}${recurrenceText}
+
+## User Memories
+${memoriesText}
+
+## Instructions
+Complete this action using your available tools. The user pre-approved it when they scheduled it, so proceed without asking for confirmation.
+
+If the action involves reaching the user (sending a message, reminder, summary, etc.), use whatever communication tools are available (Slack, noteForUser, etc.).
+
+If you can't complete it (missing tools, service down, etc.), explain what went wrong.
+
+Keep your response brief -- what you did and any notable results.`;
+
+            this.addMessage({ role: 'user', content: actionPrompt });
+
+            const response = await this.main();
+            return response?.content?.trim() || null;
+        } finally {
+            this.setMessages(savedMessages);
+            this.backgroundMode = false;
+        }
+    }
+
     @tool({ description: 'Schedule an action to run at a specific time or on a recurring basis' })
     @toolparam({
         key: 'request',
@@ -946,20 +1014,99 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
         key: 'recurrence',
         type: 'string',
         required: false,
-        description: 'Recurrence rule (daily, weekly, etc.)',
+        description:
+            'JSON recurrence rule, e.g. {"unit":"daily","hour":9,"minute":0} or {"unit":"every_x_minutes","every_x_minutes":30}. Units: daily, weekly, monthly, yearly, every_x_minutes, every_x_hours',
+    })
+    @toolparam({
+        key: 'steps',
+        type: 'array',
+        items: { type: 'string' },
+        required: false,
+        description: 'Optional step-by-step approach to follow when executing',
     })
     async scheduleAction(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { request, timestamp, recurrence } = call.fn_args;
+        const { request, timestamp, recurrence, steps } = call.fn_args;
 
-        await Action.create({
+        const action = await Action.create({
             request,
             timestamp: new Date(timestamp),
             recurrence: recurrence || null,
-            steps: [],
+            steps: steps || [],
+            enabled: true,
+            last_run: null,
         });
         await this.refreshActionsCache();
 
-        return `Action scheduled for ${timestamp}${recurrence ? ` (${recurrence})` : ''}`;
+        const recurrenceInfo = recurrence ? ` (recurring: ${recurrence})` : '';
+        return `Action #${action.id} scheduled for ${timestamp}${recurrenceInfo}`;
+    }
+
+    @tool({
+        description: 'List all scheduled actions with their IDs, next run times, and recurrence',
+    })
+    async listActions(_call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const actions = await Action.getAll();
+
+        if (actions.length === 0) {
+            return 'No scheduled actions.';
+        }
+
+        return actions
+            .map((a) => {
+                const enabled = a.enabled ? 'enabled' : 'disabled';
+                const recurrence = a.recurrence ? ` | recurring: ${a.recurrence}` : ' | one-time';
+                const lastRun = a.last_run
+                    ? ` | last run: ${new Date(a.last_run).toISOString()}`
+                    : '';
+                return `#${a.id} [${enabled}] "${a.request}" | next: ${new Date(a.timestamp).toISOString()}${recurrence}${lastRun}`;
+            })
+            .join('\n');
+    }
+
+    @tool({ description: 'Remove a scheduled action by ID' })
+    @toolparam({
+        key: 'actionId',
+        type: 'number',
+        required: true,
+        description: 'The action ID to remove',
+    })
+    async removeAction(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { actionId } = call.fn_args;
+        const action = await Action.get(actionId);
+
+        if (!action) {
+            return `Action #${actionId} not found.`;
+        }
+
+        await action.delete();
+        await this.refreshActionsCache();
+        return `Action #${actionId} ("${action.request}") removed.`;
+    }
+
+    @tool({ description: 'Enable or disable a scheduled action' })
+    @toolparam({
+        key: 'actionId',
+        type: 'number',
+        required: true,
+        description: 'The action ID to toggle',
+    })
+    @toolparam({
+        key: 'enabled',
+        type: 'boolean',
+        required: true,
+        description: 'Whether the action should be enabled',
+    })
+    async toggleAction(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { actionId, enabled } = call.fn_args;
+        const action = await Action.get(actionId);
+
+        if (!action) {
+            return `Action #${actionId} not found.`;
+        }
+
+        await action.update({ enabled } as any);
+        await this.refreshActionsCache();
+        return `Action #${actionId} ("${action.request}") ${enabled ? 'enabled' : 'disabled'}.`;
     }
 
     @tool({ description: 'Search and retrieve memories relevant to the conversation' })

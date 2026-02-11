@@ -13,6 +13,7 @@ import { registerThinkCommands } from './commands/think.js';
 import { registerSkillsCommands } from './commands/skills.js';
 import { registerSetupCommands } from './commands/setup.js';
 import { registerExportImportCommands } from './commands/export-import.js';
+import { registerActionsCommands } from './commands/actions.js';
 
 dotenv.config();
 
@@ -30,6 +31,7 @@ registerThinkCommands(program);
 registerSkillsCommands(program);
 registerSetupCommands(program);
 registerExportImportCommands(program);
+registerActionsCommands(program);
 
 async function main() {
     try {

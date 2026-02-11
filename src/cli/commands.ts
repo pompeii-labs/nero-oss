@@ -204,19 +204,71 @@ export const commands: SlashCommand[] = [
     {
         name: 'actions',
         aliases: ['a'],
-        description: 'Show scheduled actions',
-        execute: async (_, ctx) => {
+        description: 'Manage scheduled actions (run <id>, remove <id>)',
+        execute: async (args, ctx) => {
+            if (args[0] === 'run' && args[1]) {
+                const id = parseInt(args[1], 10);
+                if (isNaN(id)) return { error: 'Invalid action ID' };
+
+                ctx.setLoading(`Running action #${id}`);
+                try {
+                    const { NeroClient } = await import('../client/index.js');
+                    const client = new NeroClient({
+                        baseUrl: 'http://localhost:4847',
+                        licenseKey: ctx.config.licenseKey,
+                    });
+                    const run = await client.triggerAction(id);
+                    ctx.setLoading(null);
+
+                    const statusColor =
+                        run.status === 'success'
+                            ? chalk.green
+                            : run.status === 'error'
+                              ? chalk.red
+                              : chalk.yellow;
+                    let output = `\n${statusColor(run.status)} ${chalk.dim(`(${run.duration_ms}ms)`)}\n`;
+                    if (run.result) output += chalk.dim(run.result.slice(0, 500)) + '\n';
+                    if (run.error) output += chalk.red(run.error) + '\n';
+                    return { message: output };
+                } catch (error) {
+                    ctx.setLoading(null);
+                    return { error: `Failed to run action: ${(error as Error).message}` };
+                }
+            }
+
+            if (args[0] === 'remove' && args[1]) {
+                const id = parseInt(args[1], 10);
+                if (isNaN(id)) return { error: 'Invalid action ID' };
+
+                try {
+                    const { NeroClient } = await import('../client/index.js');
+                    const client = new NeroClient({
+                        baseUrl: 'http://localhost:4847',
+                        licenseKey: ctx.config.licenseKey,
+                    });
+                    await client.deleteAction(id);
+                    return { message: chalk.green(`Action #${id} deleted.`) };
+                } catch (error) {
+                    return { error: `Failed to delete action: ${(error as Error).message}` };
+                }
+            }
+
             const actions = await ctx.nero.getActions();
             if (actions.length === 0) {
                 return { message: chalk.dim('No scheduled actions.') };
             }
             const list = actions
-                .map(
-                    (a, i) =>
-                        `  ${chalk.dim(`${i + 1}.`)} ${a.request}\n      ${chalk.dim(`Next: ${a.timestamp}`)}`,
-                )
+                .map((a: any) => {
+                    const enabled = a.enabled !== false;
+                    const status = enabled ? chalk.green('on') : chalk.dim('off');
+                    const recurrence = a.recurrence ? chalk.cyan(` (recurring)`) : '';
+                    const nextRun = new Date(a.timestamp).toLocaleString();
+                    return `  ${chalk.dim(`#${a.id}`)} ${a.request}${recurrence}\n      ${status} ${chalk.dim(`Next: ${nextRun}`)}`;
+                })
                 .join('\n');
-            return { message: `\n${chalk.bold('Scheduled Actions:')}\n\n${list}\n` };
+            return {
+                message: `\n${chalk.bold('Scheduled Actions:')}\n\n${list}\n\n${chalk.dim('Commands: /actions run <id>, /actions remove <id>')}\n`,
+            };
         },
     },
     {

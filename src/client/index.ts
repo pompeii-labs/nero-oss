@@ -387,4 +387,83 @@ export class NeroClient {
 
         return result;
     }
+
+    async getActions(): Promise<any[]> {
+        const response = await fetch(`${this.baseUrl}/api/actions`, {
+            headers: this.getHeaders(),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to get actions: ${response.status}`);
+        }
+        return response.json();
+    }
+
+    async createAction(data: {
+        request: string;
+        timestamp: string;
+        recurrence?: string | null;
+        steps?: string[];
+        enabled?: boolean;
+    }): Promise<any> {
+        const response = await fetch(`${this.baseUrl}/api/actions`, {
+            method: 'POST',
+            headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(error.error || `HTTP ${response.status}`);
+        }
+        return response.json();
+    }
+
+    async updateAction(id: number, data: Record<string, any>): Promise<any> {
+        const response = await fetch(`${this.baseUrl}/api/actions/${id}`, {
+            method: 'PATCH',
+            headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(error.error || `HTTP ${response.status}`);
+        }
+        return response.json();
+    }
+
+    async deleteAction(id: number): Promise<void> {
+        const response = await fetch(`${this.baseUrl}/api/actions/${id}`, {
+            method: 'DELETE',
+            headers: this.getHeaders(),
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(error.error || `HTTP ${response.status}`);
+        }
+    }
+
+    async getActionRuns(actionId: number, limit?: number): Promise<any[]> {
+        const url =
+            actionId > 0
+                ? `${this.baseUrl}/api/actions/${actionId}/runs${limit ? `?limit=${limit}` : ''}`
+                : `${this.baseUrl}/api/actions/0/runs${limit ? `?limit=${limit}` : ''}`;
+        const response = await fetch(url, {
+            headers: this.getHeaders(),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to get action runs: ${response.status}`);
+        }
+        return response.json();
+    }
+
+    async triggerAction(id: number): Promise<any> {
+        const response = await fetch(`${this.baseUrl}/api/actions/${id}/run`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(error.error || `HTTP ${response.status}`);
+        }
+        return response.json();
+    }
 }

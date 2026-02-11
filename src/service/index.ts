@@ -19,7 +19,9 @@ import { handleSlack } from '../slack/handler.js';
 import { handleIncomingCall } from '../voice/twilio.js';
 import { VoiceWebSocketManager } from '../voice/websocket.js';
 import { createAuthMiddleware } from './middleware/auth.js';
+import { createActionsRouter } from './routes/actions.js';
 import { RelayServer } from '../relay/index.js';
+import { ActionManager } from '../actions/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -32,6 +34,7 @@ export class NeroService {
     private wsManager: VoiceWebSocketManager | null = null;
     private licensePollInterval: NodeJS.Timeout | null = null;
     private relay: RelayServer | null = null;
+    private actionManager: ActionManager;
     private readonly port: number;
     private readonly host: string;
 
@@ -44,6 +47,7 @@ export class NeroService {
         this.app = express();
         this.httpServer = createServer(this.app);
         this.agent = new Nero(config);
+        this.actionManager = new ActionManager();
 
         this.setupMiddleware();
         this.setupRoutes();
@@ -138,6 +142,7 @@ export class NeroService {
         this.app.use('/api', createHealthRouter(this.agent));
         this.app.use('/api', createChatRouter(this.agent));
         this.app.use('/api', createWebRouter(this.agent, this.port));
+        this.app.use('/api', createActionsRouter(this.agent, this.actionManager));
 
         this.app.use((req: Request, res: Response, next) => {
             if (req.path.startsWith('/api/admin') && !this.isLocalRequest(req)) {
@@ -220,6 +225,8 @@ export class NeroService {
                 this.licensePollInterval = null;
             }
 
+            this.actionManager.shutdown();
+
             if (this.wsManager) {
                 await this.wsManager.shutdown();
             }
@@ -248,6 +255,9 @@ export class NeroService {
 
     async start(): Promise<void> {
         await this.agent.setup();
+
+        this.actionManager.setAgent(this.agent);
+        this.actionManager.start();
 
         if (this.config.settings.onlineMode || this.config.licenseKey) {
             const relayPort = this.config.relayPort || 4848;

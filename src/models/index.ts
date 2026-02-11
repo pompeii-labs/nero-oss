@@ -2,6 +2,7 @@ export { Model } from './base.js';
 export { Message, type MessageData, type MessageRole, type MessageMedium } from './message.js';
 export { Memory, type MemoryData } from './memory.js';
 export { Action, type ActionData } from './action.js';
+export { ActionRun, type ActionRunData } from './action-run.js';
 export { Summary, type SummaryData } from './summary.js';
 export { Workspace, type WorkspaceData } from './workspace.js';
 export { ThinkingRun, type ThinkingRunData } from './thinking-run.js';
