@@ -407,6 +407,7 @@ interface AppProps {
     initialConfig: NeroConfig;
     initialHistory: LoadedMessage[];
     hasSummary: boolean;
+    dangerous?: boolean;
 }
 
 function AnimatedLoader() {
@@ -593,7 +594,7 @@ function PermissionPrompt({
     );
 }
 
-function WelcomeBanner({ model }: { model: string }) {
+function WelcomeBanner({ model, dangerous }: { model: string; dangerous?: boolean }) {
     return (
         <Box flexDirection="column" marginBottom={1}>
             <Text color={NERO_BLUE} bold>
@@ -609,7 +610,14 @@ function WelcomeBanner({ model }: { model: string }) {
                 {' '}
                 v{VERSION} | {model}
             </Text>
-            <Text dimColor> Type a message to get started, or /help for commands</Text>
+            {dangerous ? (
+                <Text color="red" bold>
+                    {' '}
+                    DANGEROUS MODE: All actions auto-approved. Use at your own risk.
+                </Text>
+            ) : (
+                <Text dimColor> Type a message to get started, or /help for commands</Text>
+            )}
         </Box>
     );
 }
@@ -673,7 +681,7 @@ interface Skill {
     description: string;
 }
 
-function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
+function App({ nero, initialConfig, initialHistory, hasSummary, dangerous }: AppProps) {
     const { exit } = useApp();
     const { stdout } = useStdout();
     const termWidth = stdout?.columns || 80;
@@ -904,6 +912,7 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
         });
 
         nero.setPermissionCallback(async (activity) => {
+            if (dangerous) return true;
             if (isToolAllowed(activity.tool, activity.args)) {
                 return true;
             }
@@ -1081,7 +1090,9 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
             <Static items={displayGroups}>
                 {(group) => (
                     <Box key={group.id} marginBottom={1} flexDirection="column">
-                        {group.type === 'banner' && <WelcomeBanner model={config.settings.model} />}
+                        {group.type === 'banner' && (
+                            <WelcomeBanner model={config.settings.model} dangerous={dangerous} />
+                        )}
                         {group.type === 'user' && (
                             <Box flexDirection="column">
                                 <Text color="cyan" bold underline>
@@ -1192,7 +1203,7 @@ function App({ nero, initialConfig, initialHistory, hasSummary }: AppProps) {
     );
 }
 
-export async function startRepl(config: NeroConfig): Promise<void> {
+export async function startRepl(config: NeroConfig, dangerous?: boolean): Promise<void> {
     const logger = new Logger('CLI');
     const serviceUrl = process.env.NERO_SERVICE_URL || 'http://localhost:4848';
     const serviceRunning = await NeroClient.checkServiceRunning(serviceUrl);
@@ -1219,6 +1230,7 @@ export async function startRepl(config: NeroConfig): Promise<void> {
             initialConfig={config}
             initialHistory={initialHistory}
             hasSummary={hasSummary}
+            dangerous={dangerous}
         />,
         { exitOnCtrlC: false },
     );

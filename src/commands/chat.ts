@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { loadConfig } from '../config.js';
 import { NeroClient } from '../client/index.js';
-import { Logger } from '../util/logger.js';
+import { Logger, formatToolName } from '../util/logger.js';
 import { startRepl } from '../cli/repl.js';
 
 async function readStdin(): Promise<string> {
@@ -19,8 +19,10 @@ export function registerChatCommand(program: Command) {
         .description('Start interactive chat session')
         .option('-m, --message <message>', 'Send a single message and exit')
         .option('-p, --pipe', 'Read message from stdin (pipe mode)')
+        .option('--dangerous', 'Auto-approve all tool actions, verbose output')
         .action(async (options) => {
             const config = await loadConfig();
+            const dangerous = options.dangerous || process.env.NERO_DANGEROUS === '1';
 
             const isPiped = !process.stdin.isTTY;
             const message = options.message || (isPiped ? await readStdin() : null);
@@ -38,15 +40,50 @@ export function registerChatCommand(program: Command) {
                     process.exit(1);
                 }
 
+                if (dangerous) {
+                    console.log(
+                        chalk.red.bold(
+                            'DANGEROUS MODE: All actions auto-approved. Use at your own risk.',
+                        ),
+                    );
+                    console.log();
+                }
+
                 const client = new NeroClient({
                     baseUrl: serviceUrl,
                     licenseKey: config.licenseKey,
                 });
 
+                const onActivity = dangerous
+                    ? (activity: any) => {
+                          const name = formatToolName(activity.tool);
+                          if (activity.status === 'running') {
+                              console.log(chalk.dim(`[tool] ${name} ...`));
+                          } else if (activity.status === 'complete') {
+                              const preview = activity.result?.slice(0, 100) || '';
+                              console.log(chalk.dim(`[tool] ${name} -> ${preview}`));
+                          } else if (activity.status === 'error') {
+                              console.log(chalk.red(`[tool] ${name} ERROR: ${activity.error}`));
+                          }
+                      }
+                    : undefined;
+
+                const onPermission = dangerous
+                    ? async (id: string) => {
+                          await client.respondToPermission(id, true);
+                      }
+                    : undefined;
+
                 try {
-                    await client.chat(message, (chunk) => {
-                        process.stdout.write(chunk);
-                    });
+                    await client.chat(
+                        message,
+                        (chunk) => {
+                            process.stdout.write(chunk);
+                        },
+                        onActivity,
+                        undefined,
+                        onPermission,
+                    );
                     console.log();
                 } catch (error) {
                     const err = error as Error;
@@ -56,7 +93,7 @@ export function registerChatCommand(program: Command) {
 
                 process.exit(0);
             } else {
-                await startRepl(config);
+                await startRepl(config, dangerous);
             }
         });
 }
