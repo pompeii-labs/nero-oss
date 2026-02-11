@@ -21,7 +21,15 @@ import { NeroConfig, getConfigDir } from '../config.js';
 import { discoverSkills, loadSkill, getSkillContent, type Skill } from '../skills/index.js';
 import { McpClient } from '../mcp/client.js';
 import { db, isDbConnected } from '../db/index.js';
-import { Message, Memory, Action, Summary, Note } from '../models/index.js';
+import {
+    Message,
+    Memory,
+    Action,
+    Summary,
+    Note,
+    BackgroundLog,
+    type BackgroundLogData,
+} from '../models/index.js';
 import { generateDiff } from '../util/diff.js';
 import { hostToContainer, containerToHost } from '../util/paths.js';
 import { formatSessionAge } from '../util/temporal.js';
@@ -818,6 +826,12 @@ You are responding via Slack DM. Use Slack-friendly formatting:
 
     async runBackgroundThinking(
         recentThoughts: Array<{ thought: string; created_at: Date | string }>,
+        recentLogs: Array<{
+            tool: string;
+            args_summary: string;
+            result_summary: string;
+            created_at: Date;
+        }>,
     ): Promise<string | null> {
         const savedMessages = this.getMessages();
         this.backgroundMode = true;
@@ -832,6 +846,16 @@ You are responding via Slack DM. Use Slack-friendly formatting:
                           .map((t) => `- [${new Date(t.created_at).toLocaleString()}] ${t.thought}`)
                           .join('\n')
                     : '(none yet)';
+
+            const recentLogsText =
+                recentLogs.length > 0
+                    ? recentLogs
+                          .map(
+                              (l) =>
+                                  `- [${new Date(l.created_at).toLocaleTimeString()}] ${l.tool}(${l.args_summary}) -> ${l.result_summary}`,
+                          )
+                          .join('\n')
+                    : '(first run, no prior activity)';
 
             const recentMessages = await this.getMessageHistory(10);
             const recentMessagesText =
@@ -850,6 +874,9 @@ You are responding via Slack DM. Use Slack-friendly formatting:
 
             const backgroundPrompt = `Run a background check. You have access to all your tools.
 
+## Your Recent Activity (last 6 hours)
+${recentLogsText}
+
 ## Recent Notes You've Left
 ${recentThoughtsText}
 
@@ -860,30 +887,29 @@ ${recentMessagesText}
 ${memoriesText}
 
 ## Instructions
-You're running in the background while the user is away. Use your tools to check on things that might be relevant.
+You're running in the background while the user is away. Use your tools to check on things, focusing on what CHANGED since your last check. If your activity log shows you already checked something and it was stable, skip it unless there's reason to re-check.
 
 **For git checks:** Your cwd is the user's home directory, NOT a git repo. To check git status, first use \`find ~/Desktop -maxdepth 3 -name .git -type d 2>/dev/null\` to locate project directories, then cd into specific projects before running git commands. Don't spam git status - pick 2-3 active projects max.
 
 **For other checks:** Linear issues, calendar, running services, etc.
 
-If you discover something the user should actually know about, use the note_for_user tool. Be very selective - most runs should result in zero notes.
+## Communication
+You can proactively reach out to the user. Check your available tools and your memories for the user's communication preferences. The noteForUser tool is always available for leaving notes the user will see next time they chat. If you have tools for Slack, SMS, or calling, use your judgment based on urgency and what the user has told you they prefer.
 
-**Save a note ONLY if:**
-- You found a specific problem or bug
-- You completed an action (created branch, fixed something, filed issue)
-- Something changed that requires user attention (meeting moved, deploy failed)
-- You discovered something unexpected they'd want to know
+Be a proactive assistant. If a meeting is coming up, ask if they want you to prep anything. If you spot something they might want to act on, surface it. If you find something interesting or relevant to their current work, share it. Think about what would genuinely help them right now.
 
-**DO NOT save notes about:**
-- "All systems healthy" or "everything running fine" (don't report normalcy)
-- "Checked X, no issues" (don't report what you checked)
-- "Database running for X hours" (they don't care)
-- "X active connections/studies/processes" (status updates are noise)
+**Don't message about:**
+- Routine status reports ("all systems healthy", "database running for X hours")
+- Things you checked that had no changes
 - General summaries of system state
 
-The test: If you walked into a colleague's office to tell them this, would they thank you or wonder why you're wasting their time?
+## Response Format
+Your final response is for internal logging so future runs don't duplicate work. End with this structured summary:
 
-Your final response is for internal logging so future runs don't duplicate work. Write in plain text only - no markdown, no headers, no **bold**, no bullet points. Just sentences describing what you checked and found.
+CHECKED: what you looked at
+FOUND: anything notable (or "nothing new")
+ACTIONS: what you did (messages sent, notes saved) or "none"
+NEXT: what to check or follow up on next time
 
 If something is URGENT (deploy failed, service down), start with [URGENT].`;
 
@@ -1296,6 +1322,26 @@ If something is URGENT (deploy failed, service down), start with [URGENT].`;
         }
         Logger.main.tool(activity);
         this.onActivity?.(activity);
+
+        if (
+            this.backgroundMode &&
+            (activity.status === 'complete' || activity.status === 'error')
+        ) {
+            const argsSummary = JSON.stringify(activity.args).slice(0, 200);
+            const resultSummary =
+                (activity.status === 'error' ? activity.error : activity.result)?.slice(0, 200) ??
+                '';
+            BackgroundLog.create({
+                tool: activity.tool,
+                args_summary: argsSummary,
+                result_summary: resultSummary,
+                thinking_run_id: null,
+            }).catch(() => {});
+        }
+    }
+
+    async getRecentBackgroundLogs(hours: number): Promise<BackgroundLogData[]> {
+        return BackgroundLog.getRecent(hours);
     }
 
     @tool({ description: 'Read the contents of a file from the filesystem' })

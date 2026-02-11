@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { Nero, ToolActivity } from '../../agent/nero.js';
 import { Logger } from '../../util/logger.js';
 import { isDbConnected } from '../../db/index.js';
-import { Workspace, ThinkingRun } from '../../models/index.js';
+import { Workspace, ThinkingRun, BackgroundLog } from '../../models/index.js';
 import { hostToContainer } from '../../util/paths.js';
 import {
     isToolAllowed,
@@ -258,11 +258,13 @@ export function createChatRouter(agent: Nero) {
 
         try {
             const recentThoughts = await ThinkingRun.getRecent(20);
+            const recentLogs = await agent.getRecentBackgroundLogs(6);
 
             sendSSE({ type: 'status', data: 'Starting background thinking...' });
 
             const thought = await agent.runBackgroundThinking(
                 recentThoughts.map((t) => ({ thought: t.thought, created_at: t.created_at })),
+                recentLogs,
             );
 
             if (thought) {

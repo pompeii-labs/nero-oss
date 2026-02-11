@@ -6,3 +6,4 @@ export { Summary, type SummaryData } from './summary.js';
 export { Workspace, type WorkspaceData } from './workspace.js';
 export { ThinkingRun, type ThinkingRunData } from './thinking-run.js';
 export { Note, type NoteData } from './note.js';
+export { BackgroundLog, type BackgroundLogData } from './background-log.js';

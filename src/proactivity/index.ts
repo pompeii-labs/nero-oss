@@ -1,6 +1,12 @@
 import chalk from 'chalk';
 import { isDbConnected } from '../db/index.js';
-import { ThinkingRun, Note, type ThinkingRunData, type NoteData } from '../models/index.js';
+import {
+    ThinkingRun,
+    Note,
+    BackgroundLog,
+    type ThinkingRunData,
+    type NoteData,
+} from '../models/index.js';
 import type { NeroConfig } from '../config.js';
 import type { Nero } from '../agent/nero.js';
 
@@ -74,16 +80,31 @@ export class ProactivityManager {
 
         try {
             const recentThoughts = await this.getRecentThoughts(20);
-            const thought = await this.agent.runBackgroundThinking(recentThoughts);
+            const recentLogs = await this.agent.getRecentBackgroundLogs(6);
+            const thought = await this.agent.runBackgroundThinking(recentThoughts, recentLogs);
 
             if (thought && thought.trim()) {
                 const isUrgent = thought.startsWith('[URGENT]');
                 const cleanThought = isUrgent ? thought.replace('[URGENT]', '').trim() : thought;
 
-                await this.storeThought(cleanThought);
+                const runId = await this.storeThought(cleanThought);
                 console.log(
                     chalk.dim(`[proactivity] Stored thought: ${cleanThought.slice(0, 50)}...`),
                 );
+
+                if (runId) {
+                    const unlinkedLogs = recentLogs.filter((l) => !l.thinking_run_id);
+                    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+                    const recentUnlinked = unlinkedLogs.filter(
+                        (l) => new Date(l.created_at) > fiveMinAgo,
+                    );
+                    if (recentUnlinked.length > 0) {
+                        await BackgroundLog.setThinkingRunId(
+                            recentUnlinked.map((l) => l.id),
+                            runId,
+                        );
+                    }
+                }
 
                 if (isUrgent && this.config.proactivity.notify) {
                     await this.sendNotification(cleanThought);
@@ -91,6 +112,7 @@ export class ProactivityManager {
             }
 
             await this.cleanupOldThoughts();
+            await BackgroundLog.deleteOlderThan(RETENTION_DAYS);
         } catch (error) {
             console.error(chalk.dim(`[proactivity] Error: ${(error as Error).message}`));
         } finally {
@@ -121,8 +143,9 @@ export class ProactivityManager {
         }
     }
 
-    private async storeThought(thought: string): Promise<void> {
-        await ThinkingRun.create({ thought, surfaced: false });
+    private async storeThought(thought: string): Promise<number | null> {
+        const run = await ThinkingRun.create({ thought, surfaced: false });
+        return run?.id ?? null;
     }
 
     private async cleanupOldThoughts(): Promise<void> {
