@@ -1,6 +1,6 @@
 {
   "name": "nero-oss",
-  "version": "1.20.0",
+  "version": "1.21.0",
   "description": "Open source AI companion with terminal, voice, and SMS interfaces",
   "main": "dist/index.js",
   "type": "module",
