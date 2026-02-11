@@ -79,6 +79,14 @@ export function isDestructiveToolCall(
         };
     }
 
+    if (call.tool === 'browser' && call.args?.operation === 'evaluate') {
+        return {
+            isDestructive: true,
+            reason: 'Browser JavaScript execution',
+            canOverride: true,
+        };
+    }
+
     return { isDestructive: false };
 }
 

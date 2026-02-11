@@ -4,5 +4,6 @@ export {
     composeToYaml,
     generateComposeYaml,
     DEFAULT_IMAGE,
+    DEFAULT_BROWSER_IMAGE,
 } from './compose.js';
 export { hasComposeV2, getComposeCommand, generateRunScript, docker, compose } from './commands.js';

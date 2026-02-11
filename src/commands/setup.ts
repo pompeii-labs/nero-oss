@@ -14,6 +14,7 @@ import {
     docker,
     compose,
     DEFAULT_IMAGE,
+    DEFAULT_BROWSER_IMAGE,
     type DockerConfig,
 } from '../docker/index.js';
 
@@ -26,6 +27,7 @@ export function registerSetupCommands(program: Command) {
         .option('-c, --compose', 'Use Docker Compose (includes Postgres)')
         .option('--integrated', 'Full host access: filesystem, docker, network (default)')
         .option('--contained', 'Sandboxed mode: no host access')
+        .option('--browser', 'Enable browser automation (larger image with Chromium)')
         .action(async (options) => {
             const neroDir = join(getNeroHome(), '.nero');
             const envPath = join(neroDir, '.env');
@@ -43,6 +45,7 @@ export function registerSetupCommands(program: Command) {
 
             const mode = options.contained ? 'contained' : 'integrated';
             const isIntegrated = mode === 'integrated';
+            const image = options.browser ? DEFAULT_BROWSER_IMAGE : DEFAULT_IMAGE;
 
             console.log(chalk.dim(`Setting up Nero in ${chalk.cyan(mode)} mode...`));
             if (isIntegrated) {
@@ -54,6 +57,9 @@ export function registerSetupCommands(program: Command) {
                 console.log(chalk.dim('  - No docker access'));
                 console.log(chalk.dim('  - Isolated network'));
             }
+            if (options.browser) {
+                console.log(chalk.dim('  - Browser automation (Chromium)'));
+            }
             console.log();
 
             const setupState = {
@@ -61,6 +67,7 @@ export function registerSetupCommands(program: Command) {
                 compose: !!options.compose,
                 name: options.name,
                 port: options.port,
+                image,
                 createdAt: new Date().toISOString(),
             };
             await writeFile(setupStatePath, JSON.stringify(setupState, null, 2));
@@ -73,7 +80,7 @@ export function registerSetupCommands(program: Command) {
                     port: options.port,
                     relayPort: '4848',
                     mode,
-                    image: DEFAULT_IMAGE,
+                    image,
                 };
 
                 const composeFile = generateComposeYaml(dockerConfig);
@@ -102,7 +109,7 @@ export function registerSetupCommands(program: Command) {
                     port: options.port,
                     relayPort: '4848',
                     mode,
-                    image: DEFAULT_IMAGE,
+                    image,
                 };
 
                 const script = generateRunScript(dockerConfig);
@@ -112,7 +119,7 @@ export function registerSetupCommands(program: Command) {
                 console.log(chalk.green('Created ~/.nero/docker-run.sh'));
 
                 console.log(chalk.dim('\nPulling latest image...'));
-                docker.pull();
+                docker.pull(image);
 
                 console.log(chalk.dim('Stopping any existing container...'));
                 docker.stopAndRemove(options.name);
@@ -140,7 +147,13 @@ export function registerSetupCommands(program: Command) {
             const neroDir = join(getNeroHome(), '.nero');
             const setupStatePath = join(neroDir, 'setup.json');
 
-            let setupState: { mode?: string; compose?: boolean; name?: string; port?: string } = {};
+            let setupState: {
+                mode?: string;
+                compose?: boolean;
+                name?: string;
+                port?: string;
+                image?: string;
+            } = {};
             try {
                 const content = await readFile(setupStatePath, 'utf-8');
                 setupState = JSON.parse(content);
@@ -148,6 +161,7 @@ export function registerSetupCommands(program: Command) {
 
             const containerName = setupState.name || 'nero';
             const mode = setupState.mode || 'integrated';
+            const image = setupState.image || DEFAULT_IMAGE;
 
             console.log(chalk.dim('Checking for updates...'));
 
@@ -199,7 +213,7 @@ export function registerSetupCommands(program: Command) {
                     console.log(chalk.dim(`Detected docker-run.sh installation (${mode} mode)`));
 
                     console.log(chalk.dim('Pulling latest image...'));
-                    docker.pull();
+                    docker.pull(image);
 
                     console.log(chalk.dim('Stopping current container...'));
                     if (!docker.stopAndRemove(containerName)) {
@@ -271,6 +285,7 @@ export function registerSetupCommands(program: Command) {
                 compose?: boolean;
                 name?: string;
                 port?: string;
+                image?: string;
                 createdAt?: string;
             } = {};
             try {
@@ -286,10 +301,13 @@ export function registerSetupCommands(program: Command) {
                   ? 'Docker Run'
                   : 'Not installed';
 
+            const hasBrowser = setupState.image?.includes('browser') ?? false;
+
             console.log(`Install Type: ${chalk.cyan(installType)}`);
             console.log(
                 `Mode: ${chalk.cyan(mode)}${mode === 'integrated' ? chalk.dim(' (full host access)') : mode === 'contained' ? chalk.dim(' (sandboxed)') : ''}`,
             );
+            console.log(`Browser: ${hasBrowser ? chalk.green('enabled') : chalk.dim('disabled')}`);
             console.log(`Container: ${chalk.cyan(containerName)}`);
             if (setupState.port) {
                 console.log(`Port: ${chalk.cyan(setupState.port)}`);
@@ -358,11 +376,13 @@ export function registerSetupCommands(program: Command) {
                 console.log(chalk.dim('  - Host filesystem access (/host/home)'));
                 console.log(chalk.dim('  - Docker daemon access'));
                 console.log(chalk.dim('  - Host network'));
+                if (hasBrowser) console.log(chalk.dim('  - Browser automation (Chromium)'));
             } else if (mode === 'contained') {
                 console.log(chalk.dim('Capabilities:'));
                 console.log(chalk.dim('  - Container-only filesystem'));
                 console.log(chalk.dim('  - No docker access'));
                 console.log(chalk.dim('  - Isolated network'));
+                if (hasBrowser) console.log(chalk.dim('  - Browser automation (Chromium)'));
             }
 
             console.log();

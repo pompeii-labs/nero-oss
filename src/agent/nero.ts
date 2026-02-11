@@ -40,6 +40,7 @@ import { ProactivityManager } from '../proactivity/index.js';
 import { isDestructiveToolCall } from '../proactivity/destructive.js';
 import { SessionManager } from '../services/session-manager.js';
 import { processManager } from '../services/process-manager.js';
+import { BrowserManager } from '../browser/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -95,6 +96,7 @@ export class Nero extends MagmaAgent {
     private sessionManager: SessionManager | null = null;
     private _isProcessing: boolean = false;
     private _aborted: boolean = false;
+    browserManager: BrowserManager;
 
     constructor(config: NeroConfig) {
         const client = new OpenAI({
@@ -117,6 +119,7 @@ export class Nero extends MagmaAgent {
         this.mcpClient = new McpClient(config.mcpServers);
         this.proactivity = new ProactivityManager(config);
         this.proactivity.setAgent(this);
+        this.browserManager = new BrowserManager(config.browser);
         this.initSessionManager();
     }
 
@@ -150,6 +153,8 @@ export class Nero extends MagmaAgent {
 
         const mcpTools = await this.mcpClient.getTools();
         console.log(chalk.dim(`[setup] Loaded ${mcpTools.length} MCP tools`));
+        const browserStatus = this.browserManager.isAvailable() ? 'available' : 'not available';
+        console.log(chalk.dim(`[setup] Browser tools: ${browserStatus}`));
 
         if (this.sessionManager && this.config.settings.sessions.enabled) {
             await this.loadSessionAwareHistory();
@@ -595,6 +600,7 @@ Be thorough - this summary will be the primary context for future conversations.
     async cleanup(): Promise<void> {
         this.proactivity.shutdown();
         processManager.cleanup();
+        await this.browserManager.shutdown();
         await this.mcpClient.disconnect();
     }
 
@@ -2517,6 +2523,60 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
         this.emitActivity(activity);
 
         return `Process ${processId} [${status}${exitInfo}]:\n${output.join('\n') || '(no output yet)'}`;
+    }
+
+    @tool({
+        description:
+            'Control a browser. Cookie banners are auto-dismissed. Operations: navigate (url), click (selector, force?), type (selector, text), screenshot (fullPage?), extract (selector?), evaluate (script), back, scroll (direction, amount?), close',
+        enabled: (agent) => (agent as Nero).browserManager.isAvailable(),
+    })
+    @toolparam({
+        key: 'operation',
+        type: 'string',
+        required: true,
+        description:
+            'The browser operation: navigate, click, type, screenshot, extract, evaluate, back, scroll, close',
+    })
+    @toolparam({
+        key: 'args',
+        type: 'object',
+        required: false,
+        description:
+            'Arguments for the operation. navigate: {url}, click: {selector, force?}, type: {selector, text}, screenshot: {fullPage?}, extract: {selector?}, evaluate: {script}, scroll: {direction, amount?}',
+        properties: [],
+    })
+    async browser(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { operation, args = {} } = call.fn_args;
+
+        if (operation === 'evaluate') {
+            const approved = await this.requestPermission(
+                'browser',
+                { operation, ...args },
+                call.id,
+            );
+            if (!approved) return 'Permission denied for browser evaluate';
+        }
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'browser',
+            args: { operation, ...args },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            const result = await this.browserManager.execute(operation, args);
+            activity.status = 'complete';
+            activity.result = result.length > 100 ? result.slice(0, 100) + '...' : result;
+            this.emitActivity(activity);
+            return result;
+        } catch (err) {
+            activity.status = 'error';
+            activity.error = (err as Error).message;
+            this.emitActivity(activity);
+            return `Browser error: ${activity.error}`;
+        }
     }
 
     @tool({

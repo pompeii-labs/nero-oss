@@ -101,7 +101,18 @@ export class RelayServer {
             }
         }, RATE_CLEANUP_INTERVAL_MS);
 
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
+            this.server.on('error', (err: NodeJS.ErrnoException) => {
+                if (this.rateLimitCleanup) {
+                    clearInterval(this.rateLimitCleanup);
+                    this.rateLimitCleanup = null;
+                }
+                if (err.code === 'EADDRINUSE') {
+                    reject(new Error(`Port ${this.config.listenPort} is already in use`));
+                } else {
+                    reject(err);
+                }
+            });
             this.server.listen(this.config.listenPort, this.config.listenHost, () => {
                 this.logger.info(
                     `[Relay] Listening on http://${this.config.listenHost}:${this.port}`,

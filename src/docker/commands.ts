@@ -1,8 +1,7 @@
 import { execSync } from 'child_process';
 import type { DockerConfig } from './types.js';
 import { getDockerSocketMount } from './socket.js';
-
-const IMAGE = 'ghcr.io/pompeii-labs/nero-oss:latest';
+import { DEFAULT_IMAGE as IMAGE } from './compose.js';
 
 export function hasComposeV2(): boolean {
     try {
@@ -132,5 +131,3 @@ export const compose = {
         return execSync(`${cmd} logs${serviceArg}`, { cwd, encoding: 'utf-8' });
     },
 };
-
-export const DEFAULT_IMAGE = IMAGE;

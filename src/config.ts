@@ -61,6 +61,10 @@ export interface NeroConfig {
     settings: NeroSettings;
     allowedTools?: string[];
     proactivity: ProactivityConfig;
+    browser?: {
+        headless?: boolean;
+        timeout?: number;
+    };
 }
 
 const defaultSessionSettings: SessionSettings = {

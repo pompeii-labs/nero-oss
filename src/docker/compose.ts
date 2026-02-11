@@ -2,6 +2,7 @@ import type { DockerConfig, ComposeFile, ComposeService } from './types.js';
 import { getDockerSocketMount } from './socket.js';
 
 const IMAGE = 'ghcr.io/pompeii-labs/nero-oss:latest';
+const BROWSER_IMAGE = 'ghcr.io/pompeii-labs/nero-oss:browser';
 
 function buildNeroService(config: DockerConfig): ComposeService {
     const isIntegrated = config.mode === 'integrated';
@@ -145,3 +146,4 @@ export function generateComposeYaml(config: DockerConfig): string {
 }
 
 export const DEFAULT_IMAGE = IMAGE;
+export const DEFAULT_BROWSER_IMAGE = BROWSER_IMAGE;

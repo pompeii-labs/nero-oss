@@ -1,0 +1,54 @@
+FROM oven/bun:1 AS builder
+
+WORKDIR /app
+
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+
+COPY web/package.json web/bun.lock* ./web/
+RUN cd web && bun install --frozen-lockfile
+
+COPY . .
+RUN bun run build && cd web && bun run build
+
+FROM oven/bun:debian AS browser
+
+COPY package.json bun.lock /tmp/app/
+RUN cd /tmp/app && bun install --frozen-lockfile --production --ignore-scripts \
+    && bunx playwright install chromium \
+    && rm -rf /tmp/app
+
+FROM oven/bun:debian
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl procps docker.io \
+    libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
+    libcups2t64 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxkbcommon0 \
+    libgbm1 libpango-1.0-0 libcairo2 libasound2t64 libdbus-1-3 libexpat1 \
+    libx11-6 libxcb1 libxext6 \
+    fonts-liberation fonts-freefont-ttf fontconfig \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production --ignore-scripts \
+    && rm -rf ~/.bun/install/cache
+
+COPY --from=browser /root/.cache/ms-playwright /root/.cache/ms-playwright
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prompts ./prompts
+COPY --from=builder /app/migrations ./migrations
+COPY --from=builder /app/web/build ./web/build
+
+RUN printf '#!/bin/sh\nexec bun run /app/dist/index.js "$@"\n' > /usr/local/bin/nero \
+    && chmod +x /usr/local/bin/nero
+
+ENV TERM=xterm-256color
+ENV FORCE_COLOR=1
+ENV NODE_ENV=production
+
+EXPOSE 4848
+
+CMD ["bun", "run", "dist/service/entrypoint.js"]
