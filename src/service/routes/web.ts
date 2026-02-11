@@ -12,6 +12,7 @@ import {
     type NeroConfig,
     type McpServerConfig,
 } from '../../config.js';
+import { buildExport, runImport, validateExportFile } from '../../export-import.js';
 import {
     discoverSkills,
     loadSkill,
@@ -548,6 +549,34 @@ export function createWebRouter(agent: Nero, port?: number) {
         } catch (error) {
             logger.error(`Failed to logout MCP server: ${(error as Error).message}`);
             res.status(500).json({ error: 'Failed to logout' });
+        }
+    });
+
+    router.get('/export', async (req: Request, res: Response) => {
+        try {
+            const exportData = await buildExport();
+            const date = new Date().toISOString().split('T')[0];
+            res.setHeader('Content-Disposition', `attachment; filename=nero-export-${date}.nro`);
+            res.setHeader('Content-Type', 'application/json');
+            res.json(exportData);
+        } catch (error) {
+            logger.error(`Failed to export: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to export data' });
+        }
+    });
+
+    router.post('/import', async (req: Request, res: Response) => {
+        try {
+            const data = req.body;
+            if (!validateExportFile(data)) {
+                res.status(400).json({ error: 'Invalid export file' });
+                return;
+            }
+            const result = await runImport(data);
+            res.json(result);
+        } catch (error) {
+            logger.error(`Failed to import: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to import data' });
         }
     });
 

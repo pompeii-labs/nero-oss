@@ -1,5 +1,6 @@
-import { NeroClient, ActivityEvent } from './index.js';
+import { NeroClient, type ActivityEvent } from './index.js';
 import { Logger } from '../util/logger.js';
+import type { NeroExportData, ImportResult } from '../export-import.js';
 import type {
     LoadedMessage,
     PermissionCallback,
@@ -179,5 +180,13 @@ export class NeroProxy {
         }>
     > {
         return this.client.getAvailableSkills();
+    }
+
+    async exportState(): Promise<NeroExportData> {
+        return this.client.exportData();
+    }
+
+    async importState(data: NeroExportData): Promise<ImportResult> {
+        return this.client.importData(data);
     }
 }

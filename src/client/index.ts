@@ -1,4 +1,5 @@
 import { Logger } from '../util/logger.js';
+import type { NeroExportData, ImportResult } from '../export-import.js';
 
 export interface NeroClientConfig {
     baseUrl: string;
@@ -299,6 +300,30 @@ export class NeroClient {
             const error = await response.json().catch(() => ({ error: 'Unknown error' }));
             throw new Error(error.error || `HTTP ${response.status}`);
         }
+    }
+
+    async exportData(): Promise<NeroExportData> {
+        const response = await fetch(`${this.baseUrl}/api/export`, {
+            headers: this.getHeaders(),
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(error.error || `HTTP ${response.status}`);
+        }
+        return response.json();
+    }
+
+    async importData(data: NeroExportData): Promise<ImportResult> {
+        const response = await fetch(`${this.baseUrl}/api/import`, {
+            method: 'POST',
+            headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(error.error || `HTTP ${response.status}`);
+        }
+        return response.json();
     }
 
     async think(

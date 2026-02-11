@@ -1,15 +1,20 @@
 import chalk from 'chalk';
+import { writeFile, readFile } from 'fs/promises';
+import { resolve } from 'path';
+import { existsSync } from 'fs';
 import { NERO_BLUE } from './theme.js';
 import { createServer } from 'http';
 import {
     NeroConfig,
     updateSettings,
     getConfigPath,
+    getConfigDir,
     saveConfig,
     updateMcpServerOAuth,
     getAllowedTools,
     removeAllowedTool,
 } from '../config.js';
+import { validateExportFile } from '../export-import.js';
 import type { NeroProxy } from '../client/proxy.js';
 import {
     discoverOAuthMetadata,
@@ -771,6 +776,95 @@ export const commands: SlashCommand[] = [
 
             output += chalk.dim('\nUse /skills <name> for details\n');
             return { message: output };
+        },
+    },
+    {
+        name: 'export',
+        aliases: ['backup'],
+        description: 'Export Nero state to a .nro file',
+        execute: async (args, ctx) => {
+            const date = new Date().toISOString().split('T')[0];
+            const defaultPath = resolve(getConfigDir(), `export-${date}.nro`);
+            const outputPath = args[0] ? resolve(args[0]) : defaultPath;
+
+            ctx.setLoading('Exporting data');
+
+            try {
+                const data = await ctx.nero.exportState();
+                ctx.setLoading(null);
+
+                const tableNames = Object.keys(data.data) as (keyof typeof data.data)[];
+                let output = `\n${chalk.bold('Export Summary')}\n\n`;
+                let totalRows = 0;
+                for (const table of tableNames) {
+                    const count = data.data[table].length;
+                    totalRows += count;
+                    output += `  ${chalk.dim(table + ':')} ${count}\n`;
+                }
+                output += `\n  ${chalk.dim('Total:')} ${totalRows} rows\n`;
+
+                await writeFile(outputPath, JSON.stringify(data, null, 2));
+                output += `\n${chalk.green('Saved to')} ${chalk.cyan(outputPath)}`;
+                return { message: output };
+            } catch (error) {
+                ctx.setLoading(null);
+                return { error: `Export failed: ${(error as Error).message}` };
+            }
+        },
+    },
+    {
+        name: 'import',
+        aliases: ['restore'],
+        description: 'Import Nero state from a .nro file',
+        execute: async (args, ctx) => {
+            if (args.length === 0) {
+                return { error: 'Usage: /import <path-to-file.nro>' };
+            }
+
+            const filePath = resolve(args[0]);
+            if (!existsSync(filePath)) {
+                return { error: `File not found: ${filePath}` };
+            }
+
+            let data: unknown;
+            try {
+                const content = await readFile(filePath, 'utf-8');
+                data = JSON.parse(content);
+            } catch {
+                return { error: 'Failed to parse file as JSON' };
+            }
+
+            if (!validateExportFile(data)) {
+                return {
+                    error: 'Invalid export file (missing nero_export marker or wrong version)',
+                };
+            }
+
+            const tableNames = Object.keys(data.data) as (keyof typeof data.data)[];
+            let preview = `\n${chalk.bold('Import Preview')} ${chalk.dim(`(v${data.version}, exported ${data.exported_at})`)}\n\n`;
+            for (const table of tableNames) {
+                const count = data.data[table].length;
+                preview += `  ${chalk.dim(table + ':')} ${count}\n`;
+            }
+            preview += `\n${chalk.yellow('This will replace all existing data.')}\n`;
+
+            ctx.log(preview);
+            ctx.setLoading('Importing data');
+
+            try {
+                const result = await ctx.nero.importState(data);
+                ctx.setLoading(null);
+
+                let output = `\n${chalk.green('Import complete')}\n\n`;
+                if (result.config) output += `  ${chalk.dim('Config:')} merged\n`;
+                for (const [table, count] of Object.entries(result.counts)) {
+                    output += `  ${chalk.dim(table + ':')} ${count} rows\n`;
+                }
+                return { message: output };
+            } catch (error) {
+                ctx.setLoading(null);
+                return { error: `Import failed: ${(error as Error).message}` };
+            }
         },
     },
 ];
