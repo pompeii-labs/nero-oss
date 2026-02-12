@@ -60,7 +60,7 @@ export class NeroService {
 
         this.app.use(cors(corsOptions));
         this.app.set('trust proxy', false);
-        this.app.use(express.json());
+        this.app.use(express.json({ limit: '50mb' }));
         this.app.use(express.urlencoded({ extended: true }));
 
         this.app.use((req: Request, res: Response, next) => {
