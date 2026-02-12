@@ -145,6 +145,19 @@ export async function runImport(data: NeroExportData): Promise<ImportResult> {
                 counts[table] = rows.length;
             }
 
+            for (const table of TABLES) {
+                if (!counts[table]) continue;
+                const tableName = MODEL_MAP[table].tableName;
+                const seq = await client.query(
+                    `SELECT pg_get_serial_sequence('${tableName}', 'id') as seq`,
+                );
+                if (seq.rows[0]?.seq) {
+                    await client.query(
+                        `SELECT setval('${seq.rows[0].seq}', COALESCE((SELECT MAX(id) FROM ${tableName}), 0))`,
+                    );
+                }
+            }
+
             await client.query('COMMIT');
         } catch (error) {
             await client.query('ROLLBACK');

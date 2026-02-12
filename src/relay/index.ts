@@ -6,7 +6,7 @@ import { Logger } from '../util/logger.js';
 import { verifyWsToken } from '../util/wstoken.js';
 import { Socket } from 'net';
 
-const MAX_BODY_BYTES = 1_048_576;
+const MAX_BODY_BYTES = 52_428_800;
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX_FAILURES = 10;
 const RATE_CLEANUP_INTERVAL_MS = 300_000;
