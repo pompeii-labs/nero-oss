@@ -1,7 +1,7 @@
 import { env } from '$env/dynamic/public';
 
 export function getServerUrl(route: string = ''): string {
-    const baseUrl = env.PUBLIC_NERO_SERVER_URL || 'http://localhost:4848';
+    const baseUrl = env.PUBLIC_NERO_SERVER_URL || '';
     return `${baseUrl}${route}`;
 }
 
