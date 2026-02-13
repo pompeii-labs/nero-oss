@@ -13,6 +13,8 @@ import {
     updateMcpServerOAuth,
     getAllowedTools,
     removeAllowedTool,
+    isOpenRouter,
+    OPENROUTER_BASE_URL,
 } from '../config.js';
 import { validateExportFile } from '../export-import.js';
 import type { NeroProxy } from '../client/proxy.js';
@@ -74,7 +76,8 @@ export interface CommandResult {
     shouldContinue?: boolean;
 }
 
-async function validateModel(modelId: string): Promise<boolean> {
+async function validateModel(modelId: string, config: NeroConfig): Promise<boolean> {
+    if (!isOpenRouter(config)) return true;
     try {
         const response = await fetch(`https://openrouter.ai/api/v1/models/${modelId}/endpoints`, {
             headers: {
@@ -152,12 +155,18 @@ export const commands: SlashCommand[] = [
         description: 'Show or change the current model',
         execute: async (args, ctx) => {
             if (args.length === 0) {
-                return { message: `Current model: ${chalk.cyan(ctx.config.settings.model)}` };
+                const baseUrl = ctx.config.settings.baseUrl || OPENROUTER_BASE_URL;
+                const provider = isOpenRouter(ctx.config) ? 'OpenRouter' : baseUrl;
+                return {
+                    message:
+                        `Current model: ${chalk.cyan(ctx.config.settings.model)}\n` +
+                        `Provider: ${chalk.dim(provider)}`,
+                };
             }
             const newModel = args.join('/');
 
             ctx.log(chalk.dim(`Validating model ${newModel}...`));
-            const isValid = await validateModel(newModel);
+            const isValid = await validateModel(newModel, ctx.config);
             if (!isValid) {
                 return {
                     error: `Model not found: ${newModel}. Check available models at https://openrouter.ai/models`,
@@ -168,6 +177,41 @@ export const commands: SlashCommand[] = [
             ctx.config.settings.model = newModel;
             ctx.nero.setModel(newModel);
             return { message: `Model changed to ${chalk.cyan(newModel)}` };
+        },
+    },
+    {
+        name: 'provider',
+        aliases: ['baseurl'],
+        description: 'Show or change the API provider (base URL)',
+        execute: async (args, ctx) => {
+            if (args.length === 0) {
+                const baseUrl = ctx.config.settings.baseUrl || OPENROUTER_BASE_URL;
+                const label = isOpenRouter(ctx.config) ? 'OpenRouter' : 'Custom';
+                return {
+                    message:
+                        `Provider: ${chalk.cyan(label)}\n` +
+                        `Base URL: ${chalk.dim(baseUrl)}\n` +
+                        chalk.dim('\nUsage: /provider <url> or /provider openrouter'),
+                };
+            }
+
+            const value = args[0];
+
+            if (value === 'openrouter' || value === 'reset') {
+                await updateSettings({ baseUrl: undefined });
+                ctx.config.settings.baseUrl = undefined;
+                ctx.nero.setModel(ctx.config.settings.model, OPENROUTER_BASE_URL);
+                return { message: `Provider reset to ${chalk.cyan('OpenRouter')}` };
+            }
+
+            if (!value.startsWith('http')) {
+                return { error: 'Base URL must start with http:// or https://' };
+            }
+
+            await updateSettings({ baseUrl: value });
+            ctx.config.settings.baseUrl = value;
+            ctx.nero.setModel(ctx.config.settings.model, value);
+            return { message: `Provider changed to ${chalk.cyan(value)}` };
         },
     },
     {
@@ -295,9 +339,12 @@ export const commands: SlashCommand[] = [
             const mcpCount = Object.keys(ctx.config.mcpServers).length;
             const timezone = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+            const provider = isOpenRouter(ctx.config) ? 'OpenRouter' : settings.baseUrl || 'custom';
+
             let output = `\n${chalk.bold('Settings:')}\n`;
             output += `  Streaming: ${settings.streaming ? chalk.green('on') : chalk.dim('off')}\n`;
             output += `  Model: ${chalk.cyan(settings.model)}\n`;
+            output += `  Provider: ${chalk.cyan(provider)}${settings.baseUrl ? '' : chalk.dim(' (default)')}\n`;
             output += `  Timezone: ${chalk.cyan(timezone)}${!settings.timezone ? chalk.dim(' (auto)') : ''}\n`;
             output += `  Verbose: ${settings.verbose ? chalk.green('on') : chalk.dim('off')}\n`;
             output += `  MCP Servers: ${mcpCount > 0 ? chalk.green(mcpCount) : chalk.dim('none')}\n`;
@@ -614,6 +661,9 @@ export const commands: SlashCommand[] = [
         aliases: ['credits', 'balance'],
         description: 'Show OpenRouter API usage and credits',
         execute: async (_, ctx) => {
+            if (!isOpenRouter(ctx.config)) {
+                return { message: chalk.dim('Usage tracking is only available with OpenRouter.') };
+            }
             ctx.setLoading('Fetching usage data');
 
             try {

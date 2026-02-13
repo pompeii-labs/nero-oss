@@ -9,6 +9,7 @@ import {
     updateSettings,
     getAllowedTools,
     removeAllowedTool,
+    isOpenRouter,
     type NeroConfig,
     type McpServerConfig,
 } from '../../config.js';
@@ -249,6 +250,12 @@ export function createWebRouter(agent: Nero, port?: number) {
 
     router.get('/models/validate/:modelId(*)', async (req: Request, res: Response) => {
         const modelId = req.params.modelId as string;
+        const config = await loadConfig();
+
+        if (!isOpenRouter(config)) {
+            res.json({ valid: true, modelId });
+            return;
+        }
 
         try {
             const response = await fetch(

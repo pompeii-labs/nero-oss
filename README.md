@@ -143,6 +143,57 @@ nero mcp list
 nero mcp remove filesystem
 ```
 
+## Local Models (Ollama / vLLM)
+
+Nero works with any OpenAI-compatible API, including local models via Ollama, vLLM, or similar.
+
+### Quick Setup with Ollama
+
+```bash
+# Install Ollama (https://ollama.com)
+ollama pull llama3.2:3b
+
+# Point Nero at your Ollama instance
+nero config set baseUrl http://localhost:11434/v1
+nero config set model llama3.2:3b
+```
+
+Or edit `~/.nero/config.json` directly:
+
+```json
+{
+  "settings": {
+    "model": "llama3.2:3b",
+    "baseUrl": "http://localhost:11434/v1"
+  }
+}
+```
+
+### Any OpenAI-Compatible Endpoint
+
+Works with vLLM, TGI, LiteLLM, or any server that speaks the OpenAI chat completions API:
+
+```bash
+nero config set baseUrl http://your-server:8000/v1
+nero config set model your-model-name
+```
+
+### Managing Models
+
+```bash
+nero models              # List available models from your provider
+nero config get model    # Show current model
+nero config get baseUrl  # Show current provider URL
+```
+
+### Reset to OpenRouter
+
+```bash
+nero config set baseUrl openrouter
+```
+
+> **Note:** Local models on CPU can be slow. For best results, use a GPU-accelerated setup. Nero automatically extends timeouts for local providers.
+
 ## Remote Access (Relay)
 
 Nero supports **remote access** without exposing the core service to the public internet. A lightweight **relay** is tunneled instead, and the relay proxies only the allowed endpoints back to your local Nero instance.
@@ -195,6 +246,9 @@ The file is loaded on startup and reloaded with `nero reload`. Use it for:
 nero                      # Start interactive REPL
 nero -m "message"         # One-shot message
 nero config               # Show current configuration
+nero config set <k> <v>   # Set a config value (model, baseUrl, etc.)
+nero config get <key>     # Get a config value
+nero models               # List available models from provider
 nero status               # Show installation status and mode
 nero setup                # Setup Docker container
 nero setup --integrated   # Setup with full host access (default)
@@ -215,6 +269,7 @@ nero migrate              # Run database migrations
 | `/clear` | Clear conversation history |
 | `/compact` | Summarize and compress context |
 | `/model` | Switch AI model |
+| `/provider` | Switch API provider (base URL) |
 | `/mcp` | List connected MCP servers and tools |
 | `/memory` | Show stored memories |
 | `/usage` | Show context usage |
@@ -321,7 +376,7 @@ Add these to `~/.nero/.env`:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `OPENROUTER_API_KEY` | Yes | OpenRouter API key |
+| `OPENROUTER_API_KEY` | Yes* | OpenRouter API key (*not needed with local models) |
 | `DATABASE_URL` | No | PostgreSQL connection string |
 | `TAVILY_API_KEY` | No | For web search tool |
 | `DEEPGRAM_API_KEY` | No | For voice STT |

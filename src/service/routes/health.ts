@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import semver from 'semver';
 import { Nero } from '../../agent/nero.js';
-import { loadConfig } from '../../config.js';
+import { loadConfig, isOpenRouter } from '../../config.js';
 import { Logger } from '../../util/logger.js';
 import { VERSION } from '../../util/version.js';
 
@@ -21,6 +21,16 @@ export function createHealthRouter(agent: Nero) {
 
     router.get('/usage', async (req: Request, res: Response) => {
         try {
+            const config = await loadConfig();
+            if (!isOpenRouter(config)) {
+                res.json({
+                    local: true,
+                    model: config.settings.model,
+                    baseUrl: config.settings.baseUrl,
+                });
+                return;
+            }
+
             const apiKey = process.env.OPENROUTER_API_KEY;
             if (!apiKey) {
                 res.status(400).json({ error: 'OPENROUTER_API_KEY not set' });

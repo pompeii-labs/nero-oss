@@ -3,6 +3,7 @@ import { get, put, del, type NeroResult } from './helpers';
 export type NeroSettings = {
     streaming: boolean;
     model: string;
+    baseUrl?: string;
     theme: 'dark' | 'light';
     verbose: boolean;
     historyLimit: number;

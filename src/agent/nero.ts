@@ -19,7 +19,7 @@ import { join, dirname, resolve, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import { encode as toon } from '@toon-format/toon';
-import { NeroConfig, getConfigDir } from '../config.js';
+import { NeroConfig, getConfigDir, isOpenRouter, OPENROUTER_BASE_URL } from '../config.js';
 import { discoverSkills, loadSkill, getSkillContent, type Skill } from '../skills/index.js';
 import { McpClient } from '../mcp/client.js';
 import { db, isDbConnected } from '../db/index.js';
@@ -115,14 +115,18 @@ export class Nero extends MagmaAgent {
     browserManager: BrowserManager;
 
     constructor(config: NeroConfig) {
+        const baseUrl = config.settings.baseUrl || OPENROUTER_BASE_URL;
+        const apiKey = isOpenRouter(config) ? process.env.OPENROUTER_API_KEY! : 'ollama';
         const client = new OpenAI({
-            baseURL: 'https://openrouter.ai/api/v1',
-            apiKey: process.env.OPENROUTER_API_KEY!,
+            baseURL: baseUrl,
+            apiKey,
+            timeout: isOpenRouter(config) ? 120_000 : 600_000,
+            maxRetries: isOpenRouter(config) ? 2 : 0,
         });
 
         super({
             provider: 'openai',
-            model: 'anthropic/claude-opus-4.5',
+            model: config.settings.model,
             client,
             settings: {
                 temperature: 0.7,
@@ -471,6 +475,10 @@ export class Nero extends MagmaAgent {
     private contextLimit: number = 200000;
 
     private async fetchContextLimit(modelId: string): Promise<void> {
+        if (!isOpenRouter(this.config)) {
+            this.contextLimit = 128000;
+            return;
+        }
         try {
             const response = await fetch(
                 `https://openrouter.ai/api/v1/models/${modelId}/endpoints`,
@@ -1516,15 +1524,24 @@ Keep your response brief -- what you did and any notable results.`;
         return this.mcpClient.getToolNames();
     }
 
-    setModel(model: string): void {
+    setModel(model: string, baseUrl?: string): void {
+        const resolvedBaseUrl = baseUrl || this.config.settings.baseUrl || OPENROUTER_BASE_URL;
+        const isLocal = resolvedBaseUrl !== OPENROUTER_BASE_URL;
+        const apiKey = isLocal ? 'ollama' : process.env.OPENROUTER_API_KEY!;
+        const client = new OpenAI({
+            baseURL: resolvedBaseUrl,
+            apiKey,
+            timeout: isLocal ? 600_000 : 120_000,
+            maxRetries: isLocal ? 0 : 2,
+        });
+        this.openaiClient = client;
         this.setProviderConfig({
             provider: 'openai',
             model,
-            client: new OpenAI({
-                baseURL: 'https://openrouter.ai/api/v1',
-                apiKey: process.env.OPENROUTER_API_KEY!,
-            }),
+            client,
         });
+        this.config.settings.model = model;
+        if (baseUrl !== undefined) this.config.settings.baseUrl = baseUrl;
         this.fetchContextLimit(model);
     }
 

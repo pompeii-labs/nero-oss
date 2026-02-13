@@ -29,6 +29,7 @@
     import Sliders from '@lucide/svelte/icons/sliders';
     import Zap from '@lucide/svelte/icons/zap';
     import Activity from '@lucide/svelte/icons/activity';
+    import Cpu from '@lucide/svelte/icons/cpu';
     import Copy from '@lucide/svelte/icons/copy';
     import RefreshCw from '@lucide/svelte/icons/refresh-cw';
     import Terminal from '@lucide/svelte/icons/terminal';
@@ -58,7 +59,10 @@
     let loading = $state(true);
 
     let historyLimit = $state(20);
+    let modelValue = $state('');
+    let baseUrlValue = $state('');
     let savingSettings = $state(false);
+    let savingModel = $state(false);
 
     let envValues: Record<string, string> = $state({});
     let savingEnv = $state(false);
@@ -83,6 +87,8 @@
         if (configRes.success) {
             config = configRes.data;
             historyLimit = config.settings.historyLimit;
+            modelValue = config.settings.model;
+            baseUrlValue = config.settings.baseUrl || '';
         }
 
         if (serverRes.success) {
@@ -116,6 +122,23 @@
             toast.error('Failed to save settings');
         }
         savingSettings = false;
+    }
+
+    async function handleSaveModel() {
+        savingModel = true;
+        const updates: Record<string, unknown> = { model: modelValue };
+        if (baseUrlValue.trim()) {
+            updates.baseUrl = baseUrlValue.trim();
+        } else {
+            updates.baseUrl = undefined;
+        }
+        const response = await updateSettings(updates as any);
+        if (response.success) {
+            toast.success('Model settings saved. Restart to apply.');
+        } else {
+            toast.error('Failed to save model settings');
+        }
+        savingModel = false;
     }
 
     async function handleRevokeTool(tool: string) {
@@ -395,6 +418,59 @@
                     style="animation-delay: 150ms"
                 >
                     <div class="p-4 border-b border-border/30">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500/20 to-orange-500/5 border border-orange-500/30 dark:border-orange-500/20">
+                                    <Cpu class="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                                </div>
+                                <div>
+                                    <h2 class="font-medium text-foreground">Model & Provider</h2>
+                                    <p class="text-xs text-muted-foreground">Configure LLM model and API endpoint</p>
+                                </div>
+                            </div>
+                            <Button onclick={handleSaveModel} disabled={savingModel} class="gap-2">
+                                {#if savingModel}
+                                    <Loader2 class="h-4 w-4 animate-spin" />
+                                {/if}
+                                Save
+                            </Button>
+                        </div>
+                    </div>
+                    <div class="p-4 space-y-4">
+                        <div>
+                            <label for="model" class="mb-1.5 block text-sm font-medium text-foreground">Model</label>
+                            <Input
+                                id="model"
+                                type="text"
+                                bind:value={modelValue}
+                                placeholder="anthropic/claude-sonnet-4"
+                                class="font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50"
+                            />
+                            <p class="mt-1.5 text-xs text-muted-foreground">
+                                OpenRouter model ID or local model name (e.g. llama3.2:3b)
+                            </p>
+                        </div>
+                        <div>
+                            <label for="base-url" class="mb-1.5 block text-sm font-medium text-foreground">Base URL</label>
+                            <Input
+                                id="base-url"
+                                type="text"
+                                bind:value={baseUrlValue}
+                                placeholder="Leave blank for OpenRouter (default)"
+                                class="font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50"
+                            />
+                            <p class="mt-1.5 text-xs text-muted-foreground">
+                                Custom OpenAI-compatible endpoint. Leave blank to use OpenRouter.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="rounded-xl border border-border/50 bg-gradient-to-br from-card/80 to-card/40 overflow-hidden opacity-0 animate-[floatUp_0.4s_ease-out_forwards]"
+                    style="animation-delay: 200ms"
+                >
+                    <div class="p-4 border-b border-border/30">
                         <div class="flex items-center gap-3">
                             <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20">
                                 <Sliders class="h-5 w-5 text-primary" />
@@ -434,7 +510,7 @@
 
                 <div
                     class="rounded-xl border border-border/50 bg-gradient-to-br from-card/80 to-card/40 overflow-hidden opacity-0 animate-[floatUp_0.4s_ease-out_forwards]"
-                    style="animation-delay: 200ms"
+                    style="animation-delay: 250ms"
                 >
                     <div class="p-4 border-b border-border/30">
                         <div class="flex items-center gap-3">

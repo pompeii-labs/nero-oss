@@ -111,7 +111,7 @@ export class NeroProxy {
         this.logger.warn('clearHistory not yet implemented for service mode');
     }
 
-    setModel(model: string): void {
+    setModel(model: string, baseUrl?: string): void {
         // TODO: Call service endpoint to set model
         this.logger.warn('setModel not yet implemented for service mode');
     }

@@ -28,6 +28,7 @@ export interface SessionSettings {
 export interface NeroSettings {
     streaming: boolean;
     model: string;
+    baseUrl?: string;
     theme: 'dark' | 'light';
     verbose: boolean;
     historyLimit: number;
@@ -121,6 +122,9 @@ function envBool(key: string): boolean | undefined {
 function applyEnvOverrides(config: NeroConfig): void {
     const model = process.env.NERO_MODEL;
     if (model) config.settings.model = model;
+
+    const baseUrl = process.env.NERO_BASE_URL;
+    if (baseUrl) config.settings.baseUrl = baseUrl;
 
     const streaming = envBool('NERO_STREAMING');
     if (streaming !== undefined) config.settings.streaming = streaming;
@@ -274,6 +278,12 @@ export async function updateSettings(updates: Partial<NeroSettings>): Promise<Ne
 
 export function getConfig(): NeroConfig {
     return cachedConfig || defaultConfig;
+}
+
+export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+
+export function isOpenRouter(config: NeroConfig): boolean {
+    return !config.settings.baseUrl || config.settings.baseUrl === OPENROUTER_BASE_URL;
 }
 
 export async function updateMcpServerOAuth(
