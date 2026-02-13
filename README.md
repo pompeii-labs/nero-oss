@@ -143,6 +143,107 @@ nero mcp list
 nero mcp remove filesystem
 ```
 
+## Hooks
+
+Hooks let you run shell commands at key points in Nero's lifecycle. Use them for logging, blocking dangerous commands, auto-formatting after writes, or injecting custom workflows.
+
+Add a `hooks` key to `~/.nero/config.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "command": "~/.nero/hooks/block-rm.sh",
+        "match": "bash",
+        "timeout": 5000
+      }
+    ],
+    "PostToolUse": [
+      {
+        "command": "~/.nero/hooks/log-tools.sh"
+      }
+    ],
+    "OnPrompt": [
+      {
+        "command": "~/.nero/hooks/log-prompt.sh",
+        "match": "voice"
+      }
+    ]
+  }
+}
+```
+
+### Hook Events
+
+| Event | When | Can Block? |
+|-------|------|-----------|
+| `PreToolUse` | Before a tool executes | Yes |
+| `PostToolUse` | After a tool completes | No |
+| `OnPrompt` | When a message is received | No |
+| `OnResponse` | When Nero responds | No |
+| `OnMainFinish` | Full turn completes (all tools + response) | No |
+| `OnError` | An error occurs | No |
+| `OnSessionStart` | New conversation session starts | No |
+
+### Hook Config
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `command` | string | Shell command to run. `~` is resolved to home directory. |
+| `match` | string | Optional regex filter. For tool events, matches tool name. For `OnPrompt`, matches medium (cli, voice, sms, etc.). |
+| `timeout` | number | Timeout in ms. Default: 10000. |
+
+### How It Works
+
+Each hook receives JSON context on **stdin** with details about the event:
+
+```json
+{
+  "event": "PreToolUse",
+  "tool": "bash",
+  "args": { "command": "rm -rf /tmp/test" },
+  "cwd": "/home/user"
+}
+```
+
+**Exit codes:**
+- `0` = allow (hook passes)
+- Non-zero = block (`PreToolUse` only). Stdout is used as the block reason.
+
+Non-blocking events (`PostToolUse`, `OnPrompt`, etc.) ignore exit codes. They run fire-and-forget.
+
+### Example: Block Dangerous Commands
+
+```bash
+#!/bin/sh
+# ~/.nero/hooks/block-rm.sh
+python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+cmd = data.get('args', {}).get('command', '')
+if 'rm -rf' in cmd:
+    print('Blocked: dangerous rm command')
+    sys.exit(1)
+"
+```
+
+### Example: Log All Tool Usage
+
+```bash
+#!/bin/sh
+# ~/.nero/hooks/log-tools.sh
+python3 -c "
+import sys, json, datetime
+data = json.load(sys.stdin)
+ts = datetime.datetime.now().strftime('%H:%M:%S')
+tool = data.get('tool', '?')
+event = data.get('event', '?')
+with open('$HOME/.nero/hooks.log', 'a') as f:
+    f.write(f'[{ts}] {event} {tool}\n')
+"
+```
+
 ## Local Models (Ollama / vLLM)
 
 Nero works with any OpenAI-compatible API, including local models via Ollama, vLLM, or similar.

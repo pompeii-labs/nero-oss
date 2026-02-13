@@ -37,6 +37,21 @@ export interface NeroSettings {
     onlineMode?: boolean;
 }
 
+export type HookEvent =
+    | 'PreToolUse'
+    | 'PostToolUse'
+    | 'OnPrompt'
+    | 'OnResponse'
+    | 'OnMainFinish'
+    | 'OnError'
+    | 'OnSessionStart';
+
+export interface HookConfig {
+    command: string;
+    match?: string;
+    timeout?: number;
+}
+
 export interface ProactivityConfig {
     enabled: boolean;
     notify: boolean;
@@ -62,6 +77,7 @@ export interface NeroConfig {
     settings: NeroSettings;
     allowedTools?: string[];
     proactivity: ProactivityConfig;
+    hooks?: Partial<Record<HookEvent, HookConfig[]>>;
     browser?: {
         headless?: boolean;
         timeout?: number;

@@ -44,6 +44,7 @@ import { isDestructiveToolCall } from '../proactivity/destructive.js';
 import { SessionManager } from '../services/session-manager.js';
 import { processManager } from '../services/process-manager.js';
 import { BrowserManager } from '../browser/index.js';
+import { HooksManager } from '../hooks/index.js';
 import type { FileRef } from '../files/index.js';
 import {
     readFileAsBase64,
@@ -117,6 +118,8 @@ export class Nero extends MagmaAgent {
     private _isProcessing: boolean = false;
     private _aborted: boolean = false;
     browserManager: BrowserManager;
+    private hooksManager: HooksManager;
+    private turnToolCount: number = 0;
 
     constructor(config: NeroConfig) {
         const baseUrl = config.settings.baseUrl || OPENROUTER_BASE_URL;
@@ -144,6 +147,7 @@ export class Nero extends MagmaAgent {
         this.proactivity = new ProactivityManager(config);
         this.proactivity.setAgent(this);
         this.browserManager = new BrowserManager(config.browser);
+        this.hooksManager = new HooksManager(config);
         this.initSessionManager();
     }
 
@@ -321,6 +325,11 @@ export class Nero extends MagmaAgent {
         try {
             const sessionService = this.sessionManager.getSessionService();
             const sessionInfo = await sessionService.detectSession();
+
+            if (sessionInfo.isNewSession && sessionInfo.currentSessionStart) {
+                const sessionId = sessionInfo.currentSessionStart.toISOString();
+                this.hooksManager.runOnSessionStart(sessionId, this.currentCwd).catch(() => {});
+            }
 
             const sessionSummaries = await Summary.getRecentSessionSummaries(
                 this.config.settings.sessions.maxSessionSummaries,
@@ -815,9 +824,11 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         const attachments = typeof input === 'string' ? undefined : input.attachments;
 
         this._aborted = false;
+        this.turnToolCount = 0;
         this.proactivity.onUserActivity();
 
         this.sessionManager?.onUserMessage();
+        this.hooksManager.runOnPrompt(message, this.currentMedium, this.currentCwd).catch(() => {});
 
         this.onChunk = onChunk;
 
@@ -863,12 +874,21 @@ You are responding via Slack DM. Use Slack-friendly formatting:
             await this.saveMessage('user', message, attachments);
             if (response?.content) {
                 await this.saveMessage('assistant', response.content);
+                this.hooksManager.runOnResponse(response.content, this.currentCwd).catch(() => {});
             }
+
+            this.hooksManager
+                .runOnMainFinish(response?.content || '', this.turnToolCount, this.currentCwd)
+                .catch(() => {});
 
             return {
                 content: response?.content || '',
                 streamed: !!onChunk,
             };
+        } catch (error) {
+            const err = error as Error;
+            this.hooksManager.runOnError(err.message, undefined, this.currentCwd).catch(() => {});
+            throw error;
         } finally {
             this._isProcessing = false;
         }
@@ -1589,7 +1609,7 @@ Keep your response brief -- what you did and any notable results.`;
 
         if (this.backgroundMode) {
             if (this.config.proactivity.destructive) {
-                return true;
+                return this.runPreToolHook(tool, args, callId);
             }
 
             const result = isDestructiveToolCall(
@@ -1615,16 +1635,39 @@ Keep your response brief -- what you did and any notable results.`;
                 return false;
             }
 
-            return true;
+            return this.runPreToolHook(tool, args, callId);
         }
 
-        if (!this.onPermissionRequest) return true;
+        if (!this.onPermissionRequest) {
+            return this.runPreToolHook(tool, args, callId);
+        }
         const activity: ToolActivity = { id: callId, tool, args, status: 'pending' };
         this.onActivity?.(activity);
         const approved = await this.onPermissionRequest(activity);
         activity.status = approved ? 'approved' : 'denied';
         this.onActivity?.(activity);
-        return approved;
+        if (!approved) return false;
+        return this.runPreToolHook(tool, args, callId);
+    }
+
+    private async runPreToolHook(
+        tool: string,
+        args: Record<string, any>,
+        callId: string,
+    ): Promise<boolean> {
+        const hookResult = await this.hooksManager.runPreToolUse(tool, args, this.currentCwd);
+        if (hookResult.blocked) {
+            const activity: ToolActivity = {
+                id: callId,
+                tool,
+                args,
+                status: 'skipped',
+                skipReason: hookResult.reason || 'Blocked by hook',
+            };
+            this.emitActivity(activity);
+            return false;
+        }
+        return true;
     }
 
     private emitActivity(activity: ToolActivity): void {
@@ -1633,6 +1676,22 @@ Keep your response brief -- what you did and any notable results.`;
         }
         Logger.main.tool(activity);
         this.onActivity?.(activity);
+
+        if (activity.status === 'running') {
+            this.turnToolCount++;
+        }
+
+        if (activity.status === 'complete' || activity.status === 'error') {
+            this.hooksManager
+                .runPostToolUse(
+                    activity.tool,
+                    activity.args,
+                    activity.result,
+                    activity.error,
+                    this.currentCwd,
+                )
+                .catch(() => {});
+        }
 
         if (
             this.backgroundMode &&
