@@ -36,6 +36,7 @@ import {
 import { describeRecurrence, parseRecurrence } from '../actions/recurrence.js';
 import { generateDiff } from '../util/diff.js';
 import { hostToContainer, containerToHost } from '../util/paths.js';
+import { runSubagent, type SubagentTask } from './subagent.js';
 import { formatSessionAge } from '../util/temporal.js';
 import { Logger, formatToolName } from '../util/logger.js';
 import { ProactivityManager } from '../proactivity/index.js';
@@ -74,6 +75,9 @@ export interface ToolActivity {
     result?: string;
     error?: string;
     skipReason?: string;
+    subagentId?: string;
+    subagentTask?: string;
+    dispatchId?: string;
 }
 
 export type PermissionCallback = (activity: ToolActivity) => Promise<boolean>;
@@ -2613,6 +2617,170 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
             this.emitActivity(activity);
             return `Fetch error: ${activity.error}`;
         }
+    }
+
+    @tool({
+        description:
+            'Dispatch subagents to work on tasks in parallel. Each subagent runs independently with its own context. Use "research" mode for investigation/analysis or "build" mode for file modifications. Results come back to you for review before responding to the user.',
+    })
+    @toolparam({
+        key: 'tasks',
+        type: 'array',
+        items: {
+            type: 'object',
+            properties: [
+                {
+                    key: 'id',
+                    type: 'string',
+                    required: true,
+                    description: 'Short identifier (e.g., "api-research", "auth-scaffold")',
+                },
+                {
+                    key: 'task',
+                    type: 'string',
+                    required: true,
+                    description: 'Detailed task description with context',
+                },
+                {
+                    key: 'mode',
+                    type: 'string',
+                    required: false,
+                    description: '"research" (read-only, default) or "build" (can write files)',
+                },
+                {
+                    key: 'model',
+                    type: 'string',
+                    required: false,
+                    description:
+                        'OpenRouter model ID for this subagent. Use faster/cheaper models for simple lookups. Defaults to your own model if omitted.',
+                },
+            ],
+        },
+        required: true,
+        description: 'Array of tasks to dispatch in parallel',
+    })
+    async dispatch(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { tasks } = call.fn_args as {
+            tasks: Array<{ id: string; task: string; mode?: string; model?: string }>;
+        };
+
+        if (!tasks || tasks.length === 0) {
+            return 'Error: No tasks provided';
+        }
+
+        const taskSummary = tasks.map((t) => `- ${t.id}: ${t.task.slice(0, 80)}`).join('\n');
+        const approved = await this.requestPermission(
+            'dispatch',
+            { tasks: taskSummary, count: tasks.length },
+            call.id,
+        );
+        if (!approved) return 'Permission denied by user.';
+
+        const dispatchId = call.id;
+
+        const dispatchActivity: ToolActivity = {
+            id: dispatchId,
+            tool: 'dispatch',
+            displayName: `Dispatching ${tasks.length} subagents`,
+            args: { count: tasks.length },
+            status: 'running',
+            dispatchId,
+        };
+        this.emitActivity(dispatchActivity);
+
+        const subagentTasks: SubagentTask[] = tasks.map((t) => ({
+            id: t.id,
+            task: t.task,
+            mode: (t.mode === 'build' ? 'build' : 'research') as 'research' | 'build',
+            model: t.model,
+        }));
+
+        for (const st of subagentTasks) {
+            const subActivity: ToolActivity = {
+                id: `${dispatchId}-${st.id}`,
+                tool: 'subagent',
+                displayName: st.id,
+                args: { task: st.task.slice(0, 200), mode: st.mode },
+                status: 'running',
+                subagentId: st.id,
+                subagentTask: st.task,
+                dispatchId,
+            };
+            this.emitActivity(subActivity);
+        }
+
+        const cwd = this.currentCwd;
+
+        const toolCounts = new Map<string, number>();
+
+        const results = await Promise.allSettled(
+            subagentTasks.map((st) =>
+                runSubagent({
+                    task: st,
+                    model: this.config.settings.model,
+                    client: this.openaiClient,
+                    cwd,
+                    onToolUse: (toolName, args, status, result) => {
+                        const key = st.id;
+                        const count = (toolCounts.get(key) || 0) + (status === 'running' ? 1 : 0);
+                        if (status === 'running') toolCounts.set(key, count);
+
+                        const toolActivity: ToolActivity = {
+                            id: `${dispatchId}-${st.id}-tool-${count}`,
+                            tool: toolName,
+                            args: args as Record<string, any>,
+                            status:
+                                status === 'running'
+                                    ? 'running'
+                                    : status === 'complete'
+                                      ? 'complete'
+                                      : 'error',
+                            result: result?.slice(0, 200),
+                            subagentId: st.id,
+                            dispatchId,
+                        };
+                        this.emitActivity(toolActivity);
+                    },
+                }),
+            ),
+        );
+
+        const output: string[] = [];
+        for (let i = 0; i < subagentTasks.length; i++) {
+            const st = subagentTasks[i]!;
+            const result = results[i]!;
+
+            const subActivity: ToolActivity = {
+                id: `${dispatchId}-${st.id}`,
+                tool: 'subagent',
+                displayName: st.id,
+                args: { task: st.task.slice(0, 200), mode: st.mode },
+                status: result.status === 'fulfilled' ? 'complete' : 'error',
+                subagentId: st.id,
+                subagentTask: st.task,
+                dispatchId,
+            };
+
+            if (result.status === 'fulfilled') {
+                const truncated =
+                    result.value.length > 4000
+                        ? result.value.slice(0, 4000) + '\n\n[Result truncated]'
+                        : result.value;
+                subActivity.result = `Completed (${toolCounts.get(st.id) || 0} tool calls)`;
+                output.push(`## Subagent: ${st.id}\n${truncated}`);
+            } else {
+                subActivity.error = result.reason?.message || 'Unknown error';
+                output.push(`## Subagent: ${st.id}\nError: ${subActivity.error}`);
+            }
+
+            this.emitActivity(subActivity);
+        }
+
+        dispatchActivity.status = 'complete';
+        dispatchActivity.result = `${tasks.length} subagents completed`;
+        this.emitActivity(dispatchActivity);
+
+        return output.join('\n\n');
     }
 
     @tool({

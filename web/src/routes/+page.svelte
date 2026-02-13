@@ -7,6 +7,7 @@
     import ChatMessage from '$lib/components/chat/chat-message.svelte';
     import ChatInput, { type PendingFile } from '$lib/components/chat/chat-input.svelte';
     import ToolActivityComponent from '$lib/components/chat/tool-activity.svelte';
+    import SubagentGroup from '$lib/components/chat/subagent-group.svelte';
     import PermissionModal from '$lib/components/chat/permission-modal.svelte';
     import GlitchLoader from '$lib/components/chat/glitch-loader.svelte';
     import CommandWidgetComponent from '$lib/components/chat/command-widget.svelte';
@@ -30,7 +31,8 @@
     type TimelineItem =
         | { type: 'message'; data: Message }
         | { type: 'activity'; data: ToolActivity; id: string }
-        | { type: 'widget'; data: CommandWidget; id: string };
+        | { type: 'widget'; data: CommandWidget; id: string }
+        | { type: 'subagent-group'; data: { dispatchId: string; activities: ToolActivity[] }; id: string };
 
     let timeline: TimelineItem[] = $state([]);
     let loading = $state(false);
@@ -285,8 +287,6 @@
                     if (isAtBottom) scrollToBottom();
                 },
                 onActivity: (activity) => {
-                    loadingText = `Calling ${activity.displayName || activity.tool}`;
-
                     if (streamingContent.trim()) {
                         timeline = [...timeline, {
                             type: 'message',
@@ -299,18 +299,55 @@
                         streamingContent = '';
                     }
 
-                    const existingIndex = timeline.findIndex(
-                        item => item.type === 'activity' && item.id === activity.id
-                    );
+                    if (activity.dispatchId) {
+                        const runningSubagents = timeline.find(
+                            item => item.type === 'subagent-group' && item.id === `dispatch-${activity.dispatchId}`
+                        );
 
-                    if (existingIndex >= 0) {
-                        timeline = [
-                            ...timeline.slice(0, existingIndex),
-                            { type: 'activity', data: activity, id: activity.id },
-                            ...timeline.slice(existingIndex + 1)
-                        ];
+                        if (runningSubagents && runningSubagents.type === 'subagent-group') {
+                            const existingIdx = runningSubagents.data.activities.findIndex(a => a.id === activity.id);
+                            if (existingIdx >= 0) {
+                                runningSubagents.data.activities[existingIdx] = activity;
+                            } else {
+                                runningSubagents.data.activities.push(activity);
+                            }
+                            timeline = [...timeline];
+                        } else {
+                            timeline = [...timeline, {
+                                type: 'subagent-group',
+                                data: { dispatchId: activity.dispatchId, activities: [activity] },
+                                id: `dispatch-${activity.dispatchId}`
+                            }];
+                        }
+
+                        const groupItem = timeline.find(
+                            item => item.type === 'subagent-group' && item.id === `dispatch-${activity.dispatchId}`
+                        );
+                        if (groupItem && groupItem.type === 'subagent-group') {
+                            const subagents = groupItem.data.activities.filter(a => a.tool === 'subagent');
+                            const running = subagents.filter(a => a.status === 'running').length;
+                            if (running > 0) {
+                                loadingText = `Running ${running} subagent${running !== 1 ? 's' : ''}`;
+                            } else {
+                                loadingText = 'Processing results';
+                            }
+                        }
                     } else {
-                        timeline = [...timeline, { type: 'activity', data: activity, id: activity.id }];
+                        loadingText = `Calling ${activity.displayName || activity.tool}`;
+
+                        const existingIndex = timeline.findIndex(
+                            item => item.type === 'activity' && item.id === activity.id
+                        );
+
+                        if (existingIndex >= 0) {
+                            timeline = [
+                                ...timeline.slice(0, existingIndex),
+                                { type: 'activity', data: activity, id: activity.id },
+                                ...timeline.slice(existingIndex + 1)
+                            ];
+                        } else {
+                            timeline = [...timeline, { type: 'activity', data: activity, id: activity.id }];
+                        }
                     }
 
                     if (isAtBottom) scrollToBottom();
@@ -489,6 +526,8 @@
                     <ChatMessage role={item.data.role} content={item.data.content} medium={item.data.medium} attachments={item.data.attachments} />
                 {:else if item.type === 'activity'}
                     <ToolActivityComponent activity={item.data} />
+                {:else if item.type === 'subagent-group'}
+                    <SubagentGroup activities={item.data.activities} />
                 {:else if item.type === 'widget'}
                     <CommandWidgetComponent widget={item.data} />
                 {/if}

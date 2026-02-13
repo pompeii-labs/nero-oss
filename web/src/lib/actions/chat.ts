@@ -9,6 +9,9 @@ export type ToolActivity = {
     result?: string;
     error?: string;
     skipReason?: string;
+    subagentId?: string;
+    subagentTask?: string;
+    dispatchId?: string;
 };
 
 export type ChatSSEEvent =
