@@ -13,6 +13,110 @@ All notable changes to Nero are documented here.
 - Configurable timeout per hook (default 10s)
 - Configure via `hooks` key in `~/.nero/config.json`
 
+## 1.24.0 (2026-02-13)
+
+### New Features
+- Subagent dispatch for parallel task execution
+
+## 1.23.1 (2026-02-12)
+
+### New Features
+- Local model support (Ollama, vLLM, any OpenAI-compatible endpoint)
+
+## 1.23.0 (2026-02-12)
+
+### New Features
+- Image and file support across all interfaces
+
+## 1.22.4 (2026-02-12)
+
+### Fixes
+- Reduce redundant checks in proactivity background loop
+
+## 1.22.3 (2026-02-12)
+
+### Fixes
+- Use relative URLs in web dashboard for LAN access
+
+## 1.22.2 (2026-02-11)
+
+### Fixes
+- Reset sequences after import, increase body limits for large payloads
+- Increase json body limit to 50mb for large imports
+
+## 1.22.1 (2026-02-11)
+
+### Fixes
+- Prevent browser image from claiming latest tag
+
+## 1.22.0 (2026-02-11)
+
+### New Features
+- Browser automation with Playwright
+
+## 1.21.1 (2026-02-11)
+
+### New Features
+- `--dangerous` mode for auto-approving tool actions
+
+## 1.21.0 (2026-02-11)
+
+### New Features
+- Scheduled actions engine with recurrence, execution, and API
+
+## 1.20.0 (2026-02-11)
+
+### New Features
+- Export/import state via .nro files
+- Background activity log, prompt rework, structured output
+- Web MCP OAuth flow for HTTP servers
+
+## 1.19.1 (2026-02-09)
+
+### Changes
+- Redesign web app with TW4, shadcn v2, Svelte 5 runes, oklch color space
+
+## 1.19.0 (2026-02-09)
+
+### New Features
+- Env var overrides for all config values
+- Permission focus notifications
+- Terminal cursor focus improvements
+
+## 1.18.0 (2026-02-09)
+
+### New Features
+- Fetch model context limit from OpenRouter API
+- Parallelize MCP loading and configurable thinking interval
+
+### Fixes
+- Medium label contrast on user bubbles in light mode
+
+## 1.17.0 (2026-02-09)
+
+### New Features
+- Relay-only port architecture with local IP bypass
+
+## 1.16.1 (2026-02-06)
+
+### Fixes
+- Integration tests running in CI
+
+## 1.16.0 (2026-02-06)
+
+### New Features
+- Relay security hardening, voice fixes, and CLI refactor
+
+## 1.15.2 (2026-02-01)
+
+### Fixes
+- Include full file content in update activity for diff viewer
+
+## 1.15.1 (2026-02-01)
+
+### Fixes
+- Start background thinking timer on service start
+
 ## 1.15.0 (2026-02-01)
 
 ### Fixes
