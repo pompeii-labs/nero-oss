@@ -855,7 +855,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
                           .join('\n')
                     : '(none yet)';
 
-            const recentLogsText =
+            const newLogsText =
                 recentLogs.length > 0
                     ? recentLogs
                           .map(
@@ -863,7 +863,7 @@ You are responding via Slack DM. Use Slack-friendly formatting:
                                   `- [${new Date(l.created_at).toLocaleTimeString()}] ${l.tool}(${l.args_summary}) -> ${l.result_summary}`,
                           )
                           .join('\n')
-                    : '(first run, no prior activity)';
+                    : '(none)';
 
             const recentMessages = await this.getMessageHistory(10);
             const recentMessagesText =
@@ -882,11 +882,11 @@ You are responding via Slack DM. Use Slack-friendly formatting:
 
             const backgroundPrompt = `Run a background check. You have access to all your tools.
 
-## Your Recent Activity (last 6 hours)
-${recentLogsText}
-
-## Recent Notes You've Left
+## Your Previous Runs (most recent first)
 ${recentThoughtsText}
+
+## Activity Since Last Run
+${newLogsText}
 
 ## Recent Conversation
 ${recentMessagesText}
@@ -895,7 +895,7 @@ ${recentMessagesText}
 ${memoriesText}
 
 ## Instructions
-You're running in the background while the user is away. Use your tools to check on things, focusing on what CHANGED since your last check. If your activity log shows you already checked something and it was stable, skip it unless there's reason to re-check.
+You're running in the background while the user is away. Your previous runs above contain CHECKED/FOUND/ACTIONS/NEXT summaries. Read them carefully and DO NOT re-check things that were stable last time unless the NEXT section says to follow up on something specific. Only re-check things that were actively changing or that you flagged for follow-up.
 
 **For git checks:** Your cwd is the user's home directory, NOT a git repo. To check git status, first use \`find ~/Desktop -maxdepth 3 -name .git -type d 2>/dev/null\` to locate project directories, then cd into specific projects before running git commands. Don't spam git status - pick 2-3 active projects max.
 
@@ -1066,6 +1066,45 @@ Keep your response brief -- what you did and any notable results.`;
                     : '';
                 return `#${a.id} [${enabled}] "${a.request}" | next: ${new Date(a.timestamp).toISOString()}${recurrence}${lastRun}`;
             })
+            .join('\n');
+    }
+
+    @tool({
+        description:
+            'Query your background activity logs. Returns tool calls you made during background thinking runs. Use to review what you checked and when.',
+    })
+    @toolparam({
+        key: 'hours',
+        type: 'number',
+        required: false,
+        description: 'How many hours back to search (default: 1, max: 24)',
+    })
+    @toolparam({
+        key: 'tool_filter',
+        type: 'string',
+        required: false,
+        description: 'Filter by tool name (e.g. "fetch", "linear", "spotify")',
+    })
+    async queryBackgroundLogs(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const hours = Math.min(call.fn_args.hours || 1, 24);
+        const toolFilter = call.fn_args.tool_filter?.toLowerCase();
+
+        let logs = await BackgroundLog.getRecent(hours);
+
+        if (toolFilter) {
+            logs = logs.filter((l) => l.tool.toLowerCase().includes(toolFilter));
+        }
+
+        if (logs.length === 0) {
+            return `No background logs found in the last ${hours} hour(s)${toolFilter ? ` matching "${toolFilter}"` : ''}.`;
+        }
+
+        return logs
+            .slice(0, 50)
+            .map(
+                (l) =>
+                    `[${new Date(l.created_at).toLocaleTimeString()}] ${l.tool}(${l.args_summary}) -> ${l.result_summary.slice(0, 200)}`,
+            )
             .join('\n');
     }
 

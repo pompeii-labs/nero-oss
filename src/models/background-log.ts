@@ -47,4 +47,24 @@ export class BackgroundLog extends Model<BackgroundLogData> implements Backgroun
             ids,
         ]);
     }
+
+    static async linkUnlinkedSince(since: Date, runId: number): Promise<void> {
+        if (!isDbConnected()) return;
+
+        await db.query(
+            `UPDATE background_logs SET thinking_run_id = $1 WHERE thinking_run_id IS NULL AND created_at >= $2`,
+            [runId, since],
+        );
+    }
+
+    static async getSince(since: Date): Promise<BackgroundLog[]> {
+        if (!isDbConnected()) return [];
+
+        const { rows } = await db.query(
+            `SELECT * FROM background_logs WHERE thinking_run_id IS NULL AND created_at > $1 ORDER BY created_at DESC`,
+            [since],
+        );
+
+        return rows.map((row) => new BackgroundLog(row));
+    }
 }

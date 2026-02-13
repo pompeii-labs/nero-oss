@@ -79,9 +79,16 @@ export class ProactivityManager {
         console.log(chalk.dim('[proactivity] Running background thinking...'));
 
         try {
-            const recentThoughts = await this.getRecentThoughts(20);
-            const recentLogs = await this.agent.getRecentBackgroundLogs(6);
-            const thought = await this.agent.runBackgroundThinking(recentThoughts, recentLogs);
+            const runStartTime = new Date();
+            const recentThoughts = await this.getRecentThoughts(10);
+
+            const lastThoughtTime =
+                recentThoughts.length > 0
+                    ? new Date(recentThoughts[0].created_at)
+                    : new Date(Date.now() - 6 * 60 * 60 * 1000);
+            const newLogs = await BackgroundLog.getSince(lastThoughtTime);
+
+            const thought = await this.agent.runBackgroundThinking(recentThoughts, newLogs);
 
             if (thought && thought.trim()) {
                 const isUrgent = thought.startsWith('[URGENT]');
@@ -93,17 +100,7 @@ export class ProactivityManager {
                 );
 
                 if (runId) {
-                    const unlinkedLogs = recentLogs.filter((l) => !l.thinking_run_id);
-                    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
-                    const recentUnlinked = unlinkedLogs.filter(
-                        (l) => new Date(l.created_at) > fiveMinAgo,
-                    );
-                    if (recentUnlinked.length > 0) {
-                        await BackgroundLog.setThinkingRunId(
-                            recentUnlinked.map((l) => l.id),
-                            runId,
-                        );
-                    }
+                    await BackgroundLog.linkUnlinkedSince(runStartTime, runId);
                 }
 
                 if (isUrgent && this.config.proactivity.notify) {
