@@ -2,6 +2,17 @@
 
 All notable changes to Nero are documented here.
 
+## 1.25.0 (2026-02-13)
+
+### New Features
+
+**Hooks System**
+- Run shell commands at key lifecycle points (before/after tool use, on prompts, on responses, on errors, on session start)
+- `PreToolUse` hooks can block tool execution (non-zero exit code = block, stdout = reason)
+- Regex matching to target specific tools or mediums
+- Configurable timeout per hook (default 10s)
+- Configure via `hooks` key in `~/.nero/config.json`
+
 ## 1.15.0 (2026-02-01)
 
 ### Fixes
