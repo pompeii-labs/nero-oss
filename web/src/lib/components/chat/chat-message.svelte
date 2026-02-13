@@ -1,23 +1,46 @@
 <script lang="ts">
     import { cn } from '$lib/utils';
     import { marked } from 'marked';
+    import { getServerUrl } from '$lib/actions/helpers';
     import ChevronRight from '@lucide/svelte/icons/chevron-right';
     import Copy from '@lucide/svelte/icons/copy';
     import Check from '@lucide/svelte/icons/check';
+    import FileText from '@lucide/svelte/icons/file-text';
     import NeroIcon from '$lib/components/icons/nero-icon.svelte';
     import Phone from '@lucide/svelte/icons/phone';
     import MessageSquare from '@lucide/svelte/icons/message-square';
     import Terminal from '@lucide/svelte/icons/terminal';
     import Hash from '@lucide/svelte/icons/hash';
 
+    type FileRef = {
+        id: string;
+        originalName: string;
+        mimeType: string;
+        size: number;
+        previewUrl?: string;
+    };
+
     type Props = {
         role: 'user' | 'assistant' | 'system';
         content: string;
         medium?: 'cli' | 'api' | 'voice' | 'sms' | 'slack';
         isStreaming?: boolean;
+        attachments?: FileRef[] | null;
     };
 
-    let { role, content, medium, isStreaming = false }: Props = $props();
+    let { role, content, medium, isStreaming = false, attachments }: Props = $props();
+
+    const imageAttachments = $derived(
+        attachments?.filter((a) => a.mimeType.startsWith('image/')) || [],
+    );
+    const fileAttachments = $derived(
+        attachments?.filter((a) => !a.mimeType.startsWith('image/')) || [],
+    );
+
+    function getImageUrl(att: FileRef): string {
+        if (att.previewUrl) return att.previewUrl;
+        return getServerUrl(`/api/files/${att.id}`);
+    }
     let copied = $state(false);
 
     const mediumConfig = {
@@ -79,9 +102,31 @@
                         <span>via {config.label}</span>
                     </div>
                 {/if}
-                <p class="text-[15px] leading-relaxed text-white whitespace-pre-wrap">
-                    {content}
-                </p>
+                {#if content}
+                    <p class="text-[15px] leading-relaxed text-white whitespace-pre-wrap">{content}</p>
+                {/if}
+                {#if imageAttachments.length > 0}
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        {#each imageAttachments as att}
+                            <img
+                                src={getImageUrl(att)}
+                                alt={att.originalName}
+                                class="max-h-48 rounded-lg"
+                                loading="lazy"
+                            />
+                        {/each}
+                    </div>
+                {/if}
+                {#if fileAttachments.length > 0}
+                    <div class="mt-2 flex flex-wrap gap-1.5">
+                        {#each fileAttachments as att}
+                            <span class="inline-flex items-center gap-1.5 rounded-md bg-white/10 px-2 py-1 text-xs text-white/80">
+                                <FileText class="h-3 w-3" />
+                                {att.originalName}
+                            </span>
+                        {/each}
+                    </div>
+                {/if}
             </div>
         </div>
     </div>

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import path from 'path';
 import crypto from 'crypto';
+import { existsSync } from 'fs';
 import { Nero, ToolActivity } from '../../agent/nero.js';
 import { Logger } from '../../util/logger.js';
 import { isDbConnected } from '../../db/index.js';
@@ -14,11 +15,20 @@ import {
     loadConfig,
 } from '../../config.js';
 import { loadSkill, getSkillContent } from '../../skills/index.js';
+import { saveUpload, getFilePath, type FileRef } from '../../files/index.js';
+import { readFile as readFileFromDisk } from 'fs/promises';
+
+interface AttachmentUpload {
+    data: string;
+    name: string;
+    mimeType: string;
+}
 
 interface ChatRequest {
     message: string;
     medium?: 'cli' | 'api' | 'voice' | 'sms';
     cwd?: string;
+    attachments?: AttachmentUpload[];
 }
 
 interface PendingPermission {
@@ -82,15 +92,73 @@ export function createChatRouter(agent: Nero) {
         res.json({ success: true });
     });
 
-    router.post('/chat', async (req: Request, res: Response) => {
-        const { message, medium = 'api', cwd } = req.body as ChatRequest;
+    router.get('/files/:id', async (req: Request, res: Response) => {
+        const fileId = req.params.id as string;
+        const filePath = getFilePath(fileId);
 
-        if (!message) {
-            res.status(400).json({ error: 'Message is required' });
+        if (!existsSync(filePath)) {
+            res.status(404).json({ error: 'File not found' });
             return;
         }
 
-        logger.info(`Received message via ${medium}${cwd ? ` from ${cwd}` : ''}`);
+        try {
+            const buffer = await readFileFromDisk(filePath);
+            const ext = path.extname(fileId).toLowerCase();
+            const mimeMap: Record<string, string> = {
+                '.png': 'image/png',
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.gif': 'image/gif',
+                '.webp': 'image/webp',
+                '.pdf': 'application/pdf',
+                '.json': 'application/json',
+                '.txt': 'text/plain',
+                '.csv': 'text/csv',
+                '.md': 'text/markdown',
+                '.html': 'text/html',
+                '.css': 'text/css',
+                '.js': 'text/javascript',
+                '.ts': 'text/typescript',
+                '.xml': 'application/xml',
+                '.yaml': 'text/yaml',
+                '.yml': 'text/yaml',
+            };
+            const contentType = mimeMap[ext] || 'application/octet-stream';
+
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            res.send(buffer);
+        } catch {
+            res.status(500).json({ error: 'Failed to read file' });
+        }
+    });
+
+    router.post('/chat', async (req: Request, res: Response) => {
+        const {
+            message,
+            medium = 'api',
+            cwd,
+            attachments: rawAttachments,
+        } = req.body as ChatRequest;
+
+        if (!message && (!rawAttachments || rawAttachments.length === 0)) {
+            res.status(400).json({ error: 'Message or attachments required' });
+            return;
+        }
+
+        const fileRefs: FileRef[] = [];
+        if (rawAttachments && rawAttachments.length > 0) {
+            for (const att of rawAttachments) {
+                const buffer = Buffer.from(att.data, 'base64');
+                const ref = await saveUpload(buffer, att.name, att.mimeType);
+                fileRefs.push(ref);
+            }
+            logger.info(
+                `Received message via ${medium} with ${fileRefs.length} attachment(s)${cwd ? ` from ${cwd}` : ''}`,
+            );
+        } else {
+            logger.info(`Received message via ${medium}${cwd ? ` from ${cwd}` : ''}`);
+        }
 
         agent.setMedium(medium as 'cli' | 'api' | 'voice' | 'sms' | 'slack');
 
@@ -166,7 +234,11 @@ export function createChatRouter(agent: Nero) {
                 ? (chunk: string) => sendSSE({ type: 'chunk', data: chunk })
                 : undefined;
 
-            const response = await agent.chat(message, onChunk);
+            const chatInput =
+                fileRefs.length > 0
+                    ? { message: message || '', attachments: fileRefs }
+                    : message || '';
+            const response = await agent.chat(chatInput, onChunk);
 
             sendSSE({ type: 'done', data: { content: response.content } });
 

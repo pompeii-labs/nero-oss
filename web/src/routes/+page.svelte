@@ -1,11 +1,11 @@
 <script lang="ts">
     import { goto } from '$app/navigation';
     import { onMount } from 'svelte';
-    import { streamChat, clearHistory, abortChat, type ToolActivity } from '$lib/actions/chat';
-    import { getHistory } from '$lib/actions/health';
+    import { streamChat, clearHistory, abortChat, type ToolActivity, type AttachmentUpload } from '$lib/actions/chat';
+    import { getHistory, type FileRef } from '$lib/actions/health';
     import { executeCommand, isSlashCommand, checkAndToggleSkill, refreshLoadedSkills, type CommandContext, type CommandWidget } from '$lib/commands';
     import ChatMessage from '$lib/components/chat/chat-message.svelte';
-    import ChatInput from '$lib/components/chat/chat-input.svelte';
+    import ChatInput, { type PendingFile } from '$lib/components/chat/chat-input.svelte';
     import ToolActivityComponent from '$lib/components/chat/tool-activity.svelte';
     import PermissionModal from '$lib/components/chat/permission-modal.svelte';
     import GlitchLoader from '$lib/components/chat/glitch-loader.svelte';
@@ -17,11 +17,14 @@
     import AlertCircle from '@lucide/svelte/icons/alert-circle';
     import NeroIcon from '$lib/components/icons/nero-icon.svelte';
 
+    type MessageFileRef = FileRef & { previewUrl?: string };
+
     type Message = {
         id: string;
         role: 'user' | 'assistant' | 'system';
         content: string;
         medium?: 'cli' | 'api' | 'voice' | 'sms' | 'slack';
+        attachments?: MessageFileRef[] | null;
     };
 
     type TimelineItem =
@@ -58,7 +61,8 @@
                     id: `history-${i}`,
                     role: m.role,
                     content: m.content,
-                    medium: m.medium
+                    medium: m.medium,
+                    attachments: m.attachments,
                 }
             }));
             scrollToBottom();
@@ -220,13 +224,47 @@
         streamingContent = '';
     }
 
-    async function handleSendMessage(message: string) {
+    function fileToBase64(file: File): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const result = reader.result as string;
+                const base64 = result.split(',')[1];
+                resolve(base64);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function handleSendMessage(message: string, files?: PendingFile[]) {
+        let userAttachments: MessageFileRef[] | undefined;
+        let attachmentUploads: AttachmentUpload[] | undefined;
+
+        if (files && files.length > 0) {
+            userAttachments = [];
+            attachmentUploads = [];
+            for (const pf of files) {
+                const base64 = await fileToBase64(pf.file);
+                const mime = pf.file.type || 'application/octet-stream';
+                userAttachments.push({
+                    id: pf.id,
+                    originalName: pf.file.name,
+                    mimeType: mime,
+                    size: pf.file.size,
+                    previewUrl: mime.startsWith('image/') ? `data:${mime};base64,${base64}` : undefined,
+                });
+                attachmentUploads.push({ data: base64, name: pf.file.name, mimeType: mime });
+            }
+        }
+
         timeline = [...timeline, {
             type: 'message',
             data: {
                 id: `user-${Date.now()}`,
                 role: 'user',
-                content: message
+                content: message,
+                attachments: userAttachments,
             }
         }];
         loading = true;
@@ -239,6 +277,7 @@
         try {
         await streamChat({
             message,
+            attachments: attachmentUploads,
             signal: abortController.signal,
             callbacks: {
                 onChunk: (chunk) => {
@@ -447,7 +486,7 @@
 
             {#each timeline as item}
                 {#if item.type === 'message'}
-                    <ChatMessage role={item.data.role} content={item.data.content} medium={item.data.medium} />
+                    <ChatMessage role={item.data.role} content={item.data.content} medium={item.data.medium} attachments={item.data.attachments} />
                 {:else if item.type === 'activity'}
                     <ToolActivityComponent activity={item.data} />
                 {:else if item.type === 'widget'}

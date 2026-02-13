@@ -5,9 +5,18 @@
     import { getSuggestions, isSlashCommand, type Suggestion } from '$lib/commands';
     import ArrowUp from '@lucide/svelte/icons/arrow-up';
     import Square from '@lucide/svelte/icons/square';
+    import Paperclip from '@lucide/svelte/icons/paperclip';
+    import X from '@lucide/svelte/icons/x';
+    import FileText from '@lucide/svelte/icons/file-text';
+
+    export type PendingFile = {
+        file: File;
+        preview?: string;
+        id: string;
+    };
 
     type Props = {
-        onSubmit: (message: string) => void;
+        onSubmit: (message: string, files?: PendingFile[]) => void;
         onCommand?: (command: string) => void;
         onAbort?: () => void;
         disabled?: boolean;
@@ -19,12 +28,94 @@
     let message = $state('');
     let textareaRef: HTMLTextAreaElement | null = $state(null);
     let containerRef: HTMLDivElement | null = $state(null);
+    let fileInputRef: HTMLInputElement | null = $state(null);
     let suggestions: Suggestion[] = $state([]);
     let selectedIndex = $state(0);
     let isFocused = $state(false);
+    let isDragOver = $state(false);
+    let pendingFiles: PendingFile[] = $state([]);
+
+    const ACCEPTED_TYPES = 'image/*,.pdf,.csv,.json,.txt,.md,.ts,.js,.py,.html,.css,.xml,.yaml,.yml,.toml,.sql,.sh,.log';
 
     const MIN_HEIGHT = 56;
     const MAX_HEIGHT = 200;
+
+    function isImageFile(file: File): boolean {
+        return file.type.startsWith('image/');
+    }
+
+    function addFiles(files: FileList | File[]) {
+        for (const file of files) {
+            const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const pending: PendingFile = { file, id };
+
+            if (isImageFile(file)) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const idx = pendingFiles.findIndex((f) => f.id === id);
+                    if (idx >= 0) {
+                        pendingFiles[idx] = { ...pendingFiles[idx], preview: reader.result as string };
+                        pendingFiles = [...pendingFiles];
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+
+            pendingFiles = [...pendingFiles, pending];
+        }
+    }
+
+    function removeFile(id: string) {
+        pendingFiles = pendingFiles.filter((f) => f.id !== id);
+    }
+
+    function handleDragOver(e: DragEvent) {
+        e.preventDefault();
+        isDragOver = true;
+    }
+
+    function handleDragLeave(e: DragEvent) {
+        e.preventDefault();
+        isDragOver = false;
+    }
+
+    function handleDrop(e: DragEvent) {
+        e.preventDefault();
+        isDragOver = false;
+        if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+            addFiles(e.dataTransfer.files);
+        }
+    }
+
+    function handlePaste(e: ClipboardEvent) {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        const imageFiles: File[] = [];
+        for (const item of items) {
+            if (item.kind === 'file' && item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                if (file) imageFiles.push(file);
+            }
+        }
+
+        if (imageFiles.length > 0) {
+            e.preventDefault();
+            addFiles(imageFiles);
+        }
+    }
+
+    function openFilePicker() {
+        fileInputRef?.click();
+    }
+
+    function handleFileSelect(e: Event) {
+        const input = e.target as HTMLInputElement;
+        if (input.files && input.files.length > 0) {
+            addFiles(input.files);
+            input.value = '';
+        }
+    }
 
     async function updateSuggestions() {
         if (isSlashCommand(message)) {
@@ -41,14 +132,16 @@
     }
 
     function handleSubmit() {
-        if (!message.trim() || disabled || loading) return;
+        const hasContent = message.trim() || pendingFiles.length > 0;
+        if (!hasContent || disabled || loading) return;
 
         if (isSlashCommand(message) && onCommand) {
             onCommand(message.trim());
         } else {
-            onSubmit(message.trim());
+            onSubmit(message.trim(), pendingFiles.length > 0 ? pendingFiles : undefined);
         }
         message = '';
+        pendingFiles = [];
         suggestions = [];
         textareaRef?.focus();
     }
@@ -124,10 +217,38 @@
 
 <div class="floating-input p-4 pt-6">
     <div class="mx-auto max-w-3xl">
+        {#if pendingFiles.length > 0}
+            <div class="mb-2 flex flex-wrap gap-2 px-1">
+                {#each pendingFiles as pf (pf.id)}
+                    <div class="relative group flex items-center gap-2 rounded-lg border border-border/50 bg-muted/30 px-2 py-1.5">
+                        {#if pf.preview}
+                            <img src={pf.preview} alt={pf.file.name} class="h-10 w-10 rounded object-cover" />
+                        {:else}
+                            <div class="flex h-10 w-10 items-center justify-center rounded bg-muted/50">
+                                <FileText class="h-4 w-4 text-muted-foreground" />
+                            </div>
+                        {/if}
+                        <span class="max-w-[120px] truncate text-xs text-muted-foreground">{pf.file.name}</span>
+                        <button
+                            type="button"
+                            onclick={() => removeFile(pf.id)}
+                            class="flex h-5 w-5 items-center justify-center rounded-full bg-background/80 text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
+                        >
+                            <X class="h-3 w-3" />
+                        </button>
+                    </div>
+                {/each}
+            </div>
+        {/if}
+
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
             bind:this={containerRef}
-            class="relative input-glow rounded-2xl {isFocused ? 'ring-1 ring-primary/30' : ''}"
+            class="relative input-glow rounded-2xl {isFocused ? 'ring-1 ring-primary/30' : ''} {isDragOver ? 'ring-2 ring-primary/50 bg-primary/5' : ''}"
             style="height: {MIN_HEIGHT}px"
+            ondragover={handleDragOver}
+            ondragleave={handleDragLeave}
+            ondrop={handleDrop}
         >
             <CommandPalette
                 {suggestions}
@@ -135,19 +256,47 @@
                 onSelect={selectSuggestion}
             />
 
+            {#if isDragOver}
+                <div class="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-primary/5 border-2 border-dashed border-primary/40 pointer-events-none">
+                    <span class="text-sm text-primary/70 font-medium">Drop files here</span>
+                </div>
+            {/if}
+
             <Textarea
                 bind:ref={textareaRef}
                 bind:value={message}
                 placeholder="Ask Nero anything..."
-                class="h-full w-full resize-none bg-transparent border-0 pr-14 pl-4 pt-4 font-mono text-sm placeholder:text-muted-foreground/40 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                class="h-full w-full resize-none bg-transparent border-0 pr-24 pl-4 pt-4 font-mono text-sm placeholder:text-muted-foreground/40 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                 onkeydown={handleKeyDown}
                 oninput={handleInput}
+                onpaste={handlePaste}
                 onfocus={() => isFocused = true}
                 onblur={() => isFocused = false}
                 {disabled}
             />
 
-            <div class="absolute bottom-3 right-3">
+            <input
+                bind:this={fileInputRef}
+                type="file"
+                accept={ACCEPTED_TYPES}
+                multiple
+                class="hidden"
+                onchange={handleFileSelect}
+            />
+
+            <div class="absolute bottom-3 right-3 flex items-center gap-1.5">
+                {#if !(loading && onAbort)}
+                    <button
+                        type="button"
+                        onclick={openFilePicker}
+                        disabled={disabled || loading}
+                        class="relative flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground/50 transition-all hover:text-muted-foreground hover:bg-muted/50 disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Attach file"
+                    >
+                        <Paperclip class="h-4 w-4" />
+                    </button>
+                {/if}
+
                 {#if loading && onAbort}
                     <button
                         type="button"
@@ -161,7 +310,7 @@
                     <button
                         type="button"
                         onclick={handleSubmit}
-                        disabled={!message.trim() || disabled || loading}
+                        disabled={(!message.trim() && pendingFiles.length === 0) || disabled || loading}
                         class="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground transition-all hover:from-primary/90 hover:to-primary/70 disabled:opacity-40 disabled:cursor-not-allowed group"
                     >
                         <div class="absolute inset-0 rounded-xl bg-primary/30 blur-lg opacity-0 group-hover:opacity-60 transition-opacity"></div>

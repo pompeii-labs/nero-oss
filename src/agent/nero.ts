@@ -4,6 +4,8 @@ import type {
     MagmaMessage,
     MagmaToolCall,
     MagmaSystemMessageType,
+    MagmaContentBlock,
+    MagmaImageType,
 } from '@pompeii-labs/magma/types';
 import OpenAI from 'openai';
 import chalk from 'chalk';
@@ -13,7 +15,7 @@ import { execSync, exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
-import { join, dirname, resolve } from 'path';
+import { join, dirname, resolve, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import { encode as toon } from '@toon-format/toon';
@@ -41,12 +43,26 @@ import { isDestructiveToolCall } from '../proactivity/destructive.js';
 import { SessionManager } from '../services/session-manager.js';
 import { processManager } from '../services/process-manager.js';
 import { BrowserManager } from '../browser/index.js';
+import type { FileRef } from '../files/index.js';
+import {
+    readFileAsBase64,
+    readFileAsText,
+    isImageMimeType,
+    isTextMimeType,
+    isPdfMimeType,
+    extractPdfText,
+} from '../files/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 interface ChatResponse {
     content: string;
     streamed: boolean;
+}
+
+export interface ChatInput {
+    message: string;
+    attachments?: FileRef[];
 }
 
 export interface ToolActivity {
@@ -552,9 +568,15 @@ Be thorough - this summary will be the primary context for future conversations.
         return summaryContent;
     }
 
-    async getMessageHistory(
-        limit = 50,
-    ): Promise<Array<{ role: string; content: string; created_at: string; medium?: string }>> {
+    async getMessageHistory(limit = 50): Promise<
+        Array<{
+            role: string;
+            content: string;
+            created_at: string;
+            medium?: string;
+            attachments?: FileRef[] | null;
+        }>
+    > {
         if (!isDbConnected()) return [];
 
         const messages = await Message.getRecent(limit);
@@ -563,6 +585,7 @@ Be thorough - this summary will be the primary context for future conversations.
             content: m.content,
             created_at: String(m.created_at),
             medium: m.medium,
+            attachments: m.attachments,
         }));
     }
 
@@ -772,7 +795,13 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         return messages;
     }
 
-    async chat(message: string, onChunk?: (chunk: string) => void): Promise<ChatResponse> {
+    async chat(
+        input: string | ChatInput,
+        onChunk?: (chunk: string) => void,
+    ): Promise<ChatResponse> {
+        const message = typeof input === 'string' ? input : input.message;
+        const attachments = typeof input === 'string' ? undefined : input.attachments;
+
         this._aborted = false;
         this.proactivity.onUserActivity();
 
@@ -808,13 +837,18 @@ You are responding via Slack DM. Use Slack-friendly formatting:
             this.pendingNotes = [];
         }
 
-        this.addMessage({ role: 'user', content: message });
+        if (attachments && attachments.length > 0) {
+            const blocks = await this.buildAttachmentBlocks(message, attachments);
+            this.addMessage({ role: 'user', blocks });
+        } else {
+            this.addMessage({ role: 'user', content: message });
+        }
 
         this._isProcessing = true;
         try {
             const response = await this.main();
 
-            await this.saveMessage('user', message);
+            await this.saveMessage('user', message, attachments);
             if (response?.content) {
                 await this.saveMessage('assistant', response.content);
             }
@@ -1370,7 +1404,11 @@ Keep your response brief -- what you did and any notable results.`;
         return hostToContainer(resolved);
     }
 
-    private async saveMessage(role: 'user' | 'assistant', content: string): Promise<void> {
+    private async saveMessage(
+        role: 'user' | 'assistant',
+        content: string,
+        attachments?: FileRef[],
+    ): Promise<void> {
         if (!isDbConnected() || this.backgroundMode) return;
         try {
             await Message.create({
@@ -1378,11 +1416,71 @@ Keep your response brief -- what you did and any notable results.`;
                 content,
                 medium: this.currentMedium,
                 compacted: false,
+                attachments:
+                    attachments && attachments.length > 0
+                        ? (JSON.stringify(attachments) as unknown as FileRef[])
+                        : null,
             });
         } catch (error) {
             const err = error as Error;
             console.error(chalk.dim(`[db] Failed to save message: ${err.message}`));
         }
+    }
+
+    private async buildAttachmentBlocks(
+        message: string,
+        attachments: FileRef[],
+    ): Promise<MagmaContentBlock[]> {
+        const blocks: MagmaContentBlock[] = [];
+
+        if (message.trim()) {
+            blocks.push({ type: 'text', text: message });
+        }
+
+        for (const file of attachments) {
+            if (isImageMimeType(file.mimeType)) {
+                const base64 = await readFileAsBase64(file.id);
+                blocks.push({
+                    type: 'image',
+                    image: {
+                        data: base64,
+                        type: file.mimeType as MagmaImageType,
+                    },
+                });
+            } else if (isPdfMimeType(file.mimeType)) {
+                try {
+                    const text = await extractPdfText(file.id);
+                    blocks.push({
+                        type: 'text',
+                        text: `\n\n--- ${file.originalName} ---\n${text}`,
+                    });
+                } catch {
+                    blocks.push({
+                        type: 'text',
+                        text: `\n\n--- ${file.originalName} ---\n[Failed to extract PDF text]`,
+                    });
+                }
+            } else if (isTextMimeType(file.mimeType)) {
+                try {
+                    const text = await readFileAsText(file.id);
+                    blocks.push({
+                        type: 'text',
+                        text: `\n\n--- ${file.originalName} ---\n${text}`,
+                    });
+                } catch {
+                    blocks.push({
+                        type: 'text',
+                        text: `\n\n--- ${file.originalName} ---\n[Failed to read file]`,
+                    });
+                }
+            }
+        }
+
+        if (blocks.length === 0) {
+            blocks.push({ type: 'text', text: message || 'What is this?' });
+        }
+
+        return blocks;
     }
 
     private getCurrentMemories(): Array<{ body: string; created_at: string }> {
@@ -1536,7 +1634,10 @@ Keep your response brief -- what you did and any notable results.`;
         return BackgroundLog.getRecent(hours);
     }
 
-    @tool({ description: 'Read the contents of a file from the filesystem' })
+    @tool({
+        description:
+            'Read the contents of a file from the filesystem. Supports text files, images (adds to visual context), and PDFs (extracts text).',
+    })
     @toolparam({
         key: 'path',
         type: 'string',
@@ -1547,34 +1648,77 @@ Keep your response brief -- what you did and any notable results.`;
         key: 'limit',
         type: 'number',
         required: false,
-        description: 'Max number of lines to read',
+        description: 'Max number of lines to read (text files only)',
     })
     async readFile(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { path, limit } = call.fn_args;
-        const approved = await this.requestPermission('read', { path, limit }, call.id);
+        const { path: inputPath, limit } = call.fn_args;
+        const approved = await this.requestPermission('read', { path: inputPath, limit }, call.id);
         if (!approved) return 'Permission denied by user.';
 
         const activity: ToolActivity = {
             id: call.id,
             tool: 'read',
-            args: { path },
+            args: { path: inputPath },
             status: 'running',
         };
         this.emitActivity(activity);
 
         try {
-            const filePath = this.resolvePath(path);
+            const filePath = this.resolvePath(inputPath);
             if (!existsSync(filePath)) {
                 activity.status = 'error';
-                activity.error = `File not found: ${path}`;
+                activity.error = `File not found: ${inputPath}`;
                 this.emitActivity(activity);
                 return activity.error;
             }
+
+            const ext = extname(filePath).toLowerCase();
+            const imageExtensions = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
+            const pdfExtensions = new Set(['.pdf']);
+
+            if (imageExtensions.has(ext)) {
+                const buffer = await readFile(filePath);
+                const base64 = buffer.toString('base64');
+                const mimeMap: Record<string, MagmaImageType> = {
+                    '.png': 'image/png',
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.gif': 'image/gif',
+                    '.webp': 'image/webp',
+                };
+                const mimeType = mimeMap[ext] || 'image/png';
+                const sizeKb = Math.round(buffer.length / 1024);
+
+                this.addMessage({
+                    role: 'user',
+                    blocks: [{ type: 'image', image: { data: base64, type: mimeType } }],
+                });
+
+                activity.status = 'complete';
+                activity.result = `Image loaded: ${inputPath} (${sizeKb} KB)`;
+                this.emitActivity(activity);
+                return `Image loaded and added to context: ${inputPath} (${sizeKb} KB)`;
+            }
+
+            if (pdfExtensions.has(ext)) {
+                const buffer = await readFile(filePath);
+                const { PDFParse } = await import('pdf-parse');
+                const parser = new PDFParse({ data: new Uint8Array(buffer) });
+                const result = await parser.getText();
+                await parser.destroy();
+                const text = result.text;
+
+                activity.status = 'complete';
+                activity.result = `Extracted ${text.length} chars from PDF: ${inputPath}`;
+                this.emitActivity(activity);
+                return text;
+            }
+
             const content = await readFile(filePath, 'utf-8');
             const lines = content.split('\n');
             const output = limit ? lines.slice(0, limit).join('\n') : content;
             activity.status = 'complete';
-            activity.result = `Read ${lines.length} lines from ${path}`;
+            activity.result = `Read ${lines.length} lines from ${inputPath}`;
             this.emitActivity(activity);
             return output;
         } catch (error) {

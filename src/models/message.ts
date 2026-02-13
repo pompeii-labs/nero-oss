@@ -1,5 +1,6 @@
 import { db, isDbConnected } from '../db/index.js';
 import { Model } from './base.js';
+import type { FileRef } from '../files/index.js';
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 export type MessageMedium = 'terminal' | 'voice' | 'sms' | 'web' | 'cli' | 'api' | 'slack';
@@ -10,6 +11,7 @@ export interface MessageData {
     content: string;
     medium: MessageMedium;
     compacted: boolean;
+    attachments: FileRef[] | null;
     created_at: Date;
 }
 
@@ -18,6 +20,7 @@ export class Message extends Model<MessageData> implements MessageData {
     declare content: string;
     declare medium: MessageMedium;
     declare compacted: boolean;
+    declare attachments: FileRef[] | null;
     declare created_at: Date;
 
     static override tableName = 'messages';

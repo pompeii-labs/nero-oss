@@ -1,14 +1,23 @@
 import type { Request, Response } from 'express';
 import { Nero } from '../agent/nero.js';
 import { Logger } from '../util/logger.js';
+import { saveUpload, type FileRef } from '../files/index.js';
 
 const logger = new Logger('Slack');
+
+interface SlackFile {
+    id: string;
+    name: string;
+    mimetype: string;
+    url_private: string;
+}
 
 interface SlackMessage {
     text: string;
     channel: string;
     user: string;
     ts: string;
+    files?: SlackFile[];
 }
 
 export async function handleSlack(req: Request, res: Response, agent: Nero): Promise<void> {
@@ -28,19 +37,44 @@ export async function handleSlack(req: Request, res: Response, agent: Nero): Pro
             return;
         }
 
-        const { text, channel, user } = req.body as SlackMessage;
+        const { text, channel, user, files } = req.body as SlackMessage;
 
-        if (!text || !channel) {
-            logger.error('Missing text or channel');
+        if (!text && (!files || files.length === 0)) {
+            logger.error('Missing text and files');
             return;
         }
 
-        logger.info(`From ${user}: ${text.slice(0, 50)}${text.length > 50 ? '...' : ''}`);
+        logger.info(
+            `From ${user}: ${(text || '').slice(0, 50)}${(text || '').length > 50 ? '...' : ''}${files?.length ? ` [${files.length} files]` : ''}`,
+        );
 
         agent.setMedium('slack');
         agent.setActivityCallback((activity) => logger.tool(activity));
 
-        const response = await agent.chat(text);
+        const attachments: FileRef[] = [];
+        if (files && files.length > 0) {
+            for (const file of files) {
+                try {
+                    const fileResponse = await fetch(file.url_private, {
+                        headers: { Authorization: `Bearer ${botToken}` },
+                    });
+                    if (fileResponse.ok) {
+                        const buffer = Buffer.from(await fileResponse.arrayBuffer());
+                        const ref = await saveUpload(buffer, file.name, file.mimetype);
+                        attachments.push(ref);
+                    }
+                } catch (err) {
+                    logger.warn(
+                        `Failed to download Slack file ${file.name}: ${(err as Error).message}`,
+                    );
+                }
+            }
+        }
+
+        const chatInput =
+            attachments.length > 0 ? { message: text || 'What is this?', attachments } : text || '';
+
+        const response = await agent.chat(chatInput);
 
         agent.setActivityCallback(undefined);
 

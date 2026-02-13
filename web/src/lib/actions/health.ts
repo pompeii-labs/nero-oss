@@ -7,6 +7,13 @@ export type ContextInfo = {
     mcpTools: string[];
 };
 
+export type FileRef = {
+    id: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+};
+
 export type HistoryInfo = {
     messages: Array<{
         role: 'user' | 'assistant';
@@ -14,6 +21,7 @@ export type HistoryInfo = {
         created_at: string;
         medium?: 'cli' | 'api' | 'voice' | 'sms' | 'slack';
         isHistory?: boolean;
+        attachments?: FileRef[] | null;
     }>;
     hasSummary: boolean;
 };

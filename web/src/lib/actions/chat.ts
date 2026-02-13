@@ -26,12 +26,24 @@ export type StreamCallbacks = {
     onError?: (error: string) => void;
 };
 
+export type AttachmentUpload = {
+    data: string;
+    name: string;
+    mimeType: string;
+};
+
 export async function streamChat(args: {
     message: string;
+    attachments?: AttachmentUpload[];
     callbacks: StreamCallbacks;
     signal?: AbortSignal;
 }): Promise<void> {
     const url = getServerUrl('/api/chat');
+
+    const body: Record<string, unknown> = { message: args.message, medium: 'api' };
+    if (args.attachments && args.attachments.length > 0) {
+        body.attachments = args.attachments;
+    }
 
     const response = await fetch(url, {
         method: 'POST',
@@ -39,7 +51,7 @@ export async function streamChat(args: {
             'Content-Type': 'application/json',
             Accept: 'text/event-stream',
         },
-        body: JSON.stringify({ message: args.message, medium: 'api' }),
+        body: JSON.stringify(body),
         signal: args.signal,
     });
 
