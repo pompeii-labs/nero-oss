@@ -8,3 +8,5 @@ export { Workspace, type WorkspaceData } from './workspace.js';
 export { ThinkingRun, type ThinkingRunData } from './thinking-run.js';
 export { Note, type NoteData } from './note.js';
 export { BackgroundLog, type BackgroundLogData } from './background-log.js';
+export { AutonomyProject, type AutonomyProjectData } from './autonomy-project.js';
+export { AutonomyJournal, type AutonomyJournalData } from './autonomy-journal.js';

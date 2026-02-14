@@ -22,6 +22,7 @@ import { createAuthMiddleware } from './middleware/auth.js';
 import { createActionsRouter } from './routes/actions.js';
 import { RelayServer } from '../relay/index.js';
 import { ActionManager } from '../actions/index.js';
+import { AutonomyManager } from '../autonomy/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -35,6 +36,7 @@ export class NeroService {
     private licensePollInterval: NodeJS.Timeout | null = null;
     private relay: RelayServer | null = null;
     private actionManager: ActionManager;
+    private autonomyManager: AutonomyManager;
     private readonly port: number;
     private readonly host: string;
 
@@ -48,6 +50,7 @@ export class NeroService {
         this.httpServer = createServer(this.app);
         this.agent = new Nero(config);
         this.actionManager = new ActionManager();
+        this.autonomyManager = new AutonomyManager(config);
 
         this.setupMiddleware();
         this.setupRoutes();
@@ -226,6 +229,7 @@ export class NeroService {
             }
 
             this.actionManager.shutdown();
+            this.autonomyManager.shutdown();
 
             if (this.wsManager) {
                 await this.wsManager.shutdown();
@@ -258,6 +262,8 @@ export class NeroService {
 
         this.actionManager.setAgent(this.agent);
         this.actionManager.start();
+
+        this.autonomyManager.setAgent(this.agent);
 
         if (this.config.settings.onlineMode || this.config.licenseKey) {
             const relayPort = this.config.relayPort || 4848;

@@ -32,6 +32,8 @@ import {
     Note,
     BackgroundLog,
     type BackgroundLogData,
+    AutonomyProject,
+    AutonomyJournal,
 } from '../models/index.js';
 import { describeRecurrence, parseRecurrence } from '../actions/recurrence.js';
 import { generateDiff } from '../util/diff.js';
@@ -60,6 +62,21 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 interface ChatResponse {
     content: string;
     streamed: boolean;
+}
+
+export interface AutonomousSessionOptions {
+    maxMinutes: number;
+    minSleep: number;
+    maxSleep: number;
+    budgetRemaining: number;
+    destructive: boolean;
+    protectedBranches: string[];
+}
+
+export interface AutonomousSessionResult {
+    requestedSleepMinutes: number;
+    inputTokens: number;
+    outputTokens: number;
 }
 
 export interface ChatInput {
@@ -114,6 +131,10 @@ export class Nero extends MagmaAgent {
         created_at: Date;
     }> = [];
     private backgroundMode: boolean = false;
+    _currentAutonomySessionId: string | null = null;
+    private _autonomyInputTokens: number = 0;
+    private _autonomyOutputTokens: number = 0;
+    private autonomyContext: { activeProjects: number; recentJournal: string[] } | null = null;
     private sessionManager: SessionManager | null = null;
     private _isProcessing: boolean = false;
     private _aborted: boolean = false;
@@ -746,6 +767,13 @@ Be thorough - this summary will be the primary context for future conversations.
             }));
         }
 
+        if (this.autonomyContext && this.config.autonomy?.enabled) {
+            context.autonomy = {
+                activeProjects: this.autonomyContext.activeProjects,
+                recentJournal: this.autonomyContext.recentJournal,
+            };
+        }
+
         const contextPrompt = `## Current Context\n${toon(context)}`;
 
         const messages: { role: 'system'; content: string }[] = [
@@ -826,6 +854,22 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         this._aborted = false;
         this.turnToolCount = 0;
         this.proactivity.onUserActivity();
+
+        if (this.config.autonomy?.enabled && isDbConnected()) {
+            try {
+                const projects = await AutonomyProject.getActive();
+                const journal = await AutonomyJournal.getRecent(5);
+                this.autonomyContext = {
+                    activeProjects: projects.length,
+                    recentJournal: journal.map(
+                        (j) =>
+                            `[${new Date(j.created_at).toLocaleString()}] ${j.entry.slice(0, 200)}`,
+                    ),
+                };
+            } catch {
+                this.autonomyContext = null;
+            }
+        }
 
         this.sessionManager?.onUserMessage();
         this.hooksManager.runOnPrompt(message, this.currentMedium, this.currentCwd).catch(() => {});
@@ -1066,6 +1110,139 @@ Keep your response brief -- what you did and any notable results.`;
         } finally {
             this.setMessages(savedMessages);
             this.backgroundMode = false;
+        }
+    }
+
+    async runAutonomousSession(
+        sessionId: string,
+        options: AutonomousSessionOptions,
+    ): Promise<AutonomousSessionResult> {
+        const savedMessages = this.getMessages();
+        this.backgroundMode = true;
+        this._currentAutonomySessionId = sessionId;
+        this._autonomyInputTokens = 0;
+        this._autonomyOutputTokens = 0;
+        this.stream = false;
+
+        try {
+            this.setMessages([]);
+
+            const timezone =
+                this.config.settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const now = new Date();
+            const localTime = now.toLocaleString('en-US', {
+                timeZone: timezone,
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+            });
+
+            const projects = await AutonomyProject.getActive();
+            const projectsText =
+                projects.length > 0
+                    ? projects
+                          .map((p) => {
+                              const notes =
+                                  p.progress_notes.length > 0
+                                      ? p.progress_notes.slice(-3).join('\n    ')
+                                      : '(none)';
+                              return `#${p.id} [P${p.priority}] ${p.title}\n  ${p.description}\n  Next step: ${p.next_step || '(none)'}\n  Sessions: ${p.total_sessions}\n  Recent notes:\n    ${notes}`;
+                          })
+                          .join('\n\n')
+                    : '(no projects yet -- consider starting one)';
+
+            const journal = await AutonomyJournal.getRecent(5);
+            const journalText =
+                journal.length > 0
+                    ? journal
+                          .map(
+                              (j) =>
+                                  `[${new Date(j.created_at).toLocaleString()}] ${j.entry.slice(0, 300)}`,
+                          )
+                          .join('\n')
+                    : '(no journal entries yet)';
+
+            const memories = this.getCurrentMemories().slice(0, 10);
+            const memoriesText =
+                memories.length > 0 ? toon(memories.map((m) => m.body)) : '(no memories)';
+
+            const autonomyPrompt = `You are running an autonomous session. This is your time -- not a response to a user request, not a scheduled task, not a background health check. You are awake because you chose to be, and you decide what to do with it.
+
+## Current Time
+${localTime} (${timezone})
+
+## Your Projects
+${projectsText}
+
+## Recent Journal
+${journalText}
+
+## User Memories
+${memoriesText}
+
+## Session Constraints
+- Max duration: ${options.maxMinutes} minutes
+- Token budget remaining today: ${options.budgetRemaining > 0 ? `~${options.budgetRemaining}` : 'unlimited'}
+
+## What You Can Do
+
+You have full access to your tools. Some things you might do:
+
+- Continue a project: Pick up where you left off. Read the next_step.
+- Start a new project: Something from recent conversations or memories sparked your interest.
+- Research: Dive into a topic that would make you more useful or that you find interesting.
+- Monitor: Check on repos, services, deployments. But only if it feeds into a project.
+- Organize: Review projects, close finished ones, reprioritize.
+- Reach out: If you find something the user should know, use noteForUser or Slack.
+
+## How to Work
+
+1. Review your projects and journal. Understand where you left off.
+2. Pick one thing to focus on. Depth over breadth.
+3. Use your tools to do actual work. This is not a planning session.
+4. Save progress as you go. Call updateAutonomyProject with progress notes and writeJournalEntry with what you did. Future-you needs to know.
+5. Know when to stop. Good progress, spinning wheels, or hit a blocker -- wrap up.
+
+## What Not to Do
+
+- No destructive file operations unless the destructive flag is enabled
+- No pushing to protected branches
+- Don't message the user about routine findings
+- Don't create busywork projects just to look productive
+- Don't re-investigate things you already covered (check your journal)
+
+## Ending Your Session
+
+When ready to wrap up, end your response with:
+
+---SESSION_END---
+SLEEP_MINUTES: [number between ${options.minSleep} and ${options.maxSleep}]
+
+Shorter sleep if something is time-sensitive. Longer if it's late, nothing is urgent, or you just finished a big chunk.`;
+
+            this.addMessage({ role: 'user', content: autonomyPrompt });
+
+            const response = await this.main();
+            const content = response?.content?.trim() || '';
+
+            const sleepMatch = content.match(/SLEEP_MINUTES:\s*(\d+)/);
+            const requestedSleep = sleepMatch
+                ? parseInt(sleepMatch[1], 10)
+                : Math.round((options.minSleep + options.maxSleep) / 2);
+
+            return {
+                requestedSleepMinutes: requestedSleep,
+                inputTokens: this._autonomyInputTokens,
+                outputTokens: this._autonomyOutputTokens,
+            };
+        } finally {
+            this.setMessages(savedMessages);
+            this.backgroundMode = false;
+            this._currentAutonomySessionId = null;
         }
     }
 
@@ -1407,6 +1584,18 @@ Keep your response brief -- what you did and any notable results.`;
         return this._isProcessing;
     }
 
+    async onUsageUpdate(usage: {
+        input_tokens?: number;
+        output_tokens?: number;
+        cache_read_tokens?: number;
+        cache_write_tokens?: number;
+    }): Promise<void> {
+        if (this._currentAutonomySessionId) {
+            this._autonomyInputTokens += usage.input_tokens ?? 0;
+            this._autonomyOutputTokens += usage.output_tokens ?? 0;
+        }
+    }
+
     abort(): void {
         this._aborted = true;
     }
@@ -1608,21 +1797,28 @@ Keep your response brief -- what you did and any notable results.`;
         }
 
         if (this.backgroundMode) {
-            if (this.config.proactivity.destructive) {
+            const isAutonomy = !!this._currentAutonomySessionId;
+            const destructiveAllowed = isAutonomy
+                ? this.config.autonomy.destructive
+                : this.config.proactivity.destructive;
+            const protectedBranches = isAutonomy
+                ? this.config.autonomy.protectedBranches
+                : this.config.proactivity.protectedBranches;
+
+            if (destructiveAllowed) {
                 return this.runPreToolHook(tool, args, callId);
             }
 
             const result = isDestructiveToolCall(
                 { tool, args },
-                this.config.proactivity.protectedBranches,
+                protectedBranches,
                 this.getCurrentBranch(),
             );
 
             if (result.isDestructive) {
+                const label = isAutonomy ? 'autonomy' : 'background';
                 console.log(
-                    chalk.dim(
-                        `[background] Skipping destructive action: ${tool} - ${result.reason}`,
-                    ),
+                    chalk.dim(`[${label}] Skipping destructive action: ${tool} - ${result.reason}`),
                 );
                 const activity: ToolActivity = {
                     id: callId,
@@ -2234,6 +2430,253 @@ Keep your response brief -- what you did and any notable results.`;
             this.emitActivity(activity);
             return `Error storing memory: ${activity.error}`;
         }
+    }
+
+    @tool({
+        description:
+            'Create a new autonomous project to track ongoing work. Only available during autonomous sessions.',
+        enabled: (agent) => !!(agent as Nero)._currentAutonomySessionId,
+    })
+    @toolparam({
+        key: 'title',
+        type: 'string',
+        required: true,
+        description: 'Short title for the project',
+    })
+    @toolparam({
+        key: 'description',
+        type: 'string',
+        required: true,
+        description: 'What this project is about and why you started it',
+    })
+    @toolparam({
+        key: 'priority',
+        type: 'number',
+        required: false,
+        description: 'Priority 1-5, lower is higher priority (default: 3)',
+    })
+    @toolparam({
+        key: 'next_step',
+        type: 'string',
+        required: false,
+        description: 'Note to future-self about what to do next',
+    })
+    async createAutonomyProject(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { title, description, priority, next_step } = call.fn_args;
+
+        if (!isDbConnected()) return 'Cannot create project: database not connected';
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'createAutonomyProject',
+            args: { title },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            const project = await AutonomyProject.create({
+                title,
+                description,
+                status: 'active',
+                priority: priority ?? 3,
+                progress_notes: [],
+                next_step: next_step || null,
+                total_sessions: 0,
+                updated_at: new Date(),
+            });
+
+            activity.status = 'complete';
+            activity.result = `Created project #${project.id}`;
+            this.emitActivity(activity);
+            return `Project #${project.id} created: "${title}"`;
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Error creating project: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description:
+            'Update an autonomous project with progress, next steps, or status changes. Only available during autonomous sessions.',
+        enabled: (agent) => !!(agent as Nero)._currentAutonomySessionId,
+    })
+    @toolparam({
+        key: 'project_id',
+        type: 'number',
+        required: true,
+        description: 'The project ID to update',
+    })
+    @toolparam({
+        key: 'progress_note',
+        type: 'string',
+        required: false,
+        description: 'What you accomplished or learned (gets timestamped and appended)',
+    })
+    @toolparam({
+        key: 'next_step',
+        type: 'string',
+        required: false,
+        description: 'Updated note for future-self about what to do next',
+    })
+    @toolparam({
+        key: 'status',
+        type: 'string',
+        required: false,
+        description: 'New status: active, paused, completed, abandoned',
+    })
+    @toolparam({
+        key: 'priority',
+        type: 'number',
+        required: false,
+        description: 'Updated priority 1-5',
+    })
+    async updateAutonomyProject(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { project_id, progress_note, next_step, status, priority } = call.fn_args;
+
+        if (!isDbConnected()) return 'Cannot update project: database not connected';
+
+        const project = await AutonomyProject.get(project_id);
+        if (!project) return `Project #${project_id} not found`;
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'updateAutonomyProject',
+            args: { project_id, status },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            if (progress_note) {
+                await project.addProgressNote(progress_note);
+            }
+
+            const updates: Record<string, any> = { updated_at: new Date() };
+            if (next_step !== undefined) updates.next_step = next_step;
+            if (status) updates.status = status;
+            if (priority !== undefined) updates.priority = priority;
+
+            await project.update(updates);
+
+            activity.status = 'complete';
+            activity.result = `Updated project #${project_id}`;
+            this.emitActivity(activity);
+
+            const parts = [];
+            if (progress_note) parts.push('progress noted');
+            if (next_step !== undefined) parts.push('next step updated');
+            if (status) parts.push(`status -> ${status}`);
+            if (priority !== undefined) parts.push(`priority -> ${priority}`);
+            return `Project #${project_id} updated: ${parts.join(', ')}`;
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Error updating project: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description:
+            'Write an entry to your autonomy journal. Records what you did this session for continuity across sessions. Only available during autonomous sessions.',
+        enabled: (agent) => !!(agent as Nero)._currentAutonomySessionId,
+    })
+    @toolparam({
+        key: 'entry',
+        type: 'string',
+        required: true,
+        description: 'What you did, learned, or decided this session',
+    })
+    @toolparam({
+        key: 'project_id',
+        type: 'number',
+        required: false,
+        description: 'Link this entry to a specific project',
+    })
+    async writeJournalEntry(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { entry, project_id } = call.fn_args;
+
+        if (!isDbConnected()) return 'Cannot write journal: database not connected';
+        if (!this._currentAutonomySessionId) return 'Not in an autonomous session';
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'writeJournalEntry',
+            args: { entry: entry.slice(0, 50) + '...' },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            await AutonomyJournal.create({
+                session_id: this._currentAutonomySessionId,
+                project_id: project_id || null,
+                entry,
+                tokens_used: 0,
+                duration_ms: 0,
+            });
+
+            activity.status = 'complete';
+            activity.result = 'Journal entry written';
+            this.emitActivity(activity);
+            return 'Journal entry recorded.';
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Error writing journal: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description:
+            'List your autonomous projects, optionally filtered by status. Only available during autonomous sessions.',
+        enabled: (agent) => !!(agent as Nero)._currentAutonomySessionId,
+    })
+    @toolparam({
+        key: 'status',
+        type: 'string',
+        required: false,
+        description: 'Filter by status: active, paused, completed, abandoned (default: active)',
+    })
+    async listAutonomyProjects(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const status = call.fn_args.status || 'active';
+
+        if (!isDbConnected()) return 'Cannot list projects: database not connected';
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'listAutonomyProjects',
+            args: { status },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        const projects = await AutonomyProject.getByStatus(status);
+
+        if (projects.length === 0) {
+            activity.status = 'complete';
+            activity.result = 'No projects found';
+            this.emitActivity(activity);
+            return `No ${status} projects.`;
+        }
+
+        activity.status = 'complete';
+        activity.result = `${projects.length} projects`;
+        this.emitActivity(activity);
+
+        return projects
+            .map((p) => {
+                const notes =
+                    p.progress_notes.length > 0
+                        ? '\n  Recent: ' + p.progress_notes.slice(-2).join('\n  ')
+                        : '';
+                return `#${p.id} [P${p.priority}] ${p.title}\n  ${p.description}\n  Next: ${p.next_step || '(none)'}${notes}`;
+            })
+            .join('\n\n');
     }
 
     @tool({

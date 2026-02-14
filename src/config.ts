@@ -60,6 +60,18 @@ export interface ProactivityConfig {
     intervalMinutes: number;
 }
 
+export interface AutonomyConfig {
+    enabled: boolean;
+    maxSessionMinutes: number;
+    minSleepMinutes: number;
+    maxSleepMinutes: number;
+    dailyTokenBudget: number;
+    maxSessionsPerDay: number;
+    destructive: boolean;
+    protectedBranches: string[];
+    notify: boolean;
+}
+
 export interface NeroConfig {
     mcpServers: Record<string, McpServerConfig>;
     licenseKey: string | null;
@@ -77,6 +89,7 @@ export interface NeroConfig {
     settings: NeroSettings;
     allowedTools?: string[];
     proactivity: ProactivityConfig;
+    autonomy: AutonomyConfig;
     hooks?: Partial<Record<HookEvent, HookConfig[]>>;
     browser?: {
         headless?: boolean;
@@ -110,6 +123,18 @@ const defaultProactivity: ProactivityConfig = {
     intervalMinutes: 10,
 };
 
+const defaultAutonomy: AutonomyConfig = {
+    enabled: false,
+    maxSessionMinutes: 30,
+    minSleepMinutes: 15,
+    maxSleepMinutes: 120,
+    dailyTokenBudget: 500000,
+    maxSessionsPerDay: 20,
+    destructive: false,
+    protectedBranches: ['main', 'master'],
+    notify: false,
+};
+
 const defaultConfig: NeroConfig = {
     mcpServers: {},
     licenseKey: null,
@@ -124,6 +149,7 @@ const defaultConfig: NeroConfig = {
     },
     settings: defaultSettings,
     proactivity: defaultProactivity,
+    autonomy: defaultAutonomy,
 };
 
 let cachedConfig: NeroConfig | null = null;
@@ -161,6 +187,15 @@ function applyEnvOverrides(config: NeroConfig): void {
     if (thinkingInterval) {
         const val = parseInt(thinkingInterval, 10);
         if (!isNaN(val) && val >= 1) config.proactivity.intervalMinutes = val;
+    }
+
+    const autonomyEnabled = envBool('NERO_AUTONOMY_ENABLED');
+    if (autonomyEnabled !== undefined) config.autonomy.enabled = autonomyEnabled;
+
+    const autonomyBudget = process.env.NERO_AUTONOMY_TOKEN_BUDGET;
+    if (autonomyBudget) {
+        const val = parseInt(autonomyBudget, 10);
+        if (!isNaN(val) && val >= 0) config.autonomy.dailyTokenBudget = val;
     }
 
     const voiceEnabled = envBool('NERO_VOICE_ENABLED');
@@ -254,6 +289,7 @@ export async function loadConfig(forceReload = false): Promise<NeroConfig> {
                     sessions: { ...defaultSessionSettings, ...userConfig.settings?.sessions },
                 },
                 proactivity: { ...defaultProactivity, ...userConfig.proactivity },
+                autonomy: { ...defaultAutonomy, ...userConfig.autonomy },
             };
             applyEnvOverrides(merged);
             cachedConfig = merged;

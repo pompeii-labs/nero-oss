@@ -15,6 +15,7 @@ import { registerSetupCommands } from './commands/setup.js';
 import { registerExportImportCommands } from './commands/export-import.js';
 import { registerActionsCommands } from './commands/actions.js';
 import { registerModelsCommand } from './commands/models.js';
+import { registerAutonomyCommands } from './commands/autonomy.js';
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ registerSetupCommands(program);
 registerExportImportCommands(program);
 registerActionsCommands(program);
 registerModelsCommand(program);
+registerAutonomyCommands(program);
 
 async function main() {
     try {

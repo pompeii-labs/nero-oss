@@ -26,14 +26,16 @@ export class ProactivityManager {
 
     setAgent(agent: Nero): void {
         this.agent = agent;
-        if (this.config.proactivity.enabled) {
+        if (this.config.proactivity.enabled && !this.config.autonomy?.enabled) {
             console.log(chalk.dim('[proactivity] Starting idle timer on service start'));
             this.resetIdleTimer();
+        } else if (this.config.autonomy?.enabled) {
+            console.log(chalk.dim('[proactivity] Disabled (autonomy mode active)'));
         }
     }
 
     onUserActivity(): void {
-        if (!this.config.proactivity.enabled) return;
+        if (!this.config.proactivity.enabled || this.config.autonomy?.enabled) return;
 
         this.stopBackgroundLoop();
         this.resetIdleTimer();
