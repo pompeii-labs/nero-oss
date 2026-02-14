@@ -2,6 +2,39 @@
 
 All notable changes to Nero are documented here.
 
+## 1.26.0 (2026-02-14)
+
+### New Features
+
+**Autonomy Mode**
+- Nero can now run a continuous self-directed loop, working on his own projects between user interactions
+- Self-scheduling wake/sleep cycle with variable durations chosen by Nero (clamped to configurable bounds)
+- Persistent project tracking (`autonomy_projects` table) with progress notes, priorities, and next steps
+- Session journal (`autonomy_journal` table) for continuity across sessions
+- Four new autonomy tools: `createAutonomyProject`, `updateAutonomyProject`, `writeJournalEntry`, `listAutonomyProjects`
+- Token usage tracking per session via `onUsageUpdate` (input/output tracked separately)
+- Autonomy context surfaces in reactive mode so Nero can reference his autonomous work in conversation
+
+**Safety Guardrails**
+- Configurable daily token budget (set to 0 for unlimited)
+- Max sessions per day limit (set to 0 for unlimited)
+- Per-session time cap (default 30 minutes)
+- Destructive action blocking with separate config from thinking mode
+- Protected branch enforcement
+- Yields to user when agent is busy
+
+**CLI Commands**
+- `nero autonomy on/off` - enable/disable (auto-disables thinking mode)
+- `nero autonomy status` - show config and current state
+- `nero autonomy budget <tokens>` - set daily token budget (0 for unlimited)
+- `nero autonomy destructive on/off` - toggle destructive actions
+- `nero autonomy sleep <min> <max>` - set sleep range in minutes
+- `nero autonomy notify on/off` - toggle notifications
+
+**Environment Variables**
+- `NERO_AUTONOMY_ENABLED` - enable autonomy mode
+- `NERO_AUTONOMY_TOKEN_BUDGET` - set daily token budget
+
 ## 1.25.1 (2026-02-14)
 
 ### Fixes
