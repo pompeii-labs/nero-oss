@@ -51,7 +51,7 @@ jobs:
           name: binaries
           path: dist/binaries/
 
-  build-docker:
+  build-docker-amd64:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -60,9 +60,82 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-amd64
+          cache-from: type=gha,scope=docker-amd64
+          cache-to: type=gha,mode=max,scope=docker-amd64
+
+      - name: Export digest
+        run: echo "${{ steps.build.outputs.digest }}" > /tmp/digest-amd64.txt
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-digest-amd64
+          path: /tmp/digest-amd64.txt
+
+  build-docker-arm64:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-arm64
+          cache-from: type=gha,scope=docker-arm64
+          cache-to: type=gha,mode=max,scope=docker-arm64
+
+      - name: Export digest
+        run: echo "${{ steps.build.outputs.digest }}" > /tmp/digest-arm64.txt
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-digest-arm64
+          path: /tmp/digest-arm64.txt
+
+  merge-docker:
+    needs: [build-docker-amd64, build-docker-arm64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -84,18 +157,25 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest
 
-      - name: Build and push
-        uses: docker/build-push-action@v5
+      - name: Download digests
+        uses: actions/download-artifact@v4
         with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          pattern: docker-digest-*
+          path: /tmp/digests
+          merge-multiple: true
 
-  build-docker-browser:
+      - name: Create manifest
+        run: |
+          AMD64_DIGEST=$(cat /tmp/digests/digest-amd64.txt)
+          ARM64_DIGEST=$(cat /tmp/digests/digest-arm64.txt)
+          TAGS=$(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' ')
+          for TAG in $TAGS; do
+            docker buildx imagetools create -t "$TAG" \
+              "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${AMD64_DIGEST}" \
+              "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${ARM64_DIGEST}"
+          done
+
+  build-docker-browser-amd64:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -104,9 +184,84 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.browser
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-browser-amd64
+          cache-from: type=gha,scope=browser-amd64
+          cache-to: type=gha,mode=max,scope=browser-amd64
+
+      - name: Export digest
+        run: echo "${{ steps.build.outputs.digest }}" > /tmp/digest-browser-amd64.txt
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-browser-digest-amd64
+          path: /tmp/digest-browser-amd64.txt
+
+  build-docker-browser-arm64:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.browser
+          platforms: linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-browser-arm64
+          cache-from: type=gha,scope=browser-arm64
+          cache-to: type=gha,mode=max,scope=browser-arm64
+
+      - name: Export digest
+        run: echo "${{ steps.build.outputs.digest }}" > /tmp/digest-browser-arm64.txt
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-browser-digest-arm64
+          path: /tmp/digest-browser-arm64.txt
+
+  merge-docker-browser:
+    needs: [build-docker-browser-amd64, build-docker-browser-arm64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -127,20 +282,26 @@ jobs:
             type=semver,pattern={{version}}-browser
             type=raw,value=browser
 
-      - name: Build and push
-        uses: docker/build-push-action@v5
+      - name: Download digests
+        uses: actions/download-artifact@v4
         with:
-          context: .
-          file: Dockerfile.browser
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          pattern: docker-browser-digest-*
+          path: /tmp/digests
+          merge-multiple: true
+
+      - name: Create manifest
+        run: |
+          AMD64_DIGEST=$(cat /tmp/digests/digest-browser-amd64.txt)
+          ARM64_DIGEST=$(cat /tmp/digests/digest-browser-arm64.txt)
+          TAGS=$(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' ')
+          for TAG in $TAGS; do
+            docker buildx imagetools create -t "$TAG" \
+              "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${AMD64_DIGEST}" \
+              "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${ARM64_DIGEST}"
+          done
 
   create-release:
-    needs: [build-binaries, build-docker, build-docker-browser]
+    needs: [build-binaries, merge-docker, merge-docker-browser]
     runs-on: ubuntu-latest
     permissions:
       contents: write

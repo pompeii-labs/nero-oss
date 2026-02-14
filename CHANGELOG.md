@@ -2,6 +2,11 @@
 
 All notable changes to Nero are documented here.
 
+## 1.26.1 (2026-02-14)
+
+### Fixes
+- Fix release CI: use native arm64 runners instead of QEMU emulation for Docker builds
+
 ## 1.26.0 (2026-02-14)
 
 ### New Features
