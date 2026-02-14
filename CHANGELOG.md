@@ -2,6 +2,11 @@
 
 All notable changes to Nero are documented here.
 
+## 1.25.1 (2026-02-14)
+
+### Fixes
+- Flatten browser tool args so smaller models (Haiku 4.5, Kimi) can call it correctly
+
 ## 1.25.0 (2026-02-13)
 
 ### New Features

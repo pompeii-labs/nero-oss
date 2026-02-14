@@ -2965,15 +2965,57 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
             'The browser operation: navigate, click, type, screenshot, extract, evaluate, back, scroll, close',
     })
     @toolparam({
-        key: 'args',
-        type: 'object',
+        key: 'url',
+        type: 'string',
         required: false,
-        description:
-            'Arguments for the operation. navigate: {url}, click: {selector, force?}, type: {selector, text}, screenshot: {fullPage?}, extract: {selector?}, evaluate: {script}, scroll: {direction, amount?}',
-        properties: [],
+        description: 'URL to navigate to (for navigate operation)',
+    })
+    @toolparam({
+        key: 'selector',
+        type: 'string',
+        required: false,
+        description: 'CSS selector for the target element (for click, type, extract operations)',
+    })
+    @toolparam({
+        key: 'text',
+        type: 'string',
+        required: false,
+        description: 'Text to type into the element (for type operation)',
+    })
+    @toolparam({
+        key: 'script',
+        type: 'string',
+        required: false,
+        description: 'JavaScript code to evaluate in the page (for evaluate operation)',
+    })
+    @toolparam({
+        key: 'force',
+        type: 'boolean',
+        required: false,
+        description: 'Force click even if element is obscured (for click operation)',
+    })
+    @toolparam({
+        key: 'fullPage',
+        type: 'boolean',
+        required: false,
+        description: 'Capture full page screenshot instead of viewport (for screenshot operation)',
+    })
+    @toolparam({
+        key: 'direction',
+        type: 'string',
+        required: false,
+        description: 'Scroll direction: up or down (for scroll operation)',
+    })
+    @toolparam({
+        key: 'amount',
+        type: 'number',
+        required: false,
+        description: 'Pixels to scroll (for scroll operation, default 500)',
     })
     async browser(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { operation, args = {} } = call.fn_args;
+        const { operation, url, selector, text, script, force, fullPage, direction, amount } =
+            call.fn_args;
+        const args = { url, selector, text, script, force, fullPage, direction, amount };
 
         if (operation === 'evaluate') {
             const approved = await this.requestPermission(
