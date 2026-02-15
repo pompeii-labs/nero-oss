@@ -2,6 +2,13 @@
 
 All notable changes to Nero are documented here.
 
+## 1.27.1 (2026-02-15)
+
+### Fixes
+
+- Auto-reconnect emotion detection WebSocket when Hume's inactivity timeout fires
+- Add TTS fallback config (`ttsFallback`) so if the primary provider fails, text is retried with the fallback
+
 ## 1.27.0 (2026-02-14)
 
 ### New Features
