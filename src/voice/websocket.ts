@@ -10,10 +10,12 @@ import {
     MagmaFlow,
     MagmaFlowSpeechToText,
     MagmaFlowSTTOutput,
+    MagmaFlowTextToSpeech,
 } from '@pompeii-labs/audio/voice';
 import { Nero } from '../agent/nero.js';
 import { NeroConfig } from '../config.js';
 import { HumeEmotionDetector } from './emotion.js';
+import { FallbackTTS } from './fallbackTts.js';
 import { Logger } from '../util/logger.js';
 import { verifyWsToken } from '../util/wstoken.js';
 
@@ -41,8 +43,11 @@ function createSTT(config: NeroConfig): MagmaFlowSpeechToText {
     return new DeepgramSTT({ model: DeepgramModel.NOVA_3 });
 }
 
-function createTTS(config: NeroConfig) {
-    if (config.voice.ttsProvider === 'hume') {
+function createTTSByProvider(
+    provider: 'elevenlabs' | 'hume',
+    config: NeroConfig,
+): MagmaFlowTextToSpeech {
+    if (provider === 'hume') {
         const humeConfig = config.voice.hume;
         return new HumeTTS({
             voice: humeConfig.voice
@@ -67,6 +72,19 @@ function createTTS(config: NeroConfig) {
             },
         },
     });
+}
+
+function createTTS(config: NeroConfig): MagmaFlowTextToSpeech {
+    const primary = createTTSByProvider(config.voice.ttsProvider, config);
+    const fallbackProvider = config.voice.ttsFallback;
+    if (fallbackProvider && fallbackProvider !== config.voice.ttsProvider) {
+        const fallback = createTTSByProvider(fallbackProvider, config);
+        console.log(
+            chalk.dim(`[tts] Using ${config.voice.ttsProvider} with ${fallbackProvider} fallback`),
+        );
+        return new FallbackTTS(primary, fallback);
+    }
+    return primary;
 }
 
 export class VoiceWebSocketManager {

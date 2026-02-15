@@ -97,6 +97,7 @@ export interface FluxSTTConfig {
 export interface VoiceConfig {
     enabled: boolean;
     ttsProvider: 'elevenlabs' | 'hume';
+    ttsFallback?: 'elevenlabs' | 'hume';
     sttModel: 'nova-3' | 'flux';
     elevenlabs: ElevenLabsVoiceConfig;
     hume: HumeVoiceConfig;

@@ -46,6 +46,8 @@ export class HumeEmotionDetector {
     private latestEmotions: EmotionReading[];
     private connected: boolean;
     private muted: boolean;
+    private killed: boolean;
+    private reconnecting: boolean;
 
     constructor() {
         this.client = new HumeClient({ apiKey: process.env.HUME_API_KEY! });
@@ -55,6 +57,8 @@ export class HumeEmotionDetector {
         this.latestEmotions = [];
         this.connected = false;
         this.muted = false;
+        this.killed = false;
+        this.reconnecting = false;
     }
 
     connect(): void {
@@ -103,6 +107,17 @@ export class HumeEmotionDetector {
 
     input(pcmAudio: Buffer): void {
         if (this.muted) return;
+
+        if (!this.connected && !this.killed && !this.reconnecting) {
+            this.reconnecting = true;
+            console.log(chalk.dim('[emotion] Reconnecting...'));
+            try {
+                this.socket?.close();
+            } catch {}
+            this.socket = null;
+            this.connect();
+            this.reconnecting = false;
+        }
 
         this.pcmBuffer.push(pcmAudio);
         this.bufferBytes += pcmAudio.length;
@@ -199,6 +214,7 @@ export class HumeEmotionDetector {
     }
 
     kill(): void {
+        this.killed = true;
         this.connected = false;
         this.pcmBuffer = [];
         this.bufferBytes = 0;
