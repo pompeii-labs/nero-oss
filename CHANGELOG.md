@@ -2,6 +2,22 @@
 
 All notable changes to Nero are documented here.
 
+## 1.26.2 (2026-02-15)
+
+### New Features
+
+**Emotion Detection**
+- Real-time vocal emotion detection during voice calls via Hume Expression Measurement API
+- Runs in parallel with Deepgram STT on the same audio stream (48 prosody dimensions)
+- Top emotions passed to LLM via `<caller_emotion>` tags so responses adapt to caller's tone
+- Auto-mutes during TTS playback to prevent analyzing Nero's own voice
+- Opt-in via `emotionDetection: true` in voice config or `NERO_EMOTION_DETECTION=true` env var
+- Requires `HUME_API_KEY` (same key used for Hume TTS)
+
+### Changes
+- Upgrade `@pompeii-labs/audio` to 0.3.1 (adds `onNormalizedAudio` hook for audio pipeline taps)
+- Add `hume` SDK as direct dependency for Expression Measurement streaming
+
 ## 1.26.1 (2026-02-14)
 
 ### Fixes
