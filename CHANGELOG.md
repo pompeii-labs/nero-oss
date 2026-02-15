@@ -2,6 +2,19 @@
 
 All notable changes to Nero are documented here.
 
+## 1.27.0 (2026-02-14)
+
+### New Features
+
+**Service Logs**
+- In-memory circular buffer (last 1000 entries) and file logging to `~/.nero/logs/nero.log`
+- REST endpoint `GET /api/logs` with `?lines=`, `?level=`, `?source=` query params
+- SSE streaming endpoint `GET /api/logs/stream` for real-time log tailing
+- `nero logs` CLI command to view recent logs from terminal
+- `nero logs -f` for follow mode (real-time streaming)
+- `nero logs -n 200 -l ERROR` for filtered queries
+- New Logs tab in web dashboard with live streaming, level filter chips, auto-scroll, and pause/resume
+
 ## 1.26.2 (2026-02-15)
 
 ### New Features
