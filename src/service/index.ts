@@ -20,9 +20,12 @@ import { handleIncomingCall } from '../voice/twilio.js';
 import { VoiceWebSocketManager } from '../voice/websocket.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { createActionsRouter } from './routes/actions.js';
+import { createLogsRouter } from './routes/logs.js';
 import { RelayServer } from '../relay/index.js';
 import { ActionManager } from '../actions/index.js';
 import { AutonomyManager } from '../autonomy/index.js';
+import { initLogFile } from '../util/logger.js';
+import { getNeroHome } from '../config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -146,6 +149,7 @@ export class NeroService {
         this.app.use('/api', createChatRouter(this.agent));
         this.app.use('/api', createWebRouter(this.agent, this.port));
         this.app.use('/api', createActionsRouter(this.agent, this.actionManager));
+        this.app.use('/api', createLogsRouter());
 
         this.app.use((req: Request, res: Response, next) => {
             if (req.path.startsWith('/api/admin') && !this.isLocalRequest(req)) {
@@ -258,6 +262,7 @@ export class NeroService {
     }
 
     async start(): Promise<void> {
+        initLogFile(getNeroHome());
         await this.agent.setup();
 
         this.actionManager.setAgent(this.agent);

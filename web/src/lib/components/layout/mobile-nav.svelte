@@ -7,6 +7,7 @@
     import Brain from '@lucide/svelte/icons/brain';
     import Settings from '@lucide/svelte/icons/settings';
     import Puzzle from '@lucide/svelte/icons/puzzle';
+    import ScrollText from '@lucide/svelte/icons/scroll-text';
     import Menu from '@lucide/svelte/icons/menu';
     import { Button } from '$lib/components/ui/button';
     import * as Sheet from '$lib/components/ui/sheet';
@@ -22,6 +23,7 @@
         { href: '/voice', label: 'Voice', icon: Mic },
         { href: '/memories', label: 'Memories', icon: Brain },
         { href: '/mcp', label: 'MCP', icon: Puzzle },
+        { href: '/logs', label: 'Logs', icon: ScrollText },
         { href: '/settings', label: 'Settings', icon: Settings }
     ];
 

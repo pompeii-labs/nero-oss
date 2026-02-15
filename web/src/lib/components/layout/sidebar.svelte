@@ -9,6 +9,7 @@
     import Settings from '@lucide/svelte/icons/settings';
     import Puzzle from '@lucide/svelte/icons/puzzle';
     import Database from '@lucide/svelte/icons/database';
+    import ScrollText from '@lucide/svelte/icons/scroll-text';
     import Sun from '@lucide/svelte/icons/sun';
     import Moon from '@lucide/svelte/icons/moon';
     import RefreshCw from '@lucide/svelte/icons/refresh-cw';
@@ -29,6 +30,7 @@
         { href: '/voice', label: 'Voice', icon: Mic },
         { href: '/memories', label: 'Memories', icon: Brain },
         { href: '/mcp', label: 'MCP', icon: Puzzle },
+        { href: '/logs', label: 'Logs', icon: ScrollText },
         { href: '/database', label: 'Database', icon: Database },
         { href: '/settings', label: 'Settings', icon: Settings }
     ];
