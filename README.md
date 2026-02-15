@@ -481,7 +481,8 @@ Add these to `~/.nero/.env`:
 | `DATABASE_URL` | No | PostgreSQL connection string |
 | `TAVILY_API_KEY` | No | For web search tool |
 | `DEEPGRAM_API_KEY` | No | For voice STT |
-| `ELEVENLABS_API_KEY` | No | For voice TTS |
+| `ELEVENLABS_API_KEY` | No | For voice TTS (ElevenLabs provider) |
+| `HUME_API_KEY` | No | For voice TTS (Hume provider) and emotion detection |
 | `NERO_LICENSE_KEY` | No | For voice/SMS webhook routing |
 
 ## Voice, SMS & Slack (Optional)
@@ -508,6 +509,22 @@ nero license status
 ```
 
 Once registered, you can receive calls and texts at the phone number provided with your license.
+
+### Emotion Detection (Optional)
+
+Nero can detect vocal emotions in real-time during voice calls using Hume's Expression Measurement API. When enabled, detected emotions are passed to the LLM so it can respond with appropriate tone and empathy.
+
+Requires `HUME_API_KEY` to be set. Enable in `~/.nero/config.json`:
+
+```json
+{
+  "voice": {
+    "emotionDetection": true
+  }
+}
+```
+
+Or via environment variable: `NERO_EMOTION_DETECTION=true`
 
 ## License
 

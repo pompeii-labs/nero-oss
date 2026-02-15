@@ -4,22 +4,69 @@ import chalk from 'chalk';
 import {
     DeepgramModel,
     DeepgramSTT,
+    DeepgramFluxSTT,
     ElevenLabsTTS,
+    HumeTTS,
     MagmaFlow,
+    MagmaFlowSpeechToText,
     MagmaFlowSTTOutput,
 } from '@pompeii-labs/audio/voice';
 import { Nero } from '../agent/nero.js';
 import { NeroConfig } from '../config.js';
+import { HumeEmotionDetector } from './emotion.js';
 import { Logger } from '../util/logger.js';
 import { verifyWsToken } from '../util/wstoken.js';
 
 const logger = new Logger('Voice');
+
+function shouldEnableEmotion(config: NeroConfig): boolean {
+    return !!config.voice.emotionDetection && !!process.env.HUME_API_KEY;
+}
 
 interface Connection {
     id: string;
     ws: WebSocket;
     flow?: MagmaFlow;
     active: boolean;
+}
+
+function createSTT(config: NeroConfig): MagmaFlowSpeechToText {
+    if (config.voice.sttModel === 'flux') {
+        return new DeepgramFluxSTT({
+            eotThreshold: config.voice.flux.eotThreshold,
+            eagerEotThreshold: config.voice.flux.eagerEotThreshold,
+            eotTimeoutMs: config.voice.flux.eotTimeoutMs,
+        });
+    }
+    return new DeepgramSTT({ model: DeepgramModel.NOVA_3 });
+}
+
+function createTTS(config: NeroConfig) {
+    if (config.voice.ttsProvider === 'hume') {
+        const humeConfig = config.voice.hume;
+        return new HumeTTS({
+            voice: humeConfig.voice
+                ? { name: humeConfig.voice, provider: humeConfig.voiceProvider }
+                : undefined,
+            description: humeConfig.description,
+            speed: humeConfig.speed,
+            version: humeConfig.version,
+        });
+    }
+    const el = config.voice.elevenlabs;
+    const voiceId = el.voiceId || config.voice.elevenlabsVoiceId || 'cjVigY5qzO86Huf0OWal';
+    return new ElevenLabsTTS({
+        model: el.model,
+        voice: voiceId,
+        config: {
+            voice_settings: {
+                use_speaker_boost: false,
+                similarity_boost: el.similarityBoost,
+                stability: el.stability,
+                speed: el.speed,
+            },
+        },
+    });
 }
 
 export class VoiceWebSocketManager {
@@ -124,29 +171,37 @@ export class VoiceWebSocketManager {
         const connectionId = crypto.randomUUID();
         let streamSid: string | undefined;
         let flow: MagmaFlow | undefined;
+        let emotionDetector: HumeEmotionDetector | undefined;
 
         console.log(chalk.dim(`[twilio] Connection established: ${connectionId}`));
 
         const setupFlow = () => {
-            const voiceId = this.config.voice?.elevenlabsVoiceId || 'cjVigY5qzO86Huf0OWal';
+            const stt = createSTT(this.config);
+            const tts = createTTS(this.config);
+
+            if (shouldEnableEmotion(this.config)) {
+                emotionDetector = new HumeEmotionDetector();
+                emotionDetector.connect();
+            }
+
+            if (stt instanceof DeepgramFluxSTT) {
+                stt.onTurnResumed = () => flow?.interruptTTS();
+                stt.onEagerEndOfTurn = (transcript: string) => {
+                    console.log(chalk.dim(`[twilio] Eager EOT: "${transcript}"`));
+                };
+            }
 
             flow = new MagmaFlow({
-                stt: new DeepgramSTT({ model: DeepgramModel.NOVA_3 }),
-                tts: new ElevenLabsTTS({
-                    model: 'eleven_flash_v2_5',
-                    voice: voiceId,
-                    config: {
-                        voice_settings: {
-                            use_speaker_boost: true,
-                            similarity_boost: 0.75,
-                            stability: 0.75,
-                        },
-                    },
-                }),
-                config: { pauseDurationMs: 250, sentenceChunkLength: 30 },
+                stt,
+                tts,
+                config: { pauseDurationMs: 250, sentenceChunkLength: 50 },
                 inputFormat: { encoding: 'mulaw', sampleRate: 8000, channels: 1 },
                 outputFormat: { encoding: 'mulaw', sampleRate: 8000, channels: 1 },
+                onNormalizedAudio: emotionDetector
+                    ? (audio: Buffer) => emotionDetector!.input(audio)
+                    : undefined,
                 onSpeechDetected: () => {
+                    emotionDetector?.unmute();
                     flow?.interruptTTS();
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ event: 'clear', streamSid }));
@@ -173,7 +228,14 @@ export class VoiceWebSocketManager {
                         }
                     });
 
-                    await this.agent.chat(output.text, (chunk) => flow?.inputText(chunk));
+                    let messageText = output.text;
+                    const emotionTag = emotionDetector?.formatForLLM();
+                    if (emotionTag) {
+                        messageText = `${emotionTag}\n${output.text}`;
+                    }
+
+                    emotionDetector?.mute();
+                    await this.agent.chat(messageText, (chunk) => flow?.inputText(chunk));
                     flow?.inputText(null as unknown as string);
                     this.agent.setActivityCallback(undefined);
                 },
@@ -227,6 +289,7 @@ export class VoiceWebSocketManager {
 
         ws.on('close', () => {
             console.log(chalk.dim(`[twilio] Connection closed: ${connectionId}`));
+            emotionDetector?.kill();
             this.connections.get(connectionId)?.flow?.kill();
             this.connections.delete(connectionId);
         });
@@ -248,29 +311,37 @@ export class VoiceWebSocketManager {
 
         const connectionId = crypto.randomUUID();
         let flow: MagmaFlow | undefined;
+        let emotionDetector: HumeEmotionDetector | undefined;
 
         console.log(chalk.dim(`[web-voice] Connection established: ${connectionId}`));
 
         const setupFlow = () => {
-            const voiceId = this.config.voice?.elevenlabsVoiceId || 'cjVigY5qzO86Huf0OWal';
+            const stt = createSTT(this.config);
+            const tts = createTTS(this.config);
+
+            if (shouldEnableEmotion(this.config)) {
+                emotionDetector = new HumeEmotionDetector();
+                emotionDetector.connect();
+            }
+
+            if (stt instanceof DeepgramFluxSTT) {
+                stt.onTurnResumed = () => flow?.interruptTTS();
+                stt.onEagerEndOfTurn = (transcript: string) => {
+                    console.log(chalk.dim(`[web-voice] Eager EOT: "${transcript}"`));
+                };
+            }
 
             flow = new MagmaFlow({
-                stt: new DeepgramSTT({ model: DeepgramModel.NOVA_3 }),
-                tts: new ElevenLabsTTS({
-                    model: 'eleven_flash_v2_5',
-                    voice: voiceId,
-                    config: {
-                        voice_settings: {
-                            use_speaker_boost: true,
-                            similarity_boost: 0.75,
-                            stability: 0.75,
-                        },
-                    },
-                }),
-                config: { pauseDurationMs: 250, sentenceChunkLength: 30 },
+                stt,
+                tts,
+                config: { pauseDurationMs: 250, sentenceChunkLength: 50 },
                 inputFormat: { encoding: 'pcm', sampleRate: 48000, channels: 1 },
                 outputFormat: { encoding: 'pcm', sampleRate: 48000, channels: 1 },
+                onNormalizedAudio: emotionDetector
+                    ? (audio: Buffer) => emotionDetector!.input(audio)
+                    : undefined,
                 onSpeechDetected: () => {
+                    emotionDetector?.unmute();
                     flow?.interruptTTS();
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ type: 'clear' }));
@@ -303,7 +374,14 @@ export class VoiceWebSocketManager {
                         }
                     });
 
-                    await this.agent.chat(output.text, (chunk) => flow?.inputText(chunk));
+                    let messageText = output.text;
+                    const emotionTag = emotionDetector?.formatForLLM();
+                    if (emotionTag) {
+                        messageText = `${emotionTag}\n${output.text}`;
+                    }
+
+                    emotionDetector?.mute();
+                    await this.agent.chat(messageText, (chunk) => flow?.inputText(chunk));
                     flow?.inputText(null as unknown as string);
                     this.agent.setActivityCallback(undefined);
                 },
@@ -341,7 +419,19 @@ export class VoiceWebSocketManager {
                         console.log(chalk.dim(`[web-voice] Flow initialized`));
                         break;
                     case 'audio':
+                        if (!flow) {
+                            setupFlow();
+                            this.agent.setMedium('voice');
+                            this.agent
+                                .chat('<start />', (chunk) => flow?.inputText(chunk))
+                                .then(() => {
+                                    flow?.inputText(null as unknown as string);
+                                });
+                            console.log(chalk.dim(`[web-voice] Flow initialized (from audio)`));
+                        }
                         flow?.inputAudio(Buffer.from(parsed.data.audio, 'base64'));
+                        break;
+                    default:
                         break;
                 }
             } catch (err) {
@@ -351,6 +441,7 @@ export class VoiceWebSocketManager {
 
         ws.on('close', () => {
             console.log(chalk.dim(`[web-voice] Connection closed: ${connectionId}`));
+            emotionDetector?.kill();
             this.connections.get(connectionId)?.flow?.kill();
             this.connections.delete(connectionId);
         });

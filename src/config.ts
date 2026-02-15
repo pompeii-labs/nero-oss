@@ -72,6 +72,39 @@ export interface AutonomyConfig {
     notify: boolean;
 }
 
+export interface ElevenLabsVoiceConfig {
+    voiceId: string;
+    model: string;
+    stability: number;
+    similarityBoost: number;
+    speed: number;
+}
+
+export interface HumeVoiceConfig {
+    voice?: string;
+    voiceProvider?: 'HUME_AI' | 'CUSTOM_VOICE';
+    description?: string;
+    speed?: number;
+    version?: string;
+}
+
+export interface FluxSTTConfig {
+    eotThreshold?: number;
+    eagerEotThreshold?: number;
+    eotTimeoutMs?: number;
+}
+
+export interface VoiceConfig {
+    enabled: boolean;
+    ttsProvider: 'elevenlabs' | 'hume';
+    sttModel: 'nova-3' | 'flux';
+    elevenlabs: ElevenLabsVoiceConfig;
+    hume: HumeVoiceConfig;
+    flux: FluxSTTConfig;
+    emotionDetection?: boolean;
+    elevenlabsVoiceId?: string;
+}
+
 export interface NeroConfig {
     mcpServers: Record<string, McpServerConfig>;
     licenseKey: string | null;
@@ -79,10 +112,7 @@ export interface NeroConfig {
     port?: number;
     relayPort?: number;
     bindHost?: string;
-    voice: {
-        enabled: boolean;
-        elevenlabsVoiceId?: string;
-    };
+    voice: VoiceConfig;
     sms: {
         enabled: boolean;
     };
@@ -142,7 +172,24 @@ const defaultConfig: NeroConfig = {
     bindHost: '0.0.0.0',
     voice: {
         enabled: true,
-        elevenlabsVoiceId: 'cjVigY5qzO86Huf0OWal',
+        ttsProvider: 'elevenlabs',
+        sttModel: 'flux',
+        elevenlabs: {
+            voiceId: 'cjVigY5qzO86Huf0OWal',
+            model: 'eleven_flash_v2_5',
+            stability: 0.5,
+            similarityBoost: 0.75,
+            speed: 1.05,
+        },
+        hume: {
+            voice: 'Kora',
+            version: '2',
+            speed: 1.0,
+        },
+        flux: {
+            eotThreshold: 0.7,
+            eotTimeoutMs: 3000,
+        },
     },
     sms: {
         enabled: true,
@@ -200,6 +247,16 @@ function applyEnvOverrides(config: NeroConfig): void {
 
     const voiceEnabled = envBool('NERO_VOICE_ENABLED');
     if (voiceEnabled !== undefined) config.voice.enabled = voiceEnabled;
+
+    const ttsProvider = process.env.NERO_VOICE_TTS_PROVIDER;
+    if (ttsProvider === 'elevenlabs' || ttsProvider === 'hume')
+        config.voice.ttsProvider = ttsProvider;
+
+    const sttModel = process.env.NERO_VOICE_STT_MODEL;
+    if (sttModel === 'nova-3' || sttModel === 'flux') config.voice.sttModel = sttModel;
+
+    const emotionDetection = envBool('NERO_EMOTION_DETECTION');
+    if (emotionDetection !== undefined) config.voice.emotionDetection = emotionDetection;
 
     const smsEnabled = envBool('NERO_SMS_ENABLED');
     if (smsEnabled !== undefined) config.sms.enabled = smsEnabled;
@@ -283,6 +340,16 @@ export async function loadConfig(forceReload = false): Promise<NeroConfig> {
                 ...userConfig,
                 licenseKey: loadEnvLicenseKey() || userConfig.licenseKey || null,
                 tunnelUrl: tunnelUrl || userConfig.tunnelUrl,
+                voice: {
+                    ...defaultConfig.voice,
+                    ...userConfig.voice,
+                    elevenlabs: {
+                        ...defaultConfig.voice.elevenlabs,
+                        ...userConfig.voice?.elevenlabs,
+                    },
+                    hume: { ...defaultConfig.voice.hume, ...userConfig.voice?.hume },
+                    flux: { ...defaultConfig.voice.flux, ...userConfig.voice?.flux },
+                },
                 settings: {
                     ...defaultSettings,
                     ...userConfig.settings,
