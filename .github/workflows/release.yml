@@ -301,7 +301,7 @@ jobs:
           done
 
   create-release:
-    needs: [build-binaries, merge-docker, merge-docker-browser]
+    needs: [build-binaries, merge-docker]
     runs-on: ubuntu-latest
     permissions:
       contents: write
