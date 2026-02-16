@@ -290,4 +290,82 @@ describe('Relay Integration Tests', () => {
         const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api/chat`);
         expect(response.status).toBe(200);
     });
+
+    test('tunnel traffic (X-Forwarded-For public IP) requires auth', async () => {
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Forwarded-For': '203.0.113.1',
+            },
+            body: JSON.stringify({ message: 'ping' }),
+        });
+        expect(response.status).toBe(401);
+    });
+
+    test('tunnel traffic with valid license key is accepted', async () => {
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Forwarded-For': '203.0.113.1',
+                'x-license-key': LICENSE_KEY,
+            },
+            body: JSON.stringify({ message: 'ping' }),
+        });
+        expect(response.status).toBe(200);
+    });
+
+    test('direct localhost without X-Forwarded-For bypasses auth', async () => {
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: 'ping' }),
+        });
+        expect(response.status).toBe(200);
+    });
+
+    test('tunnel traffic with forwarded private IP bypasses auth', async () => {
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Forwarded-For': '192.168.1.100',
+            },
+            body: JSON.stringify({ message: 'ping' }),
+        });
+        expect(response.status).toBe(200);
+    });
+
+    test('WebSocket with X-Forwarded-For public IP without token is rejected', async () => {
+        const wsUrl = `ws://127.0.0.1:${servers.relayPort}/webhook/voice/stream`;
+        const connected = await waitForWs(wsUrl, { 'X-Forwarded-For': '203.0.113.1' });
+        expect(connected).toBe(false);
+    });
+
+    test('rightmost X-Forwarded-For IP is used (spoofing prevention)', async () => {
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Forwarded-For': '192.168.1.1, 203.0.113.1',
+            },
+            body: JSON.stringify({ message: 'ping' }),
+        });
+        expect(response.status).toBe(401);
+    });
+
+    test('dashboard is not accessible through tunnel (public IP)', async () => {
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/`, {
+            headers: { 'X-Forwarded-For': '203.0.113.1' },
+        });
+        expect(response.status).toBe(401);
+    });
+
+    test('non-API paths require auth for public IPs', async () => {
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/health`, {
+            headers: { 'X-Forwarded-For': '203.0.113.1' },
+        });
+        expect(response.status).toBe(401);
+    });
 });

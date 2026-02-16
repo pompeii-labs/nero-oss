@@ -172,34 +172,27 @@ export function createChatRouter(agent: Nero) {
             agent.setCwd(containerCwd);
         }
 
-        let sseStarted = false;
         let heartbeat: NodeJS.Timeout | null = null;
 
-        const startSSEHeartbeat = () => {
-            heartbeat = setInterval(() => {
-                if (res.closed || res.writableEnded) {
-                    if (heartbeat) clearInterval(heartbeat);
-                    return;
-                }
-                try {
-                    res.write('data: {}\n\n');
-                } catch {
-                    if (heartbeat) clearInterval(heartbeat);
-                }
-            }, 20_000);
-        };
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+
+        heartbeat = setInterval(() => {
+            if (res.closed || res.writableEnded) {
+                if (heartbeat) clearInterval(heartbeat);
+                return;
+            }
+            try {
+                res.write('data: {}\n\n');
+            } catch {
+                if (heartbeat) clearInterval(heartbeat);
+            }
+        }, 20_000);
 
         const sendSSE = (msg: Record<string, unknown>) => {
             if (res.closed || res.writableEnded) return;
-
-            if (!sseStarted) {
-                res.setHeader('Content-Type', 'text/event-stream');
-                res.setHeader('Cache-Control', 'no-cache');
-                res.setHeader('Connection', 'keep-alive');
-                sseStarted = true;
-                startSSEHeartbeat();
-            }
-
             try {
                 res.write(`data: ${JSON.stringify(msg)}\n\n`);
             } catch {}
@@ -243,11 +236,7 @@ export function createChatRouter(agent: Nero) {
             sendSSE({ type: 'done', data: { content: response.content } });
 
             if (!res.closed && !res.writableEnded) {
-                if (sseStarted) {
-                    res.end();
-                } else {
-                    res.status(200).json({ content: response.content });
-                }
+                res.end();
             }
 
             logger.info(`Response complete`);
@@ -255,14 +244,10 @@ export function createChatRouter(agent: Nero) {
             const err = error as Error;
             logger.error(`Chat error: ${err.message}`);
 
-            if (sseStarted) {
-                try {
-                    res.write(`data: ${JSON.stringify({ type: 'error', data: err.message })}\n\n`);
-                    res.end();
-                } catch {}
-            } else if (!res.headersSent) {
-                res.status(500).json({ error: err.message });
-            }
+            try {
+                res.write(`data: ${JSON.stringify({ type: 'error', data: err.message })}\n\n`);
+                res.end();
+            } catch {}
         } finally {
             if (heartbeat) clearInterval(heartbeat);
             agent.setActivityCallback(() => {});

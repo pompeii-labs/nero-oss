@@ -172,7 +172,16 @@ export class RelayServer {
 
     private getClientIp(req: IncomingMessage): string {
         const raw = req.socket.remoteAddress || '';
-        return raw.startsWith('::ffff:') ? raw.slice(7) : raw;
+        const direct = raw.startsWith('::ffff:') ? raw.slice(7) : raw;
+
+        if ((direct === '127.0.0.1' || direct === '::1') && req.headers['x-forwarded-for']) {
+            const forwarded = req.headers['x-forwarded-for'];
+            const parts = (Array.isArray(forwarded) ? forwarded[0] : forwarded).split(',');
+            const rightmost = parts[parts.length - 1].trim();
+            if (rightmost) return rightmost;
+        }
+
+        return direct;
     }
 
     private isPrivateIp(ip: string): boolean {
@@ -212,7 +221,6 @@ export class RelayServer {
     }
 
     private handleHttp(req: IncomingMessage, res: ServerResponse): void {
-        res.setHeader('Connection', 'close');
         const url = new URL(req.url || '/', `http://${req.headers.host}`);
 
         if (req.method === 'GET' && url.pathname === '/relay/health') {
@@ -223,11 +231,7 @@ export class RelayServer {
 
         if (this.config.licenseKey) {
             const ip = this.getClientIp(req);
-            const needsAuth =
-                !this.isPrivateIp(ip) &&
-                (url.pathname.startsWith('/api/') ||
-                    url.pathname.startsWith('/admin') ||
-                    (req.method === 'POST' && url.pathname.startsWith('/webhook/')));
+            const needsAuth = !this.isPrivateIp(ip);
 
             if (needsAuth) {
                 if (this.isRateLimited(ip)) {

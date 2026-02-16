@@ -2,6 +2,18 @@
 
 All notable changes to Nero are documented here.
 
+## 1.27.3 (2026-02-16)
+
+### Security
+
+- Fix relay auth bypass for tunnel traffic: cloudflared/ngrok connections from loopback now use `X-Forwarded-For` to determine the real client IP
+- Require auth on all paths for public IPs, not just `/api/*` and `/admin*` (dashboard was previously accessible through tunnel without auth)
+
+### Fixes
+
+- Fix SSE streaming through tunnels: remove `Connection: close` header from relay and send SSE headers immediately before LLM processing
+- Add `ScriptProcessorNode` fallback for voice on LAN (non-HTTPS) where `AudioWorklet` is unavailable
+
 ## 1.27.2 (2026-02-15)
 
 ### Fixes
