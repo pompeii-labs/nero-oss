@@ -920,7 +920,13 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         try {
             const response = await this.main();
 
-            await this.saveMessage('user', message, attachments);
+            const cleanMessage = message
+                .replace(/<[^>]+\/>\s*/g, '')
+                .replace(/<caller_emotion>[\s\S]*?<\/caller_emotion>\s*/g, '')
+                .trim();
+            if (cleanMessage) {
+                await this.saveMessage('user', cleanMessage, attachments);
+            }
             if (response?.content) {
                 await this.saveMessage('assistant', response.content);
                 this.hooksManager.runOnResponse(response.content, this.currentCwd).catch(() => {});
