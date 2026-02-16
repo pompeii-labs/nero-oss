@@ -2,6 +2,13 @@
 
 All notable changes to Nero are documented here.
 
+## 1.27.2 (2026-02-15)
+
+### Fixes
+
+- Fix browser ARM64 Docker build hanging by copying pre-built Chromium from Microsoft's Playwright image instead of running `bunx playwright install`
+- Add 20-minute timeout to browser Docker build CI jobs
+
 ## 1.27.1 (2026-02-15)
 
 ### Fixes
