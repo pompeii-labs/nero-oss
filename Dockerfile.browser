@@ -1,3 +1,5 @@
+ARG PLAYWRIGHT_VERSION=1.58.2
+
 FROM oven/bun:1 AS builder
 
 WORKDIR /app
@@ -11,12 +13,7 @@ RUN cd web && bun install --frozen-lockfile
 COPY . .
 RUN bun run build && cd web && bun run build
 
-FROM oven/bun:debian AS browser
-
-COPY package.json bun.lock /tmp/app/
-RUN cd /tmp/app && bun install --frozen-lockfile --production --ignore-scripts \
-    && bunx playwright install chromium \
-    && rm -rf /tmp/app
+FROM mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble AS playwright
 
 FROM oven/bun:debian
 
@@ -35,7 +32,7 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production --ignore-scripts \
     && rm -rf ~/.bun/install/cache
 
-COPY --from=browser /root/.cache/ms-playwright /root/.cache/ms-playwright
+COPY --from=playwright /ms-playwright /root/.cache/ms-playwright
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prompts ./prompts
