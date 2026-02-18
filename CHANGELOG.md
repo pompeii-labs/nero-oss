@@ -2,6 +2,17 @@
 
 All notable changes to Nero are documented here.
 
+## 1.27.4 (2026-02-18)
+
+### Fixes
+
+- Always-on relay: relay now runs unconditionally on port 4848 as the single entry point, eliminating the broken state where nothing listened on 4848 without a license key
+- Remove `onlineMode` setting: license key now solely controls whether relay enforces auth
+- `/health` endpoint bypasses relay auth so CLI connectivity checks always work
+- Add IPv6 private IP ranges (`fe80:`, `fc00:`, `fd00:`) to relay allowlist for Docker Desktop compatibility
+- macOS Docker: use port mappings instead of `network_mode: host` (which doesn't work on Docker Desktop for Mac)
+- Strip XML control tags from saved voice messages
+
 ## 1.27.3 (2026-02-16)
 
 ### Security
