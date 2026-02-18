@@ -105,7 +105,7 @@ export interface LoadedMessage {
     role: 'user' | 'assistant';
     content: string;
     created_at: string;
-    medium?: 'terminal' | 'voice' | 'sms' | 'web' | 'cli' | 'api' | 'slack';
+    medium?: 'terminal' | 'voice' | 'sms' | 'web' | 'cli' | 'api' | 'slack' | 'pompeii';
     isHistory?: boolean;
 }
 
@@ -846,6 +846,18 @@ You are responding via Slack DM. Use Slack-friendly formatting:
             });
         }
 
+        if (this.currentMedium === 'pompeii') {
+            messages.push({
+                role: 'system',
+                content: `## Pompeii Mode Instructions
+You are responding inside a Pompeii workspace where users @mention or DM you.
+- Use standard markdown formatting (bold, italic, code blocks, lists)
+- Be conversational and helpful
+- You may be given conversation context showing recent messages from other participants
+- If the POMPEII_API_KEY environment variable is set, you have tools to send messages and browse conversations proactively`,
+            });
+        }
+
         return messages;
     }
 
@@ -1576,10 +1588,10 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
         return `Skill "${name}" unloaded. Its instructions have been removed from your active context.`;
     }
 
-    private currentMedium: 'cli' | 'voice' | 'sms' | 'slack' | 'api' = 'cli';
+    private currentMedium: 'cli' | 'voice' | 'sms' | 'slack' | 'api' | 'pompeii' = 'cli';
     private currentCwd: string = process.env.HOST_HOME ? '/host/home' : process.cwd();
 
-    setMedium(medium: 'cli' | 'voice' | 'sms' | 'slack' | 'api'): void {
+    setMedium(medium: 'cli' | 'voice' | 'sms' | 'slack' | 'api' | 'pompeii'): void {
         this.currentMedium = medium;
     }
 
@@ -3588,5 +3600,158 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
         });
 
         return lines.join('\n\n');
+    }
+
+    @tool({
+        description:
+            'Send a message to the Pompeii workspace. Can target the main thread or a specific conversation.',
+        enabled: () => !!process.env.POMPEII_API_KEY,
+    })
+    @toolparam({
+        key: 'content',
+        type: 'string',
+        required: true,
+        description: 'The message content to send',
+    })
+    @toolparam({
+        key: 'conversation_id',
+        type: 'string',
+        required: false,
+        description: 'Target conversation ID. Omit to send to the main thread.',
+    })
+    async pompeiiSendMessage(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { content, conversation_id } = call.fn_args;
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'pompeii_send_message',
+            args: { content: content.slice(0, 50) + (content.length > 50 ? '...' : '') },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            const baseUrl = process.env.POMPEII_API_URL || 'https://api.pompeii.ai';
+            const body: Record<string, unknown> = { content };
+            if (conversation_id) body.conversation_id = conversation_id;
+
+            const response = await fetch(`${baseUrl}/v1/agent/messages`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Agent-Key': process.env.POMPEII_API_KEY!,
+                },
+                body: JSON.stringify(body),
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: response.statusText }));
+                throw new Error(error.message || `HTTP ${response.status}`);
+            }
+
+            activity.status = 'complete';
+            activity.result = 'Message sent';
+            this.emitActivity(activity);
+            return 'Message sent to Pompeii workspace.';
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Failed to send Pompeii message: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description:
+            'Get recent messages from the Pompeii workspace. Can retrieve from the main thread or a specific conversation.',
+        enabled: () => !!process.env.POMPEII_API_KEY,
+    })
+    @toolparam({
+        key: 'conversation_id',
+        type: 'string',
+        required: false,
+        description: 'Conversation ID to get messages from. Omit for the main thread.',
+    })
+    @toolparam({
+        key: 'limit',
+        type: 'number',
+        required: false,
+        description: 'Number of messages to retrieve (default 20)',
+    })
+    async pompeiiGetMessages(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { conversation_id, limit } = call.fn_args;
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'pompeii_get_messages',
+            args: { conversation_id, limit },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            const baseUrl = process.env.POMPEII_API_URL || 'https://api.pompeii.ai';
+            const params = new URLSearchParams();
+            if (conversation_id) params.set('conversation_id', conversation_id);
+            if (limit) params.set('limit', String(limit));
+
+            const url = `${baseUrl}/v1/agent/messages${params.toString() ? '?' + params.toString() : ''}`;
+            const response = await fetch(url, {
+                headers: { 'X-Agent-Key': process.env.POMPEII_API_KEY! },
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: response.statusText }));
+                throw new Error(error.message || `HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            activity.status = 'complete';
+            activity.result = `${Array.isArray(data) ? data.length : 0} messages`;
+            this.emitActivity(activity);
+            return JSON.stringify(data, null, 2);
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Failed to get Pompeii messages: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description: 'List conversations the agent participates in on the Pompeii workspace.',
+        enabled: () => !!process.env.POMPEII_API_KEY,
+    })
+    async pompeiiListConversations(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'pompeii_list_conversations',
+            args: {},
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            const baseUrl = process.env.POMPEII_API_URL || 'https://api.pompeii.ai';
+            const response = await fetch(`${baseUrl}/v1/agent/conversations`, {
+                headers: { 'X-Agent-Key': process.env.POMPEII_API_KEY! },
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: response.statusText }));
+                throw new Error(error.message || `HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            activity.status = 'complete';
+            activity.result = `${Array.isArray(data) ? data.length : 0} conversations`;
+            this.emitActivity(activity);
+            return JSON.stringify(data, null, 2);
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Failed to list Pompeii conversations: ${activity.error}`;
+        }
     }
 }

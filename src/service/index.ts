@@ -16,6 +16,7 @@ import { createAdminRouter } from './routes/admin.js';
 import { isDbConnected } from '../db/index.js';
 import { handleSms } from '../sms/handler.js';
 import { handleSlack } from '../slack/handler.js';
+import { handlePompeii } from '../pompeii/handler.js';
 import { handleIncomingCall } from '../voice/twilio.js';
 import { VoiceWebSocketManager } from '../voice/websocket.js';
 import { createAuthMiddleware } from './middleware/auth.js';
@@ -141,6 +142,11 @@ export class NeroService {
                 },
             });
         });
+
+        this.app.post('/webhook/pompeii', async (req, res) => {
+            await handlePompeii(req, res, this.agent, this.config);
+        });
+        this.logger.info('[Pompeii] Webhook enabled at /webhook/pompeii');
 
         this.app.use(authMiddleware);
 

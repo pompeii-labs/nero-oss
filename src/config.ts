@@ -125,6 +125,9 @@ export interface NeroConfig {
         headless?: boolean;
         timeout?: number;
     };
+    pompeii?: {
+        webhookSecret?: string;
+    };
 }
 
 const defaultSessionSettings: SessionSettings = {
