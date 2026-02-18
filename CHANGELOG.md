@@ -2,6 +2,13 @@
 
 All notable changes to Nero are documented here.
 
+## 1.28.0 (2026-02-18)
+
+### Features
+
+- Pompeii workspace integration: webhook handler, SSE streaming responses, agent tools for sending/reading messages and listing conversations
+- New `pompeii` medium type for agent context-aware responses
+
 ## 1.27.5 (2026-02-18)
 
 ### Fixes
