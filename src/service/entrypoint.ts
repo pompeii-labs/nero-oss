@@ -11,14 +11,13 @@ dotenv.config();
 const logger = new Logger('Nero');
 
 async function main() {
-    const port = parseInt(process.env.PORT || '4847');
-
     logger.info(`Starting Nero v${VERSION}`);
     logger.info('Initializing database...');
     await initDb();
     await migrateDb();
 
     const config = await loadConfig();
+    const port = parseInt(process.env.PORT || '4847');
 
     const service = new NeroService(port, config);
     await service.start();

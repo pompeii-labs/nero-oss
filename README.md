@@ -297,23 +297,23 @@ nero config set baseUrl openrouter
 
 ## Remote Access (Relay)
 
-Nero supports **remote access** without exposing the core service to the public internet. A lightweight **relay** is tunneled instead, and the relay proxies only the allowed endpoints back to your local Nero instance.
+Nero supports **remote access** without exposing the core service to the public internet. A built-in **relay** always runs on port `4848`, proxying requests to the internal service on `127.0.0.1:4847`. When a license key is configured, the relay enforces authentication on public requests.
 
 ### How It Works
-- The tunnel points to the **relay** (default port `4849`)
-- The relay forwards requests to your local Nero (`127.0.0.1:4848`)
-- This keeps the main API private while still enabling remote use (Slack/SMS/Voice/iOS)
+- The **relay** always listens on port `4848` and is the single entry point
+- The internal service runs on `127.0.0.1:4847` (never exposed directly)
+- Without a license key, the relay is an open passthrough
+- With a license key, the relay requires auth for non-private IPs
 
-### Enable Relay Mode
+### Remote Access
 
 ```bash
-nero relay start
-nero license register   # one-time
+nero relay start         # Start a tunnel to the relay
+nero license register    # one-time, for webhook routing
 ```
 
 This will:
-- Enable online mode
-- Start the tunnel to the relay
+- Start the tunnel pointing to the relay
 - Auto-register the tunnel URL in the backend
 
 ### Relay Commands

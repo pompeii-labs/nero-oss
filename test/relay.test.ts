@@ -363,9 +363,16 @@ describe('Relay Integration Tests', () => {
     });
 
     test('non-API paths require auth for public IPs', async () => {
-        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/health`, {
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/some-path`, {
             headers: { 'X-Forwarded-For': '203.0.113.1' },
         });
         expect(response.status).toBe(401);
+    });
+
+    test('/health bypasses auth for public IPs', async () => {
+        const response = await fetch(`http://127.0.0.1:${servers.relayPort}/health`, {
+            headers: { 'X-Forwarded-For': '203.0.113.1' },
+        });
+        expect(response.status).toBe(200);
     });
 });

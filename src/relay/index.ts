@@ -186,6 +186,7 @@ export class RelayServer {
 
     private isPrivateIp(ip: string): boolean {
         if (ip === '127.0.0.1' || ip === '::1') return true;
+        if (ip.startsWith('fe80:') || ip.startsWith('fc00:') || ip.startsWith('fd00:')) return true;
         const parts = ip.split('.').map(Number);
         if (parts.length !== 4) return false;
         if (parts[0] === 10) return true;
@@ -226,6 +227,11 @@ export class RelayServer {
         if (req.method === 'GET' && url.pathname === '/relay/health') {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ status: 'ok' }));
+            return;
+        }
+
+        if (req.method === 'GET' && url.pathname === '/health') {
+            this.proxyRequest(req, res);
             return;
         }
 

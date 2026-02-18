@@ -34,7 +34,6 @@ export interface NeroSettings {
     historyLimit: number;
     sessions: SessionSettings;
     timezone?: string;
-    onlineMode?: boolean;
 }
 
 export type HookEvent =
@@ -143,7 +142,6 @@ const defaultSettings: NeroSettings = {
     verbose: false,
     historyLimit: 20,
     sessions: defaultSessionSettings,
-    onlineMode: false,
 };
 
 const defaultProactivity: ProactivityConfig = {
@@ -221,9 +219,6 @@ function applyEnvOverrides(config: NeroConfig): void {
 
     const verbose = envBool('NERO_VERBOSE');
     if (verbose !== undefined) config.settings.verbose = verbose;
-
-    const onlineMode = envBool('NERO_ONLINE_MODE');
-    if (onlineMode !== undefined) config.settings.onlineMode = onlineMode;
 
     const thinkingEnabled = envBool('NERO_THINKING_ENABLED');
     if (thinkingEnabled !== undefined) config.proactivity.enabled = thinkingEnabled;

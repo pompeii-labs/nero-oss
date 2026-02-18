@@ -18,11 +18,17 @@ export function getComposeCommand(): string {
 
 export function generateRunScript(config: DockerConfig): string {
     const isIntegrated = config.mode === 'integrated';
+    const isMac = process.platform === 'darwin';
+    const useHostNetwork = isIntegrated && !isMac;
 
     const args = ['docker run -d', `--name ${config.name}`, '--restart unless-stopped'];
 
     if (isIntegrated) {
-        args.push('--network host');
+        if (useHostNetwork) {
+            args.push('--network host');
+        } else {
+            args.push(`-p ${config.port}:4848`);
+        }
         args.push('-v ~/.nero:/host/home/.nero');
         args.push('-v ~:/host/home');
         const socketMount = getDockerSocketMount();

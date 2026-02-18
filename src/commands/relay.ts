@@ -4,7 +4,7 @@ import fs from 'fs';
 import { join } from 'path';
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises';
 import { spawn, execSync } from 'child_process';
-import { loadConfig, saveConfig, getNeroHome } from '../config.js';
+import { loadConfig, getNeroHome } from '../config.js';
 
 const TUNNEL_STATE_FILE = join(getNeroHome(), '.nero', 'tunnel.json');
 const RELAY_WATCH_STATE_FILE = join(getNeroHome(), '.nero', 'relay-watch.json');
@@ -351,9 +351,7 @@ export function registerRelayCommands(program: Command) {
         .action(async (options) => {
             console.log(chalk.yellow('`nero tunnel` is deprecated. Use `nero relay` instead.'));
             const config = await loadConfig();
-            const defaultPort = config.settings.onlineMode
-                ? String(config.relayPort || 4848)
-                : '4848';
+            const defaultPort = String(config.relayPort || 4848);
             await runTunnelStart(options, {
                 label: 'Tunnel',
                 stopHint: 'nero tunnel stop',
@@ -387,14 +385,6 @@ export function registerRelayCommands(program: Command) {
         .option('-p, --port <port>', 'Relay port to expose (default: 4848)')
         .action(async (options) => {
             const config = await loadConfig();
-            if (!config.settings.onlineMode) {
-                config.settings.onlineMode = true;
-            }
-            if (!config.relayPort) {
-                config.relayPort = 4848;
-            }
-            await saveConfig(config);
-
             const defaultPort = options.port || String(config.relayPort || 4848);
             await runTunnelStart(options, {
                 label: 'Relay',

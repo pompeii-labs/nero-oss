@@ -6,6 +6,9 @@ const BROWSER_IMAGE = 'ghcr.io/pompeii-labs/nero-oss:browser';
 
 function buildNeroService(config: DockerConfig): ComposeService {
     const isIntegrated = config.mode === 'integrated';
+    const isMac = process.platform === 'darwin';
+    const useHostNetwork = isIntegrated && !isMac;
+    const dbHost = useHostNetwork ? 'localhost' : 'db';
 
     const service: ComposeService = {
         image: config.image,
@@ -13,7 +16,7 @@ function buildNeroService(config: DockerConfig): ComposeService {
         restart: 'unless-stopped',
         environment: [
             `HOST_HOME=${isIntegrated ? '${HOME}' : ''}`,
-            `DATABASE_URL=postgresql://nero:nero@${isIntegrated ? 'localhost' : 'db'}:5432/nero`,
+            `DATABASE_URL=postgresql://nero:nero@${dbHost}:5432/nero`,
             'GIT_DISCOVERY_ACROSS_FILESYSTEM=1',
             `NERO_MODE=${config.mode}`,
             ...(isIntegrated && getDockerSocketMount()
@@ -30,7 +33,7 @@ function buildNeroService(config: DockerConfig): ComposeService {
             : ['nero_config:/app/config'],
     };
 
-    if (isIntegrated) {
+    if (useHostNetwork) {
         service.network_mode = 'host';
     } else {
         service.ports = [`${config.port}:4848`];
@@ -44,6 +47,9 @@ function buildNeroService(config: DockerConfig): ComposeService {
 }
 
 function buildDbService(isIntegrated: boolean): ComposeService {
+    const isMac = process.platform === 'darwin';
+    const useHostNetwork = isIntegrated && !isMac;
+
     const service: ComposeService = {
         image: 'postgres:16-alpine',
         container_name: 'nero-db',
@@ -58,7 +64,7 @@ function buildDbService(isIntegrated: boolean): ComposeService {
         },
     };
 
-    if (isIntegrated) {
+    if (useHostNetwork) {
         service.network_mode = 'host';
     }
 

@@ -45,8 +45,7 @@ export class NeroService {
 
     constructor(port: number, config: NeroConfig) {
         this.port = port;
-        const hasRelay = config.settings.onlineMode || !!config.licenseKey;
-        this.host = hasRelay ? '127.0.0.1' : config.bindHost || '0.0.0.0';
+        this.host = '127.0.0.1';
         this.config = config;
 
         this.app = express();
@@ -270,17 +269,15 @@ export class NeroService {
 
         this.autonomyManager.setAgent(this.agent);
 
-        if (this.config.settings.onlineMode || this.config.licenseKey) {
-            const relayPort = this.config.relayPort || 4848;
-            this.relay = new RelayServer({
-                listenHost: this.config.bindHost || '0.0.0.0',
-                listenPort: relayPort,
-                targetHost: '127.0.0.1',
-                targetPort: this.port,
-                licenseKey: this.config.licenseKey || undefined,
-            });
-            await this.relay.start();
-        }
+        const relayPort = this.config.relayPort || 4848;
+        this.relay = new RelayServer({
+            listenHost: this.config.bindHost || '0.0.0.0',
+            listenPort: relayPort,
+            targetHost: '127.0.0.1',
+            targetPort: this.port,
+            licenseKey: this.config.licenseKey || undefined,
+        });
+        await this.relay.start();
 
         this.httpServer.listen(this.port, this.host, () => {
             this.logger.success(`Nero v${VERSION} running on http://${this.host}:${this.port}`);
