@@ -87,6 +87,10 @@ function createTTS(config: NeroConfig): MagmaFlowTextToSpeech {
     return primary;
 }
 
+function stripTags(text: string): string {
+    return text.replace(/<[^>]*>/g, '');
+}
+
 export class VoiceWebSocketManager {
     private twilioWss: WebSocketServer;
     private webWss: WebSocketServer;
@@ -253,7 +257,9 @@ export class VoiceWebSocketManager {
                     }
 
                     emotionDetector?.mute();
-                    await this.agent.chat(messageText, (chunk) => flow?.inputText(chunk));
+                    await this.agent.chat(messageText, (chunk) =>
+                        flow?.inputText(stripTags(chunk)),
+                    );
                     flow?.inputText(null as unknown as string);
                     this.agent.setActivityCallback(undefined);
                 },
@@ -285,7 +291,7 @@ export class VoiceWebSocketManager {
 
                         this.agent.setMedium('voice');
                         this.agent
-                            .chat('<start />', (chunk) => flow?.inputText(chunk))
+                            .chat('<start />', (chunk) => flow?.inputText(stripTags(chunk)))
                             .then(() => {
                                 flow?.inputText(null as unknown as string);
                             });
@@ -399,7 +405,9 @@ export class VoiceWebSocketManager {
                     }
 
                     emotionDetector?.mute();
-                    await this.agent.chat(messageText, (chunk) => flow?.inputText(chunk));
+                    await this.agent.chat(messageText, (chunk) =>
+                        flow?.inputText(stripTags(chunk)),
+                    );
                     flow?.inputText(null as unknown as string);
                     this.agent.setActivityCallback(undefined);
                 },
@@ -429,7 +437,7 @@ export class VoiceWebSocketManager {
                             setupFlow();
                             this.agent.setMedium('voice');
                             this.agent
-                                .chat('<start />', (chunk) => flow?.inputText(chunk))
+                                .chat('<start />', (chunk) => flow?.inputText(stripTags(chunk)))
                                 .then(() => {
                                     flow?.inputText(null as unknown as string);
                                 });
@@ -441,7 +449,7 @@ export class VoiceWebSocketManager {
                             setupFlow();
                             this.agent.setMedium('voice');
                             this.agent
-                                .chat('<start />', (chunk) => flow?.inputText(chunk))
+                                .chat('<start />', (chunk) => flow?.inputText(stripTags(chunk)))
                                 .then(() => {
                                     flow?.inputText(null as unknown as string);
                                 });
