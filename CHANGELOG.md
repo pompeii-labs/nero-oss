@@ -2,6 +2,12 @@
 
 All notable changes to Nero are documented here.
 
+## 1.27.5 (2026-02-18)
+
+### Fixes
+
+- Strip XML tags (e.g. `<caller_emotion>`) from LLM response chunks before sending to TTS, preventing voice from reading out raw tags
+
 ## 1.27.4 (2026-02-18)
 
 ### Fixes
