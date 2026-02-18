@@ -3,7 +3,15 @@ import { Model } from './base.js';
 import type { FileRef } from '../files/index.js';
 
 export type MessageRole = 'user' | 'assistant' | 'system';
-export type MessageMedium = 'terminal' | 'voice' | 'sms' | 'web' | 'cli' | 'api' | 'slack';
+export type MessageMedium =
+    | 'terminal'
+    | 'voice'
+    | 'sms'
+    | 'web'
+    | 'cli'
+    | 'api'
+    | 'slack'
+    | 'pompeii';
 
 export interface MessageData {
     id: number;
