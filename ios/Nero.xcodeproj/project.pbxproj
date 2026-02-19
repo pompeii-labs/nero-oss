@@ -20,7 +20,6 @@
 		A10000000000000000000011 /* NeroManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* NeroManager.swift */; };
 		A10000000000000000000012 /* APIManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* APIManager.swift */; };
 		A10000000000000000000013 /* VoiceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* VoiceManager.swift */; };
-		A10000000000000000000014 /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* SetupView.swift */; };
 		A10000000000000000000015 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* MainTabView.swift */; };
 		A10000000000000000000016 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* ChatView.swift */; };
 		A10000000000000000000017 /* VoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* VoiceView.swift */; };
@@ -31,9 +30,11 @@
 		A10000000000000000000022 /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* MessageBubble.swift */; };
 		A10000000000000000000023 /* ToolActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* ToolActivityView.swift */; };
 		A10000000000000000000024 /* PermissionModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000024 /* PermissionModal.swift */; };
-		A10000000000000000000025 /* VoiceRings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000025 /* VoiceRings.swift */; };
 		A10000000000000000000026 /* ToolActivityCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* ToolActivityCard.swift */; };
 		A10000000000000000000027 /* MarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000028 /* MarkdownView.swift */; };
+		A10000000000000000000029 /* NeroSphereView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000029 /* NeroSphereView.swift */; };
+		A10000000000000000000030 /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000030 /* LogsView.swift */; };
+		A10000000000000000000031 /* MCPView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000031 /* MCPView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,7 +51,6 @@
 		A20000000000000000000011 /* NeroManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeroManager.swift; sourceTree = "<group>"; };
 		A20000000000000000000012 /* APIManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIManager.swift; sourceTree = "<group>"; };
 		A20000000000000000000013 /* VoiceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceManager.swift; sourceTree = "<group>"; };
-		A20000000000000000000014 /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
 		A20000000000000000000015 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		A20000000000000000000016 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		A20000000000000000000017 /* VoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceView.swift; sourceTree = "<group>"; };
@@ -61,11 +61,14 @@
 		A20000000000000000000022 /* MessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubble.swift; sourceTree = "<group>"; };
 		A20000000000000000000023 /* ToolActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolActivityView.swift; sourceTree = "<group>"; };
 		A20000000000000000000024 /* PermissionModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionModal.swift; sourceTree = "<group>"; };
-		A20000000000000000000025 /* VoiceRings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRings.swift; sourceTree = "<group>"; };
 		A20000000000000000000026 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A20000000000000000000027 /* ToolActivityCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolActivityCard.swift; sourceTree = "<group>"; };
 		A20000000000000000000028 /* MarkdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownView.swift; sourceTree = "<group>"; };
+		A20000000000000000000029 /* NeroSphereView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeroSphereView.swift; sourceTree = "<group>"; };
+		A20000000000000000000030 /* LogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsView.swift; sourceTree = "<group>"; };
+		A20000000000000000000031 /* MCPView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPView.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* Nero.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Nero.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000000000000000000099 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -82,6 +85,7 @@
 		A50000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
+				B10000000000000000000099 /* Signing.xcconfig */,
 				A50000000000000000000002 /* Nero */,
 				A50000000000000000000003 /* Products */,
 			);
@@ -114,12 +118,13 @@
 		A50000000000000000000004 /* View */ = {
 			isa = PBXGroup;
 			children = (
-				A20000000000000000000014 /* SetupView.swift */,
 				A20000000000000000000015 /* MainTabView.swift */,
 				A20000000000000000000016 /* ChatView.swift */,
 				A20000000000000000000017 /* VoiceView.swift */,
 				A20000000000000000000018 /* MemoriesView.swift */,
 				A20000000000000000000019 /* SettingsView.swift */,
+				A20000000000000000000030 /* LogsView.swift */,
+				A20000000000000000000031 /* MCPView.swift */,
 				A50000000000000000000009 /* Components */,
 			);
 			path = View;
@@ -171,7 +176,7 @@
 				A20000000000000000000022 /* MessageBubble.swift */,
 				A20000000000000000000023 /* ToolActivityView.swift */,
 				A20000000000000000000024 /* PermissionModal.swift */,
-				A20000000000000000000025 /* VoiceRings.swift */,
+				A20000000000000000000029 /* NeroSphereView.swift */,
 				A20000000000000000000027 /* ToolActivityCard.swift */,
 				A20000000000000000000028 /* MarkdownView.swift */,
 			);
@@ -259,7 +264,6 @@
 				A10000000000000000000011 /* NeroManager.swift in Sources */,
 				A10000000000000000000012 /* APIManager.swift in Sources */,
 				A10000000000000000000013 /* VoiceManager.swift in Sources */,
-				A10000000000000000000014 /* SetupView.swift in Sources */,
 				A10000000000000000000015 /* MainTabView.swift in Sources */,
 				A10000000000000000000016 /* ChatView.swift in Sources */,
 				A10000000000000000000017 /* VoiceView.swift in Sources */,
@@ -270,9 +274,11 @@
 				A10000000000000000000022 /* MessageBubble.swift in Sources */,
 				A10000000000000000000023 /* ToolActivityView.swift in Sources */,
 				A10000000000000000000024 /* PermissionModal.swift in Sources */,
-				A10000000000000000000025 /* VoiceRings.swift in Sources */,
+				A10000000000000000000029 /* NeroSphereView.swift in Sources */,
 				A10000000000000000000026 /* ToolActivityCard.swift in Sources */,
 				A10000000000000000000027 /* MarkdownView.swift in Sources */,
+				A10000000000000000000030 /* LogsView.swift in Sources */,
+				A10000000000000000000031 /* MCPView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -400,30 +406,29 @@
 		};
 		B10000000000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B10000000000000000000099 /* Signing.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Nero/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Nero;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Nero needs local network access to connect to your Nero server";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Nero needs microphone access for voice conversations";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.nero;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -433,30 +438,29 @@
 		};
 		B10000000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B10000000000000000000099 /* Signing.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Nero/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Nero;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Nero needs local network access to connect to your Nero server";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Nero needs microphone access for voice conversations";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.nero;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;

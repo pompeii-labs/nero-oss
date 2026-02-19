@@ -1,0 +1,6 @@
+// Copy this file to Signing.xcconfig and fill in your values.
+// Signing.xcconfig is gitignored and will not be committed.
+
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+PRODUCT_BUNDLE_IDENTIFIER = com.yourorg.nero
+CODE_SIGN_STYLE = Automatic

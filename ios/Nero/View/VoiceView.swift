@@ -3,52 +3,38 @@ import SwiftUI
 struct VoiceView: View {
     @Binding var showMenu: Bool
 
+    @EnvironmentObject var neroManager: NeroManager
     @EnvironmentObject var voiceManager: VoiceManager
     @EnvironmentObject var toastManager: ToastManager
+    @EnvironmentObject var tabRouter: TabRouter
 
     @State private var showActivitySheet = false
+
+    private var sphereStatus: SphereStatus {
+        switch voiceManager.status {
+        case .idle: return .idle
+        case .connecting: return .connecting
+        case .connected, .listening, .speaking: return .connected
+        case .error: return .error
+        }
+    }
+
+    private var isActive: Bool {
+        switch voiceManager.status {
+        case .idle, .error: return false
+        default: return true
+        }
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 tronBackground
 
-                VStack(spacing: 0) {
-                    Spacer()
-
-                    mainOrb
-                        .floatUp(delay: 0.1)
-
-                    statusIndicator
-                        .padding(.top, 32)
-                        .floatUp(delay: 0.2)
-
-                    if !voiceManager.transcript.isEmpty {
-                        transcriptCard
-                            .padding(.top, 24)
-                            .floatUp(delay: 0.25)
-                    }
-
-                    Spacer()
-
-                    if voiceManager.status != .idle {
-                        controlBar
-                            .padding(.bottom, 30)
-                            .floatUp(delay: 0.3)
-                    }
-                }
-                .padding(.horizontal, 24)
-
-                if !voiceManager.activities.isEmpty {
-                    VStack {
-                        HStack {
-                            Spacer()
-                            activityBadge
-                                .padding(.top, 100)
-                                .padding(.trailing, 20)
-                        }
-                        Spacer()
-                    }
+                if !neroManager.isConnected {
+                    disconnectedState
+                } else {
+                    connectedContent
                 }
             }
             .navigationTitle("Voice")
@@ -65,6 +51,28 @@ struct VoiceView: View {
                             .foregroundStyle(LinearGradient.neroGradient)
                     }
                 }
+
+                if !voiceManager.activities.isEmpty {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            showActivitySheet = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                if voiceManager.activities.contains(where: { $0.status == .running }) {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .neroBlue))
+                                        .scaleEffect(0.6)
+                                } else {
+                                    Image(systemName: "terminal.fill")
+                                        .font(.system(size: 12))
+                                }
+                                Text("\(voiceManager.activities.count)")
+                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            }
+                            .foregroundStyle(LinearGradient.neroGradient)
+                        }
+                    }
+                }
             }
             .sheet(isPresented: $showActivitySheet) {
                 activitySheet
@@ -73,8 +81,78 @@ struct VoiceView: View {
                     .presentationBackground(Color.nCard)
             }
         }
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: voiceManager.activities.count)
         .animation(.spring(response: 0.3), value: voiceManager.status)
+    }
+
+    private var disconnectedState: some View {
+        VStack(spacing: 24) {
+            NeroSphereView(
+                status: .idle,
+                rmsLevel: 0,
+                outputRms: 0,
+                isTalking: false,
+                isProcessing: false,
+                isMuted: false,
+                onTap: {}
+            )
+            .frame(width: 260, height: 260)
+            .floatUp(delay: 0.1)
+
+            VStack(spacing: 8) {
+                Text("Connect in Settings")
+                    .font(.headline)
+                    .foregroundColor(.white)
+
+                Text("Set up a connection to start voice calls")
+                    .font(.subheadline)
+                    .foregroundColor(.nMutedForeground)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+            .floatUp(delay: 0.2)
+
+            Button {
+                tabRouter.selectedTab = .settings
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "gearshape.fill")
+                    Text("Go to Settings")
+                }
+                .neroButton()
+            }
+            .padding(.horizontal, 48)
+            .floatUp(delay: 0.3)
+        }
+    }
+
+    private var connectedContent: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            NeroSphereView(
+                status: sphereStatus,
+                rmsLevel: voiceManager.rmsLevel,
+                outputRms: voiceManager.outputRms,
+                isTalking: voiceManager.status == .speaking,
+                isProcessing: voiceManager.isProcessing,
+                isMuted: voiceManager.isMuted,
+                onTap: { handleOrbTap() }
+            )
+            .frame(width: 280, height: 280)
+
+            Spacer()
+
+            VStack(spacing: 24) {
+                statusText
+                    .padding(.horizontal, 32)
+
+                if isActive {
+                    controls
+                }
+            }
+            .padding(.bottom, 48)
+        }
+        .padding(.horizontal, 24)
     }
 
     private var tronBackground: some View {
@@ -116,21 +194,6 @@ struct VoiceView: View {
         }
     }
 
-    private var mainOrb: some View {
-        Button {
-            handleOrbTap()
-        } label: {
-            VoiceRings(
-                isActive: voiceManager.status == .listening || voiceManager.status == .speaking || voiceManager.status == .connected,
-                rmsLevel: voiceManager.rmsLevel,
-                isSpeaking: voiceManager.status == .speaking
-            )
-            .frame(width: 260, height: 260)
-        }
-        .buttonStyle(OrbButtonStyle())
-        .disabled(voiceManager.status == .connecting)
-    }
-
     private func handleOrbTap() {
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
@@ -142,120 +205,95 @@ struct VoiceView: View {
         }
     }
 
-    private var statusIndicator: some View {
-        HStack(spacing: 12) {
-            if voiceManager.status == .connecting {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: Color.neroBlue))
-                    .scaleEffect(0.8)
-            } else if voiceManager.status != .idle {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 8, height: 8)
-                    .shadow(color: statusColor, radius: 6)
-            }
-
-            Text(statusText)
-                .font(.system(size: 16, weight: .medium, design: .monospaced))
-                .foregroundColor(statusColor)
-                .shadow(color: statusColor.opacity(0.5), radius: 4)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(
-            Capsule()
-                .fill(Color.nCard.opacity(0.8))
-                .overlay(
-                    Capsule()
-                        .stroke(statusColor.opacity(0.3), lineWidth: 1)
-                )
-        )
-    }
-
-    private var statusText: String {
+    @ViewBuilder
+    private var statusText: some View {
         switch voiceManager.status {
-        case .idle: return "TAP TO CONNECT"
-        case .connecting: return "CONNECTING..."
-        case .connected, .listening: return voiceManager.isMuted ? "MUTED" : "LISTENING"
-        case .speaking: return "NERO SPEAKING"
-        case .error(let msg): return msg.uppercased().prefix(20).description
-        }
-    }
+        case .idle:
+            Text("Tap to start talking with Nero")
+                .font(.system(size: 15))
+                .foregroundColor(.nMutedForeground.opacity(0.5))
+                .multilineTextAlignment(.center)
 
-    private var statusColor: Color {
-        switch voiceManager.status {
-        case .idle: return Color.nMutedForeground
-        case .connecting: return Color.neroBlue
-        case .connected, .listening: return voiceManager.isMuted ? Color.nError : Color.neroCyan
-        case .speaking: return Color.neroCyan
-        case .error: return Color.nError
-        }
-    }
+        case .connecting:
+            Text("Setting up voice connection...")
+                .font(.system(size: 15))
+                .foregroundColor(.nMutedForeground.opacity(0.6))
 
-    private var transcriptCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "quote.bubble.fill")
-                    .font(.system(size: 10))
-                Text("TRANSCRIPT")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+        case .connected, .listening:
+            if !voiceManager.transcript.isEmpty {
+                Text(voiceManager.transcript)
+                    .font(.system(size: 15))
+                    .foregroundColor(.white.opacity(0.7))
+                    .lineLimit(3)
+                    .multilineTextAlignment(.center)
+            } else {
+                Text("Say something to Nero")
+                    .font(.system(size: 15))
+                    .foregroundColor(.nMutedForeground.opacity(0.6))
+                    .multilineTextAlignment(.center)
             }
-            .foregroundColor(Color.neroBlue)
 
-            Text(voiceManager.transcript)
-                .font(.system(size: 15, weight: .regular))
-                .foregroundColor(.white.opacity(0.9))
-                .lineLimit(3)
+        case .speaking:
+            if !voiceManager.transcript.isEmpty {
+                Text(voiceManager.transcript)
+                    .font(.system(size: 15))
+                    .foregroundColor(.white.opacity(0.7))
+                    .lineLimit(3)
+                    .multilineTextAlignment(.center)
+            } else {
+                Text("Nero is speaking...")
+                    .font(.system(size: 15))
+                    .foregroundColor(.nMutedForeground.opacity(0.6))
+                    .multilineTextAlignment(.center)
+            }
+
+        case .error(let msg):
+            Text(msg)
+                .font(.system(size: 14))
+                .foregroundColor(.nError.opacity(0.7))
+                .multilineTextAlignment(.center)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.nCard.opacity(0.9))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(
-                            LinearGradient(
-                                colors: [Color.neroBlue.opacity(0.4), Color.neroCyan.opacity(0.2)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
-                        )
-                )
-        )
-        .shadow(color: Color.neroBlue.opacity(0.1), radius: 10)
     }
 
-    private var activityBadge: some View {
-        Button {
-            showActivitySheet = true
-        } label: {
-            HStack(spacing: 6) {
-                if voiceManager.activities.contains(where: { $0.status == .running }) {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(0.6)
-                } else {
-                    Image(systemName: "terminal.fill")
-                        .font(.system(size: 12))
-                }
-
-                Text("\(voiceManager.activities.count)")
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+    private var controls: some View {
+        HStack(spacing: 20) {
+            Button {
+                let generator = UIImpactFeedbackGenerator(style: .light)
+                generator.impactOccurred()
+                voiceManager.toggleMute()
+            } label: {
+                Image(systemName: voiceManager.isMuted ? "mic.slash.fill" : "mic.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(voiceManager.isMuted ? .nError : .white.opacity(0.8))
+                    .frame(width: 44, height: 44)
+                    .background(
+                        Circle()
+                            .fill(voiceManager.isMuted ? Color.nError.opacity(0.15) : Color.white.opacity(0.08))
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(voiceManager.isMuted ? Color.nError.opacity(0.3) : Color.white.opacity(0.1), lineWidth: 1)
+                    )
             }
-            .foregroundColor(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(Color.neroBlue.opacity(0.8))
-            )
-            .overlay(
-                Capsule()
-                    .stroke(Color.neroCyan.opacity(0.4), lineWidth: 1)
-            )
-            .shadow(color: Color.neroBlue.opacity(0.4), radius: 8)
+
+            Button {
+                let generator = UIImpactFeedbackGenerator(style: .light)
+                generator.impactOccurred()
+                voiceManager.disconnect()
+            } label: {
+                Image(systemName: "phone.down.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(.nError)
+                    .frame(width: 44, height: 44)
+                    .background(
+                        Circle()
+                            .fill(Color.nError.opacity(0.15))
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(Color.nError.opacity(0.3), lineWidth: 1)
+                    )
+            }
         }
     }
 
@@ -353,54 +391,6 @@ struct VoiceView: View {
         default: return Color.nMutedForeground
         }
     }
-
-    private var controlBar: some View {
-        HStack(spacing: 32) {
-            controlButton(
-                icon: voiceManager.isMuted ? "mic.slash.fill" : "mic.fill",
-                label: voiceManager.isMuted ? "Unmute" : "Mute",
-                color: voiceManager.isMuted ? Color.nError : Color.neroBlue,
-                action: { voiceManager.toggleMute() }
-            )
-
-            controlButton(
-                icon: "phone.down.fill",
-                label: "End",
-                color: Color.nError,
-                action: { voiceManager.disconnect() }
-            )
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
-        .background(
-            Capsule()
-                .fill(Color.nCard.opacity(0.9))
-                .overlay(
-                    Capsule()
-                        .stroke(Color.nBorder, lineWidth: 1)
-                )
-        )
-    }
-
-    private func controlButton(icon: String, label: String, color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: {
-            let generator = UIImpactFeedbackGenerator(style: .light)
-            generator.impactOccurred()
-            action()
-        }) {
-            VStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 22))
-                    .foregroundColor(color)
-                    .shadow(color: color.opacity(0.5), radius: 4)
-
-                Text(label.uppercased())
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundColor(color.opacity(0.7))
-            }
-            .frame(width: 60)
-        }
-    }
 }
 
 struct OrbButtonStyle: ButtonStyle {
@@ -413,7 +403,9 @@ struct OrbButtonStyle: ButtonStyle {
 
 #Preview {
     VoiceView(showMenu: .constant(false))
+        .environmentObject(NeroManager.shared)
         .environmentObject(VoiceManager.shared)
         .environmentObject(ToastManager.shared)
+        .environmentObject(TabRouter())
         .preferredColorScheme(.dark)
 }

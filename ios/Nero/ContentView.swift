@@ -9,11 +9,7 @@ struct ContentView: View {
             Color.nBackground
                 .ignoresSafeArea()
 
-            if neroManager.isConnected {
-                MainTabView()
-            } else {
-                SetupView()
-            }
+            MainTabView()
         }
         .overlay(alignment: .top) {
             ToastOverlay()

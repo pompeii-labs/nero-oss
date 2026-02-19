@@ -5,27 +5,33 @@ struct ChatView: View {
     @Binding var showMenu: Bool
 
     @StateObject private var viewModel = ChatViewModel()
+    @EnvironmentObject var neroManager: NeroManager
     @EnvironmentObject var toastManager: ToastManager
+    @EnvironmentObject var tabRouter: TabRouter
 
     @StateObject private var keyboard = KeyboardObserver()
     @FocusState private var isInputFocused: Bool
-    @State private var shouldScroll = false
+    @State private var scrollTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
             ZStack {
                 NeroBackgroundView()
 
-                VStack(spacing: 0) {
-                    timelineView
+                if neroManager.isConnected {
+                    VStack(spacing: 0) {
+                        timelineView
 
-                    inputBar
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
-                }
+                        inputBar
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
+                    }
 
-                if viewModel.pendingPermission != nil {
-                    permissionOverlay
+                    if viewModel.pendingPermission != nil {
+                        permissionOverlay
+                    }
+                } else {
+                    disconnectedState
                 }
             }
             .navigationTitle("Chat")
@@ -43,41 +49,92 @@ struct ChatView: View {
                     }
                 }
 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 16) {
-                        if viewModel.isLoading {
-                            Button {
-                                Task { await viewModel.abort() }
-                            } label: {
-                                Text("Stop")
-                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                    .foregroundColor(.nError)
-                            }
-                        }
-
-                        Menu {
-                            Button {
-                                Task { await clearConversation() }
-                            } label: {
-                                Label("Clear Conversation", systemImage: "trash")
+                if neroManager.isConnected {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        HStack(spacing: 16) {
+                            if viewModel.isLoading {
+                                Button {
+                                    Task { await viewModel.abort() }
+                                } label: {
+                                    Text("Stop")
+                                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                        .foregroundColor(.nError)
+                                }
                             }
 
-                            Button {
-                                Task { await viewModel.loadHistory() }
+                            Menu {
+                                Button {
+                                    Task { await clearConversation() }
+                                } label: {
+                                    Label("Clear Conversation", systemImage: "trash")
+                                }
+
+                                Button {
+                                    Task { await viewModel.loadHistory() }
+                                } label: {
+                                    Label("Refresh", systemImage: "arrow.clockwise")
+                                }
                             } label: {
-                                Label("Refresh", systemImage: "arrow.clockwise")
+                                Image(systemName: "ellipsis.circle")
+                                    .foregroundColor(.nMutedForeground)
                             }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                                .foregroundColor(.nMutedForeground)
                         }
                     }
                 }
             }
         }
         .task {
-            await viewModel.loadHistory()
+            if neroManager.isConnected {
+                await viewModel.loadHistory()
+            }
         }
+        .onChange(of: neroManager.isConnected) { _, connected in
+            if connected {
+                Task { await viewModel.loadHistory() }
+            }
+        }
+    }
+
+    private var disconnectedState: some View {
+        VStack(spacing: 24) {
+            ZStack {
+                Circle()
+                    .fill(Color.neroBlue.opacity(0.1))
+                    .frame(width: 100, height: 100)
+                    .blur(radius: 25)
+
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 44, weight: .light))
+                    .foregroundStyle(LinearGradient.neroGradient)
+                    .neroGlowStrong()
+            }
+            .holoRing()
+            .frame(width: 80, height: 80)
+
+            VStack(spacing: 8) {
+                Text("Connect to Nero")
+                    .font(.headline)
+                    .foregroundColor(.white)
+
+                Text("Set up a connection in Settings to start chatting")
+                    .font(.subheadline)
+                    .foregroundColor(.nMutedForeground)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+
+            Button {
+                tabRouter.selectedTab = .settings
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "gearshape.fill")
+                    Text("Go to Settings")
+                }
+                .neroButton()
+            }
+            .padding(.horizontal, 48)
+        }
+        .floatUp()
     }
 
     private var timelineView: some View {
@@ -110,43 +167,35 @@ struct ChatView: View {
                 .padding(.bottom, 8)
             }
             .scrollDismissesKeyboard(.interactively)
+            .defaultScrollAnchor(.bottom)
             .onTapGesture {
                 isInputFocused = false
             }
             .onAppear {
-                scrollToBottom(proxy: proxy)
-            }
-            .onChange(of: shouldScroll) { _, newValue in
-                if newValue {
-                    scrollToBottom(proxy: proxy)
-                }
+                debouncedScroll(proxy: proxy)
             }
             .onChange(of: viewModel.timeline.count) { _, _ in
-                shouldScroll = true
+                debouncedScroll(proxy: proxy)
             }
             .onChange(of: viewModel.isLoading) { _, _ in
-                shouldScroll = true
-            }
-            .onChange(of: isInputFocused) { _, newValue in
-                if newValue {
-                    shouldScroll = true
-                }
+                debouncedScroll(proxy: proxy)
             }
             .onChange(of: keyboard.keyboardHeight) { _, newValue in
                 if newValue > 0 {
-                    shouldScroll = true
+                    debouncedScroll(proxy: proxy)
                 }
             }
         }
     }
 
-    private func scrollToBottom(proxy: ScrollViewProxy) {
-        Task {
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            withAnimation(.easeOut(duration: 0.3)) {
+    private func debouncedScroll(proxy: ScrollViewProxy) {
+        scrollTask?.cancel()
+        scrollTask = Task {
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.25)) {
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
-            shouldScroll = false
         }
     }
 
@@ -377,6 +426,8 @@ final class KeyboardObserver: ObservableObject {
 
 #Preview {
     ChatView(showMenu: .constant(false))
+        .environmentObject(NeroManager.shared)
         .environmentObject(ToastManager.shared)
+        .environmentObject(TabRouter())
         .preferredColorScheme(.dark)
 }

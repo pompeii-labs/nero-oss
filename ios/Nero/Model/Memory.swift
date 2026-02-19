@@ -3,7 +3,7 @@ import Foundation
 struct Memory: Identifiable, Codable, Equatable {
     let id: Int
     let body: String
-    let related_to: [Int]
+    let related_to: [Int]?
     let category: String?
     let created_at: String
 

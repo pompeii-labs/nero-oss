@@ -3,7 +3,9 @@ import SwiftUI
 struct MemoriesView: View {
     @Binding var showMenu: Bool
 
+    @EnvironmentObject var neroManager: NeroManager
     @EnvironmentObject var toastManager: ToastManager
+    @EnvironmentObject var tabRouter: TabRouter
     @State private var memories: [Memory] = []
     @State private var isLoading = true
     @State private var showAddMemory = false
@@ -14,7 +16,10 @@ struct MemoriesView: View {
             ZStack {
                 NeroBackgroundView()
 
-                if isLoading {
+                if !neroManager.isConnected {
+                    disconnectedState
+                        .floatUp()
+                } else if isLoading {
                     VStack(spacing: 16) {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .neroBlue))
@@ -46,12 +51,14 @@ struct MemoriesView: View {
                     }
                 }
 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showAddMemory = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .foregroundStyle(LinearGradient.neroGradient)
+                if neroManager.isConnected {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            showAddMemory = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .foregroundStyle(LinearGradient.neroGradient)
+                        }
                     }
                 }
             }
@@ -60,7 +67,55 @@ struct MemoriesView: View {
             }
         }
         .task {
-            await loadMemories()
+            if neroManager.isConnected {
+                await loadMemories()
+            }
+        }
+        .onChange(of: neroManager.isConnected) { _, connected in
+            if connected {
+                Task { await loadMemories() }
+            }
+        }
+    }
+
+    private var disconnectedState: some View {
+        VStack(spacing: 24) {
+            ZStack {
+                Circle()
+                    .fill(Color.neroBlue.opacity(0.1))
+                    .frame(width: 100, height: 100)
+                    .blur(radius: 25)
+
+                Image(systemName: "brain")
+                    .font(.system(size: 44, weight: .light))
+                    .foregroundStyle(LinearGradient.neroGradient)
+                    .neroGlowStrong()
+            }
+            .holoRing()
+            .frame(width: 80, height: 80)
+
+            VStack(spacing: 8) {
+                Text("Connect to load memories")
+                    .font(.headline)
+                    .foregroundColor(.white)
+
+                Text("Set up a connection in Settings to view and manage memories")
+                    .font(.subheadline)
+                    .foregroundColor(.nMutedForeground)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+
+            Button {
+                tabRouter.selectedTab = .settings
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "gearshape.fill")
+                    Text("Go to Settings")
+                }
+                .neroButton()
+            }
+            .padding(.horizontal, 48)
         }
     }
 
@@ -290,6 +345,8 @@ struct MemoriesView: View {
 
 #Preview {
     MemoriesView(showMenu: .constant(false))
+        .environmentObject(NeroManager.shared)
         .environmentObject(ToastManager.shared)
+        .environmentObject(TabRouter())
         .preferredColorScheme(.dark)
 }

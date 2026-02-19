@@ -18,7 +18,9 @@ class VoiceManager: ObservableObject {
     @Published var transcript: String = ""
     @Published var activities: [ToolActivity] = []
     @Published var rmsLevel: Float = 0
+    @Published var outputRms: Float = 0
     @Published var isMuted = false
+    @Published var isProcessing = false
 
     private var webSocket: URLSessionWebSocketTask?
     private var audioEngine = AVAudioEngine()
@@ -62,6 +64,8 @@ class VoiceManager: ObservableObject {
         transcript = ""
         activities = []
         rmsLevel = 0
+        outputRms = 0
+        isProcessing = false
         reset()
     }
 
@@ -234,14 +238,17 @@ class VoiceManager: ObservableObject {
                let text = transcriptData["text"] as? String {
                 transcript = text
                 status = .listening
+                isProcessing = true
             }
 
         case "audio":
             if let audioData = json["data"] as? [String: Any],
                let base64Audio = audioData["audio"] as? String,
                let pcmData = Data(base64Encoded: base64Audio) {
+                computeOutputRms(pcmData)
                 playAudioData(pcmData)
                 status = .speaking
+                isProcessing = false
             }
 
         case "activity":
@@ -254,6 +261,8 @@ class VoiceManager: ObservableObject {
         case "clear":
             clearPlayback()
             status = .listening
+            isProcessing = false
+            outputRms = 0
 
         default:
             break
@@ -267,9 +276,6 @@ class VoiceManager: ObservableObject {
             activities.append(activity)
         }
 
-        if activities.count > 10 {
-            activities = Array(activities.suffix(10))
-        }
     }
 
     private func startRecording() {
@@ -311,6 +317,21 @@ class VoiceManager: ObservableObject {
         Task { @MainActor in
             self.rmsLevel = min(rms * 5, 1.0)
         }
+    }
+
+    private func computeOutputRms(_ data: Data) {
+        let sampleCount = data.count / 2
+        guard sampleCount > 0 else { return }
+
+        var sum: Float = 0
+        data.withUnsafeBytes { rawBuffer in
+            let int16Buffer = rawBuffer.bindMemory(to: Int16.self)
+            for i in 0..<sampleCount {
+                let s = Float(int16Buffer[i]) / 32768.0
+                sum += s * s
+            }
+        }
+        outputRms = sqrt(sum / Float(sampleCount))
     }
 
     private func stopRecording() {

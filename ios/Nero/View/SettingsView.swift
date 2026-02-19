@@ -10,6 +10,17 @@ struct SettingsView: View {
     @State private var isReloading = false
     @State private var showDisconnectConfirm = false
 
+    @State private var connectionMode: ConnectionMode = .local
+    @State private var serverURL = ""
+    @State private var licenseKey = ""
+    @State private var isConnecting = false
+    @State private var errorMessage: String?
+
+    enum ConnectionMode: String, CaseIterable {
+        case local = "Local"
+        case tunnel = "Remote"
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -19,12 +30,16 @@ struct SettingsView: View {
                     VStack(spacing: 20) {
                         connectionSection
                             .floatUp(delay: 0)
-                        contextSection
-                            .floatUp(delay: 0.1)
-                        actionsSection
-                            .floatUp(delay: 0.2)
+
+                        if neroManager.isConnected {
+                            contextSection
+                                .floatUp(delay: 0.1)
+                            actionsSection
+                                .floatUp(delay: 0.2)
+                        }
+
                         aboutSection
-                            .floatUp(delay: 0.3)
+                            .floatUp(delay: neroManager.isConnected ? 0.3 : 0.1)
                     }
                     .padding()
                 }
@@ -46,12 +61,24 @@ struct SettingsView: View {
             }
         }
         .task {
-            await loadContext()
+            if neroManager.isConnected {
+                await loadContext()
+            }
+            if !neroManager.serverURL.isEmpty {
+                serverURL = neroManager.serverURL
+            }
+            if !neroManager.licenseKey.isEmpty {
+                licenseKey = neroManager.licenseKey
+            }
+            if neroManager.connectionMode == .tunnel {
+                connectionMode = .tunnel
+            }
         }
         .alert("Disconnect", isPresented: $showDisconnectConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Disconnect", role: .destructive) {
                 neroManager.disconnect()
+                contextInfo = nil
             }
         } message: {
             Text("Are you sure you want to disconnect from this Nero server?")
@@ -64,109 +91,344 @@ struct SettingsView: View {
                 .font(.subheadline.weight(.medium))
                 .foregroundColor(.nMutedForeground)
 
-            VStack(spacing: 12) {
-                HStack {
-                    ZStack {
-                        Circle()
-                            .fill(neroManager.isConnected ? Color.nSuccess.opacity(0.2) : Color.nError.opacity(0.2))
-                            .frame(width: 36, height: 36)
-
-                        Image(systemName: neroManager.isConnected ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundColor(neroManager.isConnected ? .nSuccess : .nError)
-                            .font(.system(size: 18))
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(neroManager.isConnected ? "Connected" : "Disconnected")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundColor(.white)
-
-                        if !neroManager.serverURL.isEmpty {
-                            Text(neroManager.serverURL)
-                                .font(.caption)
-                                .foregroundColor(.nMutedForeground)
-                                .lineLimit(1)
-                        }
-                    }
-
-                    Spacer()
-
-                    if neroManager.connectionMode == .tunnel {
-                        HStack(spacing: 4) {
-                            Image(systemName: "globe")
-                                .font(.caption2)
-                            Text("Remote")
-                                .font(.caption)
-                        }
-                        .foregroundColor(.neroBlue)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.neroBlue.opacity(0.15))
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule()
-                                .stroke(Color.neroBlue.opacity(0.3), lineWidth: 1)
-                        )
-                    }
-                }
-
-                if let apiInfo = neroManager.apiInfo {
-                    Divider()
-                        .background(Color.nBorder)
-
-                    HStack {
-                        Text("Version")
-                            .font(.subheadline)
-                            .foregroundColor(.nMutedForeground)
-                        Spacer()
-                        Text(apiInfo.version)
-                            .font(.subheadline.monospaced())
-                            .foregroundColor(.white)
-                    }
-
-                    if let features = apiInfo.features {
-                        HStack {
-                            Text("Features")
-                                .font(.subheadline)
-                                .foregroundColor(.nMutedForeground)
-                            Spacer()
-                            HStack(spacing: 6) {
-                                if features.voice == true {
-                                    featureBadge("Voice", icon: "waveform")
-                                }
-                                if features.sms == true {
-                                    featureBadge("SMS", icon: "message")
-                                }
-                                if features.database == true {
-                                    featureBadge("DB", icon: "cylinder")
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Button {
-                    showDisconnectConfirm = true
-                } label: {
-                    HStack {
-                        Image(systemName: "xmark.circle")
-                        Text("Disconnect")
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundColor(.nError)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.nError.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.nError.opacity(0.3), lineWidth: 1)
-                    )
-                }
+            if neroManager.isConnected {
+                connectedInfo
+            } else {
+                connectionConfig
             }
         }
         .padding(16)
         .glassCard()
+    }
+
+    private var connectedInfo: some View {
+        VStack(spacing: 12) {
+            HStack {
+                ZStack {
+                    Circle()
+                        .fill(Color.nSuccess.opacity(0.2))
+                        .frame(width: 36, height: 36)
+
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.nSuccess)
+                        .font(.system(size: 18))
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Connected")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.white)
+
+                    if !neroManager.serverURL.isEmpty {
+                        Text(neroManager.serverURL)
+                            .font(.caption)
+                            .foregroundColor(.nMutedForeground)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer()
+
+                if neroManager.connectionMode == .tunnel {
+                    HStack(spacing: 4) {
+                        Image(systemName: "globe")
+                            .font(.caption2)
+                        Text("Remote")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.neroBlue)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.neroBlue.opacity(0.15))
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.neroBlue.opacity(0.3), lineWidth: 1)
+                    )
+                }
+            }
+
+            if let apiInfo = neroManager.apiInfo {
+                Divider()
+                    .background(Color.nBorder)
+
+                HStack {
+                    Text("Version")
+                        .font(.subheadline)
+                        .foregroundColor(.nMutedForeground)
+                    Spacer()
+                    Text(apiInfo.version)
+                        .font(.subheadline.monospaced())
+                        .foregroundColor(.white)
+                }
+
+                if let features = apiInfo.features {
+                    HStack {
+                        Text("Features")
+                            .font(.subheadline)
+                            .foregroundColor(.nMutedForeground)
+                        Spacer()
+                        HStack(spacing: 6) {
+                            if features.voice == true {
+                                featureBadge("Voice", icon: "waveform")
+                            }
+                            if features.sms == true {
+                                featureBadge("SMS", icon: "message")
+                            }
+                            if features.database == true {
+                                featureBadge("DB", icon: "cylinder")
+                            }
+                        }
+                    }
+                }
+            }
+
+            Button {
+                showDisconnectConfirm = true
+            } label: {
+                HStack {
+                    Image(systemName: "xmark.circle")
+                    Text("Disconnect")
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(.nError)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Color.nError.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.nError.opacity(0.3), lineWidth: 1)
+                )
+            }
+        }
+    }
+
+    private var connectionConfig: some View {
+        VStack(spacing: 16) {
+            HStack(spacing: 12) {
+                ForEach(ConnectionMode.allCases, id: \.self) { mode in
+                    Button {
+                        withAnimation(.spring(response: 0.3)) {
+                            connectionMode = mode
+                            errorMessage = nil
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: mode == .local ? "wifi" : "globe")
+                                .font(.system(size: 14))
+
+                            Text(mode.rawValue)
+                                .font(.subheadline.weight(.medium))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            connectionMode == mode
+                                ? LinearGradient.neroGradient
+                                : LinearGradient(colors: [Color.nCard], startPoint: .top, endPoint: .bottom)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(
+                                    connectionMode == mode
+                                        ? Color.clear
+                                        : Color.nBorder,
+                                    lineWidth: 1
+                                )
+                        )
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+
+            if connectionMode == .local {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Server URL", systemImage: "link")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.white)
+
+                    TextField("http://192.168.1.100:4848", text: $serverURL)
+                        .textFieldStyle(.plain)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .foregroundColor(.white)
+                        .padding()
+                        .inputGlow()
+                }
+
+                if requiresLicenseKey {
+                    licenseKeyField
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            } else {
+                licenseKeyField
+            }
+
+            if let error = errorMessage {
+                HStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.nError)
+
+                    Text(error)
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.9))
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.nError.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.nError.opacity(0.3), lineWidth: 1)
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+
+            Button(action: connect) {
+                HStack(spacing: 12) {
+                    if isConnecting {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.9)
+                    } else {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 16))
+                    }
+                    Text(isConnecting ? "Connecting..." : "Connect")
+                        .font(.headline)
+                }
+                .neroButton()
+            }
+            .disabled(isConnecting || !canConnect)
+            .opacity(canConnect ? 1 : 0.5)
+        }
+        .animation(.spring(response: 0.3), value: requiresLicenseKey)
+    }
+
+    private var licenseKeyField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("License Key", systemImage: "key.fill")
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(.white)
+
+            SecureField("Enter your license key", text: $licenseKey)
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .foregroundColor(.white)
+                .padding()
+                .inputGlow()
+
+            if connectionMode == .local && requiresLicenseKey {
+                Text("Only localhost/127.0.0.1 can connect without a license key")
+                    .font(.caption)
+                    .foregroundColor(.nMutedForeground)
+            } else if connectionMode == .tunnel {
+                Text("Connect from anywhere with your license key")
+                    .font(.caption)
+                    .foregroundColor(.nMutedForeground)
+            }
+        }
+    }
+
+    private var requiresLicenseKey: Bool {
+        let url = serverURL.lowercased()
+        let isLocalhost = url.contains("localhost") || url.contains("127.0.0.1")
+        return !isLocalhost && !serverURL.isEmpty
+    }
+
+    private var canConnect: Bool {
+        if connectionMode == .local {
+            if requiresLicenseKey {
+                return !serverURL.isEmpty && !licenseKey.isEmpty
+            }
+            return !serverURL.isEmpty
+        } else {
+            return !licenseKey.isEmpty
+        }
+    }
+
+    private func connect() {
+        isConnecting = true
+        errorMessage = nil
+
+        Task {
+            defer {
+                Task { @MainActor in
+                    isConnecting = false
+                }
+            }
+
+            if connectionMode == .local {
+                var url = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !url.hasPrefix("http://") && !url.hasPrefix("https://") {
+                    url = "http://" + url
+                }
+                url = url.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+
+                neroManager.configure(
+                    serverURL: url,
+                    licenseKey: licenseKey.trimmingCharacters(in: .whitespacesAndNewlines),
+                    mode: .local
+                )
+
+                let connected = await neroManager.checkConnection()
+                if !connected {
+                    await MainActor.run {
+                        errorMessage = "Could not connect. Check the URL and ensure Nero is running."
+                    }
+                } else {
+                    await MainActor.run {
+                        toastManager.success("Connected to Nero")
+                    }
+                    await loadContext()
+                }
+            } else {
+                let key = licenseKey.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                guard let verifyResponse = await neroManager.verifyLicenseKey(key) else {
+                    await MainActor.run {
+                        errorMessage = "Failed to verify license key. Check your internet connection."
+                    }
+                    return
+                }
+
+                guard verifyResponse.valid && verifyResponse.active else {
+                    await MainActor.run {
+                        errorMessage = "License key is invalid or inactive"
+                    }
+                    return
+                }
+
+                guard let tunnelUrl = verifyResponse.tunnel_url, !tunnelUrl.isEmpty else {
+                    await MainActor.run {
+                        errorMessage = "No relay available. Make sure Nero is running with a license key configured."
+                    }
+                    return
+                }
+
+                neroManager.configure(
+                    serverURL: tunnelUrl,
+                    licenseKey: key,
+                    mode: .tunnel
+                )
+
+                let connected = await neroManager.checkConnection()
+                if !connected {
+                    await MainActor.run {
+                        errorMessage = "Could not connect remotely. Ensure Nero is running."
+                    }
+                } else {
+                    await MainActor.run {
+                        toastManager.success("Connected remotely")
+                    }
+                    await loadContext()
+                }
+            }
+        }
     }
 
     private func featureBadge(_ text: String, icon: String) -> some View {

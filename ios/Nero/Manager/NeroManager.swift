@@ -111,6 +111,10 @@ class NeroManager: ObservableObject {
         isConnected = false
         serverInfo = nil
         apiInfo = nil
+    }
+
+    func clearCredentials() {
+        disconnect()
         serverURL = ""
         licenseKey = ""
     }

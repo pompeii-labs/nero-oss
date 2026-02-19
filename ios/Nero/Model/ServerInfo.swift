@@ -35,3 +35,45 @@ struct LicenseVerifyResponse: Codable {
     let active: Bool
     let tunnel_url: String?
 }
+
+struct LogEntry: Identifiable, Codable {
+    var id: String { "\(timestamp)-\(source)-\(message.prefix(20))" }
+    let timestamp: String
+    let level: String
+    let source: String
+    let message: String
+
+    var date: Date? {
+        ISO8601DateFormatter().date(from: timestamp)
+    }
+}
+
+struct LogsResponse: Codable {
+    let count: Int
+    let logFile: String?
+    let entries: [LogEntry]
+}
+
+struct McpServerConfig: Codable, Identifiable {
+    var id: String { name }
+    let name: String
+    let transport: String?
+    let command: String?
+    let args: [String]?
+    let url: String?
+    let disabled: Bool?
+}
+
+struct McpServersResponse: Codable {
+    let servers: [String: McpServerConfigRaw]
+    let tools: [String]
+    let authStatus: [String: Bool]?
+}
+
+struct McpServerConfigRaw: Codable {
+    let transport: String?
+    let command: String?
+    let args: [String]?
+    let url: String?
+    let disabled: Bool?
+}

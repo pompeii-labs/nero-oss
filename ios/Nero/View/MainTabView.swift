@@ -1,16 +1,24 @@
 import SwiftUI
 
+class TabRouter: ObservableObject {
+    @Published var selectedTab: Tab = .chat
+}
+
 enum Tab: Int, CaseIterable {
     case chat = 0
     case voice = 1
     case memories = 2
-    case settings = 3
+    case logs = 3
+    case mcp = 4
+    case settings = 5
 
     var icon: String {
         switch self {
         case .chat: return "bubble.left.and.bubble.right"
         case .voice: return "waveform"
         case .memories: return "brain.head.profile"
+        case .logs: return "scroll"
+        case .mcp: return "puzzlepiece.extension"
         case .settings: return "gearshape"
         }
     }
@@ -20,6 +28,8 @@ enum Tab: Int, CaseIterable {
         case .chat: return "bubble.left.and.bubble.right.fill"
         case .voice: return "waveform.circle.fill"
         case .memories: return "brain.head.profile.fill"
+        case .logs: return "scroll.fill"
+        case .mcp: return "puzzlepiece.extension.fill"
         case .settings: return "gearshape.fill"
         }
     }
@@ -29,33 +39,40 @@ enum Tab: Int, CaseIterable {
         case .chat: return "Chat"
         case .voice: return "Voice"
         case .memories: return "Memories"
+        case .logs: return "Logs"
+        case .mcp: return "MCP"
         case .settings: return "Settings"
         }
     }
 }
 
 struct MainTabView: View {
-    @State private var selectedTab: Tab = .chat
+    @StateObject private var tabRouter = TabRouter()
     @State private var showMenu = false
 
     var body: some View {
         ZStack {
             Group {
-                switch selectedTab {
+                switch tabRouter.selectedTab {
                 case .chat:
                     ChatView(showMenu: $showMenu)
                 case .voice:
                     VoiceView(showMenu: $showMenu)
                 case .memories:
                     MemoriesView(showMenu: $showMenu)
+                case .logs:
+                    LogsView(showMenu: $showMenu)
+                case .mcp:
+                    MCPView(showMenu: $showMenu)
                 case .settings:
                     SettingsView(showMenu: $showMenu)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .environmentObject(tabRouter)
         .sheet(isPresented: $showMenu) {
-            NavigationMenu(selectedTab: $selectedTab, showMenu: $showMenu)
+            NavigationMenu(selectedTab: $tabRouter.selectedTab, showMenu: $showMenu)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Color.nCard)

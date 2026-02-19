@@ -235,6 +235,96 @@ class APIManager: ObservableObject {
         }
     }
 
+    func getLogs(lines: Int = 200, level: String? = nil) async throws -> [LogEntry] {
+        var endpoint = "/api/logs?lines=\(lines)"
+        if let level = level { endpoint += "&level=\(level)" }
+        let request = buildRequest(endpoint: endpoint)
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.httpError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+
+        let logsResponse = try JSONDecoder().decode(LogsResponse.self, from: data)
+        return logsResponse.entries
+    }
+
+    func streamLogs(level: String? = nil, onEntry: @escaping (LogEntry) -> Void) -> Task<Void, Never> {
+        Task {
+            do {
+                var endpoint = "/api/logs/stream"
+                if let level = level { endpoint += "?level=\(level)" }
+                let request = buildRequest(endpoint: endpoint)
+
+                let (bytes, response) = try await URLSession.shared.bytes(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse,
+                      httpResponse.statusCode == 200 else { return }
+
+                for try await line in bytes.lines {
+                    if Task.isCancelled { break }
+                    guard line.hasPrefix("data: ") else { continue }
+                    let json = String(line.dropFirst(6))
+                    if json == "{}" { continue }
+
+                    guard let data = json.data(using: .utf8) else { continue }
+                    if let entry = try? JSONDecoder().decode(LogEntry.self, from: data),
+                       !entry.timestamp.isEmpty {
+                        await MainActor.run { onEntry(entry) }
+                    }
+                }
+            } catch {}
+        }
+    }
+
+    func getMcpServers() async throws -> (servers: [McpServerConfig], tools: [String]) {
+        let request = buildRequest(endpoint: "/api/mcp/servers")
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.httpError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+
+        let mcpResponse = try JSONDecoder().decode(McpServersResponse.self, from: data)
+        let servers = mcpResponse.servers.map { (name, config) in
+            McpServerConfig(
+                name: name,
+                transport: config.transport,
+                command: config.command,
+                args: config.args,
+                url: config.url,
+                disabled: config.disabled
+            )
+        }.sorted { $0.name < $1.name }
+
+        return (servers: servers, tools: mcpResponse.tools)
+    }
+
+    func toggleMcpServer(name: String, disabled: Bool) async throws {
+        let body = try JSONEncoder().encode(["disabled": disabled])
+        let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+        let request = buildRequest(endpoint: "/api/mcp/servers/\(encoded)/toggle", method: "POST", body: body)
+        let (_, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.httpError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+    }
+
+    func removeMcpServer(name: String) async throws {
+        let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+        let request = buildRequest(endpoint: "/api/mcp/servers/\(encoded)", method: "DELETE")
+        let (_, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.httpError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+    }
+
     func reload() async throws -> Int {
         let request = buildRequest(endpoint: "/api/reload", method: "POST")
         let (data, response) = try await URLSession.shared.data(for: request)

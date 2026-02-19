@@ -40,3 +40,10 @@ fastlane/test_output
 
 # Code Injection
 iOSInjectionProject/
+
+# Signing
+Signing.xcconfig
+*.mobileprovision
+*.p12
+*.cer
+ExportOptions.plist
