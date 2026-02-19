@@ -1,530 +1,297 @@
 <p align="center">
-  <strong>Your self-hosted AI that actually knows what's going on.</strong>
+  <img src="assets/icon.png" alt="Nero" width="120" />
+</p>
+
+<h1 align="center">Nero</h1>
+
+<p align="center">
+  <strong>The first AI agent with <em>agency</em>.</strong>
 </p>
 
 <p align="center">
   <a href="https://github.com/pompeii-labs/nero-oss/releases"><img src="https://img.shields.io/github/v/release/pompeii-labs/nero-oss" alt="Release" /></a>
+  <a href="https://github.com/pompeii-labs/nero-oss/actions/workflows/ci.yml"><img src="https://github.com/pompeii-labs/nero-oss/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" /></a>
   <a href="https://github.com/pompeii-labs/nero-oss/stargazers"><img src="https://img.shields.io/github/stars/pompeii-labs/nero-oss" alt="Stars" /></a>
 </p>
 
 ---
 
-Nero is an open source AI companion that runs on your machine, connects to your tools via MCP, and thinks in the background while you're away. Talk to it through the terminal, web dashboard, iOS app, voice calls, or SMS.
+The closest thing to Jarvis you can self-host.
 
-**Why Nero?**
-- **Self-hosted** - Your data stays on your machine. No cloud dependency.
-- **Multi-interface** - CLI, web UI, voice, and SMS. Use what fits the moment.
-- **Proactive** - Background thinking monitors your projects and surfaces insights.
-- **MCP-native** - First-class Model Context Protocol support. Add any MCP server in seconds.
+Nero is an AI that lives on your server. Call it, text it, Slack it, or open the terminal -- every interaction shares the same context, the same memory, the same thread. It knows what you talked about on a voice call when you message it later from the web dashboard. It works on its own projects while you sleep. It thinks in the background while you're away and tells you what it found when you get back.
+
+Other AI agents are chatbots with plugins. Nero is one thing -- voice, terminal, web, SMS, and autonomy built together from the ground up.
 
 <p align="center">
-  <img src="assets/screenshot.png" alt="Nero Web UI" width="800" />
+  <img src="assets/voice.png" alt="Nero Voice" width="800" />
 </p>
 
-## Install
+<p align="center">
+  <img src="assets/screenshot.png" alt="Nero Chat" width="800" />
+</p>
+
+<p align="center">
+  <img src="assets/terminal.png" alt="Nero Terminal" width="800" />
+</p>
+
+## Quick Start
 
 ```bash
-# Install CLI
 curl -fsSL https://raw.githubusercontent.com/pompeii-labs/nero-oss/main/install.sh | bash
 
-# Create env file with your API key
 mkdir -p ~/.nero
 echo "OPENROUTER_API_KEY=your_key" > ~/.nero/.env
 
-# Setup and start Docker
 nero setup --compose
 ```
 
 That's it. Nero is running at `http://localhost:4848`.
 
-## Installation Modes
+## How You Interact With It
 
-Nero supports two installation modes that control how much access it has to your host system:
+Nero isn't tied to one interface. Every medium shares the same conversation, memory, and context.
 
-### Integrated Mode (Default)
+| Interface | What it is |
+|-----------|------------|
+| **Terminal** | Interactive REPL or one-shot commands via `nero -m "..."` |
+| **Web Dashboard** | Chat, memories, logs, settings -- all in a self-hosted UI at `localhost:4848` |
+| **Voice Calls** | Real phone calls with Deepgram STT, ElevenLabs/Hume TTS, and real-time emotion detection |
+| **SMS** | Text it from your phone, get responses back |
+| **iOS App** | Native SwiftUI app with chat, voice mode, and memory management |
+| **Slack** | Message it in Slack with rich Block Kit responses |
+| **API** | REST + SSE streaming for custom integrations |
 
-Full access to your host system. Use this for maximum capability.
+## What Makes Nero Different
 
-```bash
-nero setup --compose --integrated
-```
+### Unified Context Across Every Interface
 
-| Capability | Description |
-|------------|-------------|
-| Host Filesystem | Read/write access to `~/` via `/host/home` |
-| Docker | Can run docker commands on your host |
-| Network | Uses host network for localhost access |
+Talk to Nero on a voice call, then text it, then open the web dashboard. It remembers everything across every medium. There's no "Slack bot" and "CLI tool" -- it's one agent with one memory.
 
-### Contained Mode
+### Autonomy Mode
 
-Sandboxed with no host access. Use this for untrusted tasks or demos.
-
-```bash
-nero setup --compose --contained
-```
-
-| Capability | Description |
-|------------|-------------|
-| Filesystem | Container-only, isolated volume |
-| Docker | No access |
-| Network | Isolated, port-mapped |
-
-### Switching Modes
-
-Re-run setup with the desired mode flag:
+Nero doesn't just respond. It can work on its own projects while you're away -- tracking progress, writing journal entries, and managing its own token budget. This isn't a cron job. It's an agent that decides what to work on, does the work, and picks up where it left off next session.
 
 ```bash
-nero setup --compose --contained   # Switch to contained
-nero setup --compose --integrated  # Switch to integrated
+nero autonomy on
+nero autonomy status
+nero autonomy budget 500000
 ```
 
-### Check Current Mode
+### Background Thinking
+
+When you step away, Nero watches your environment -- git status, logs, MCP tools -- and surfaces what it finds when you come back. Optional Slack notifications for anything urgent.
 
 ```bash
-nero status
+nero think on
+nero think notify on
 ```
 
-## Update
+### Emotion Detection
+
+During voice calls, Nero analyzes vocal prosody in real-time via Hume's Expression Measurement API (48 dimensions). It knows how you're feeling and adjusts its responses accordingly. No other open-source agent does this.
+
+### MCP-Native
+
+First-class Model Context Protocol support. Add any MCP server in seconds -- stdio or HTTP, with OAuth support for remote servers.
 
 ```bash
-nero update
+nero mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem ~/
+nero mcp add github -- npx -y @modelcontextprotocol/server-github
+nero mcp add remote-server https://mcp.example.com --transport http
 ```
 
-This pulls the latest Docker image, restarts the container, and updates the CLI binary.
+### Browser Automation
+
+Built-in Playwright for web automation -- navigate, click, type, screenshot, run JavaScript. Cookie banners dismissed automatically.
+
+### Scheduled Actions
+
+Schedule recurring tasks -- daily, weekly, monthly, or on any interval. Nero executes them autonomously.
+
+### Skills
+
+Extend Nero with reusable prompts that follow the [Agent Skills](https://skills.sh) standard.
+
+```bash
+nero skills add user/repo
+nero skills create my-skill
+```
+
+### Hooks
+
+Run shell commands at key lifecycle points -- block dangerous tool calls, log everything, inject custom workflows.
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{ "command": "~/.nero/hooks/block-rm.sh", "match": "bash" }]
+  }
+}
+```
+
+Seven events: `PreToolUse`, `PostToolUse`, `OnPrompt`, `OnResponse`, `OnMainFinish`, `OnError`, `OnSessionStart`.
+
+### Subagent Dispatch
+
+Spawn parallel agents for independent research or build tasks. Each runs in isolation with its own model and context.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────┐
+│              Relay (:4848)              │
+│         Single entry point             │
+│     Auth when license key is set       │
+├─────────────────────────────────────────┤
+│            Service (:4847)             │
+│                                         │
+│  ┌─────────┐ ┌─────────┐ ┌──────────┐ │
+│  │  Agent   │ │   MCP   │ │  Tools   │ │
+│  │ (Magma)  │ │ Servers │ │ (30+)    │ │
+│  └─────────┘ └─────────┘ └──────────┘ │
+│                                         │
+│  ┌─────────┐ ┌─────────┐ ┌──────────┐ │
+│  │  Voice   │ │   SMS   │ │  Slack   │ │
+│  │ (Twilio) │ │(Twilio) │ │(Webhook) │ │
+│  └─────────┘ └─────────┘ └──────────┘ │
+│                                         │
+│  ┌─────────┐ ┌─────────┐ ┌──────────┐ │
+│  │ Browser  │ │Autonomy │ │Background│ │
+│  │(Playwrt) │ │ Engine  │ │ Thinking │ │
+│  └─────────┘ └─────────┘ └──────────┘ │
+├─────────────────────────────────────────┤
+│           PostgreSQL                    │
+└─────────────────────────────────────────┘
+```
+
+The relay always runs on port `4848` as the single entry point. The internal service on `127.0.0.1:4847` is never exposed directly. Without a license key, the relay is an open passthrough. With one, it enforces auth for non-private IPs.
+
+## Deployment
+
+### Docker (Recommended)
+
+```bash
+nero setup --compose --integrated    # Full host access (default)
+nero setup --compose --contained     # Sandboxed, no host access
+nero status                          # Check current mode
+nero update                          # Pull latest image + restart
+```
+
+**Integrated mode** gives Nero access to your host filesystem (`~/`), Docker, and network. **Contained mode** sandboxes everything.
+
+### Local Models
+
+Works with Ollama, vLLM, or any OpenAI-compatible API.
+
+```bash
+nero config set baseUrl http://localhost:11434/v1
+nero config set model llama3.2:3b
+```
+
+### Remote Access
+
+```bash
+nero relay start         # Start tunnel to relay
+nero license register    # One-time webhook registration
+nero relay status        # Check tunnel status
+```
+
+Access Nero from anywhere. The tunnel connects to the relay, and the license key handles auth.
+
+## Configuration
+
+All config lives at `~/.nero/config.json`. Persistent instructions go in `~/.nero/NERO.md`.
+
+### Environment Variables
+
+Add to `~/.nero/.env`:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENROUTER_API_KEY` | Yes* | OpenRouter API key (*not needed with local models) |
+| `DATABASE_URL` | No | PostgreSQL connection string |
+| `TAVILY_API_KEY` | No | Web search tool |
+| `DEEPGRAM_API_KEY` | No | Voice STT |
+| `ELEVENLABS_API_KEY` | No | Voice TTS (ElevenLabs) |
+| `HUME_API_KEY` | No | Voice TTS (Hume) and emotion detection |
+| `NERO_LICENSE_KEY` | No | Voice/SMS webhook routing |
+
+### Voice, SMS & Slack
+
+Nero works fully without a license. The CLI, web dashboard, and MCP tools all work out of the box.
+
+A license unlocks voice calls, SMS, and Slack by routing webhooks through Pompeii's infrastructure. Once registered, you get a phone number for calls and texts.
+
+```bash
+nero license register
+nero license status
+```
+
+## CLI Reference
+
+```bash
+nero                      # Interactive REPL
+nero -m "message"         # One-shot message
+nero chat                 # Start REPL (alias)
+nero config               # Show config
+nero config set <k> <v>   # Set config value
+nero models               # List available models
+nero status               # Installation status
+nero setup --compose      # Setup Docker
+nero update               # Update to latest
+nero reload               # Reload MCP servers, skills, NERO.md
+nero restart              # Restart service
+nero logs                 # View recent logs
+nero logs -f              # Stream logs in real-time
+nero mcp list             # List MCP servers
+nero mcp add <name> ...   # Add MCP server
+nero skills list          # List skills
+nero think on/off         # Toggle background thinking
+nero autonomy on/off      # Toggle autonomy mode
+nero relay start          # Start tunnel
+```
 
 ## Development
 
 ```bash
 bun install
 cp .env.example .env
-# Edit .env with your OPENROUTER_API_KEY
 
-# Optional: Start PostgreSQL
 docker compose up db -d
 bun run db:migrate
 
-# Terminal 1: Service
-bun run dev:service
-
-# Terminal 2: CLI
-bun run dev
+bun run dev:service      # Terminal 1: Service
+bun run dev              # Terminal 2: CLI
+bun test                 # Run tests
 ```
-
-## Configuration
-
-Config lives at `~/.nero/config.json`. Add MCP servers:
-
-```json
-{
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user"]
-    },
-    "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "your-token"
-      }
-    }
-  }
-}
-```
-
-Or use the CLI:
-
-```bash
-nero mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem ~/
-nero mcp add github -- npx -y @modelcontextprotocol/server-github
-nero mcp add remote-server https://mcp.example.com --transport http
-nero mcp list
-nero mcp remove filesystem
-```
-
-## Hooks
-
-Hooks let you run shell commands at key points in Nero's lifecycle. Use them for logging, blocking dangerous commands, auto-formatting after writes, or injecting custom workflows.
-
-Add a `hooks` key to `~/.nero/config.json`:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "command": "~/.nero/hooks/block-rm.sh",
-        "match": "bash",
-        "timeout": 5000
-      }
-    ],
-    "PostToolUse": [
-      {
-        "command": "~/.nero/hooks/log-tools.sh"
-      }
-    ],
-    "OnPrompt": [
-      {
-        "command": "~/.nero/hooks/log-prompt.sh",
-        "match": "voice"
-      }
-    ]
-  }
-}
-```
-
-### Hook Events
-
-| Event | When | Can Block? |
-|-------|------|-----------|
-| `PreToolUse` | Before a tool executes | Yes |
-| `PostToolUse` | After a tool completes | No |
-| `OnPrompt` | When a message is received | No |
-| `OnResponse` | When Nero responds | No |
-| `OnMainFinish` | Full turn completes (all tools + response) | No |
-| `OnError` | An error occurs | No |
-| `OnSessionStart` | New conversation session starts | No |
-
-### Hook Config
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `command` | string | Shell command to run. `~` is resolved to home directory. |
-| `match` | string | Optional regex filter. For tool events, matches tool name. For `OnPrompt`, matches medium (cli, voice, sms, etc.). |
-| `timeout` | number | Timeout in ms. Default: 10000. |
-
-### How It Works
-
-Each hook receives JSON context on **stdin** with details about the event:
-
-```json
-{
-  "event": "PreToolUse",
-  "tool": "bash",
-  "args": { "command": "rm -rf /tmp/test" },
-  "cwd": "/home/user"
-}
-```
-
-**Exit codes:**
-- `0` = allow (hook passes)
-- Non-zero = block (`PreToolUse` only). Stdout is used as the block reason.
-
-Non-blocking events (`PostToolUse`, `OnPrompt`, etc.) ignore exit codes. They run fire-and-forget.
-
-### Example: Block Dangerous Commands
-
-```bash
-#!/bin/sh
-# ~/.nero/hooks/block-rm.sh
-python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-cmd = data.get('args', {}).get('command', '')
-if 'rm -rf' in cmd:
-    print('Blocked: dangerous rm command')
-    sys.exit(1)
-"
-```
-
-### Example: Log All Tool Usage
-
-```bash
-#!/bin/sh
-# ~/.nero/hooks/log-tools.sh
-python3 -c "
-import sys, json, datetime
-data = json.load(sys.stdin)
-ts = datetime.datetime.now().strftime('%H:%M:%S')
-tool = data.get('tool', '?')
-event = data.get('event', '?')
-with open('$HOME/.nero/hooks.log', 'a') as f:
-    f.write(f'[{ts}] {event} {tool}\n')
-"
-```
-
-## Local Models (Ollama / vLLM)
-
-Nero works with any OpenAI-compatible API, including local models via Ollama, vLLM, or similar.
-
-### Quick Setup with Ollama
-
-```bash
-# Install Ollama (https://ollama.com)
-ollama pull llama3.2:3b
-
-# Point Nero at your Ollama instance
-nero config set baseUrl http://localhost:11434/v1
-nero config set model llama3.2:3b
-```
-
-Or edit `~/.nero/config.json` directly:
-
-```json
-{
-  "settings": {
-    "model": "llama3.2:3b",
-    "baseUrl": "http://localhost:11434/v1"
-  }
-}
-```
-
-### Any OpenAI-Compatible Endpoint
-
-Works with vLLM, TGI, LiteLLM, or any server that speaks the OpenAI chat completions API:
-
-```bash
-nero config set baseUrl http://your-server:8000/v1
-nero config set model your-model-name
-```
-
-### Managing Models
-
-```bash
-nero models              # List available models from your provider
-nero config get model    # Show current model
-nero config get baseUrl  # Show current provider URL
-```
-
-### Reset to OpenRouter
-
-```bash
-nero config set baseUrl openrouter
-```
-
-> **Note:** Local models on CPU can be slow. For best results, use a GPU-accelerated setup. Nero automatically extends timeouts for local providers.
-
-## Remote Access (Relay)
-
-Nero supports **remote access** without exposing the core service to the public internet. A built-in **relay** always runs on port `4848`, proxying requests to the internal service on `127.0.0.1:4847`. When a license key is configured, the relay enforces authentication on public requests.
-
-### How It Works
-- The **relay** always listens on port `4848` and is the single entry point
-- The internal service runs on `127.0.0.1:4847` (never exposed directly)
-- Without a license key, the relay is an open passthrough
-- With a license key, the relay requires auth for non-private IPs
-
-### Remote Access
-
-```bash
-nero relay start         # Start a tunnel to the relay
-nero license register    # one-time, for webhook routing
-```
-
-This will:
-- Start the tunnel pointing to the relay
-- Auto-register the tunnel URL in the backend
-
-### Relay Commands
-
-```bash
-nero relay start     # Start relay + tunnel (always detached)
-nero relay status    # Show relay/tunnel status
-nero relay stop      # Stop relay/tunnel
-```
-
-> `nero tunnel` still works but is deprecated. Use `nero relay`.
-
-## User Instructions (NERO.md)
-
-Create `~/.nero/NERO.md` to customize Nero's behavior with persistent instructions:
-
-```bash
-echo "Always be concise. Prefer TypeScript over JavaScript." > ~/.nero/NERO.md
-```
-
-The file is loaded on startup and reloaded with `nero reload`. Use it for:
-
-- Code style preferences
-- Project context
-- Response formatting rules
-- Any persistent instructions
-
-## CLI Commands
-
-```bash
-nero                      # Start interactive REPL
-nero -m "message"         # One-shot message
-nero config               # Show current configuration
-nero config set <k> <v>   # Set a config value (model, baseUrl, etc.)
-nero config get <key>     # Get a config value
-nero models               # List available models from provider
-nero status               # Show installation status and mode
-nero setup                # Setup Docker container
-nero setup --integrated   # Setup with full host access (default)
-nero setup --contained    # Setup sandboxed, no host access
-nero update               # Update to latest version
-nero update --check       # Check for updates
-nero reload               # Reload MCP servers and NERO.md
-nero restart              # Restart the service container
-nero migrate              # Run database migrations
-```
-
-## Slash Commands (REPL)
-
-| Command | Description |
-|---------|-------------|
-| `/help` | Show available commands |
-| `/exit` | Exit the REPL |
-| `/clear` | Clear conversation history |
-| `/compact` | Summarize and compress context |
-| `/model` | Switch AI model |
-| `/provider` | Switch API provider (base URL) |
-| `/mcp` | List connected MCP servers and tools |
-| `/memory` | Show stored memories |
-| `/usage` | Show context usage |
-| `/think` | Run background thinking manually |
-| `/skills` | List available skills |
-
-## Skills
-
-Skills are reusable prompts that extend Nero's capabilities. They follow the [Agent Skills](https://skills.sh) standard.
-
-```bash
-# List installed skills
-nero skills list
-
-# Install from git repo
-nero skills add user/repo
-
-# Create your own
-nero skills create my-skill
-
-# Remove a skill
-nero skills remove my-skill
-```
-
-Skills live in `~/.nero/skills/`. Each skill is a folder with a `SKILL.md` file:
-
-```
-~/.nero/skills/
-  my-skill/
-    SKILL.md
-```
-
-### Using Skills
-
-In the web UI or REPL, type `/<skill-name>` to load a skill into context:
-
-```
-/my-skill          # Load skill
-/my-skill          # Run again to unload
-/skills            # List all skills (● = loaded)
-```
-
-Loaded skills stay active until you unload them or reload Nero.
-
-### Creating Skills
-
-```bash
-nero skills create commit-helper
-```
-
-Edit `~/.nero/skills/commit-helper/SKILL.md`:
-
-```yaml
----
-name: commit-helper
-description: Help write git commit messages
----
-
-When the user asks you to commit, analyze the staged changes and suggest a clear, conventional commit message.
-```
-
-### Installing from npx skills
-
-```bash
-npx skills add vercel-labs/agent-skills --skill frontend-design --path ~/.nero/skills
-```
-
-## Background Thinking
-
-Nero can think in the background while you're away.
-
-```bash
-nero think on              # Enable
-nero think off             # Disable
-nero think status          # Show settings
-nero think notify on       # Enable urgent notifications
-nero think destructive on  # Allow destructive actions (off by default)
-nero think protect dev     # Add branch to protected list
-```
-
-When enabled, Nero waits 5 minutes after your last message, then checks git status, logs, MCP tools, etc. every 10 minutes. Thoughts are surfaced when you return.
 
 ## iOS App
 
-A native iOS companion app is available in the `ios/` directory.
+Native SwiftUI companion app with chat, voice mode with the neural sphere, memory management, live log streaming, and MCP server management.
 
-**Features:**
-- Chat with markdown rendering and streaming
-- Voice mode with real-time audio
-- Memories management
-- Connect via local network or remote tunnel
+<p align="center">
+  <img src="assets/ios.jpg" alt="Nero iOS" width="300" />
+</p>
 
-**Setup:**
-1. Open `ios/Nero.xcodeproj` in Xcode
-2. Update the bundle identifier and signing team
-3. Build and run on your device
-4. Enter your Nero server URL (e.g., `http://192.168.1.100:4848`)
-
-For remote access, use your license key to connect via tunnel.
-
-## Environment Variables
-
-Add these to `~/.nero/.env`:
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `OPENROUTER_API_KEY` | Yes* | OpenRouter API key (*not needed with local models) |
-| `DATABASE_URL` | No | PostgreSQL connection string |
-| `TAVILY_API_KEY` | No | For web search tool |
-| `DEEPGRAM_API_KEY` | No | For voice STT |
-| `ELEVENLABS_API_KEY` | No | For voice TTS (ElevenLabs provider) |
-| `HUME_API_KEY` | No | For voice TTS (Hume provider) and emotion detection |
-| `NERO_LICENSE_KEY` | No | For voice/SMS webhook routing |
-
-## Voice, SMS & Slack (Optional)
-
-Nero works fully without a license. The CLI, chat, and MCP tools all work out of the box.
-
-A license unlocks voice calls, SMS, and Slack integration by routing webhooks through our infrastructure.
+### Setup
 
 ```bash
-# Add to ~/.nero/.env
-NERO_LICENSE_KEY=your_license_key
-DEEPGRAM_API_KEY=your_key
-ELEVENLABS_API_KEY=your_key
-
-# Install cloudflared
-brew install cloudflared
-
-# Start tunnel
-nero tunnel -d
-
-# Register
-nero license register
-nero license status
+cd ios
+cp Signing.xcconfig.template Signing.xcconfig
 ```
 
-Once registered, you can receive calls and texts at the phone number provided with your license.
+Edit `Signing.xcconfig` with your Apple Developer Team ID and bundle identifier:
 
-### Emotion Detection (Optional)
-
-Nero can detect vocal emotions in real-time during voice calls using Hume's Expression Measurement API. When enabled, detected emotions are passed to the LLM so it can respond with appropriate tone and empathy.
-
-Requires `HUME_API_KEY` to be set. Enable in `~/.nero/config.json`:
-
-```json
-{
-  "voice": {
-    "emotionDetection": true
-  }
-}
+```
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+PRODUCT_BUNDLE_IDENTIFIER = com.yourorg.nero
+CODE_SIGN_STYLE = Automatic
 ```
 
-Or via environment variable: `NERO_EMOTION_DETECTION=true`
+Open `ios/Nero.xcodeproj` in Xcode, build and run. On first launch, go to Settings and enter your Nero server URL (e.g., `http://192.168.1.100:4848`).
+
+Requires iOS 17+ and Xcode 15+.
 
 ## License
 
