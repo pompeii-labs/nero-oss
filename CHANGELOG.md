@@ -2,6 +2,20 @@
 
 All notable changes to Nero are documented here.
 
+## 1.29.0 (2026-02-19)
+
+### Features
+
+- iOS app overhaul: remove setup gate, add SceneKit neural sphere to voice, add Logs and MCP tabs, improve chat scroll smoothness, move connection config to Settings
+- Web voice page: add Three.js neural sphere that reacts to voice state and RMS levels, redesign layout
+- Updated README with new screenshots (voice sphere, terminal, iOS, browser tool) and iOS setup section
+
+### Fixes
+
+- Wrap all voice chat calls with error handling to prevent service crashes on API errors (e.g. OpenRouter 401)
+- Add global uncaughtException and unhandledRejection handlers as safety net
+- Update emotion detection for Hume API changes
+
 ## 1.28.0 (2026-02-18)
 
 ### Features
