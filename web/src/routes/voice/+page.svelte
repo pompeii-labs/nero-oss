@@ -2,14 +2,12 @@
     import { onMount } from 'svelte';
     import { voice } from '$lib/stores/voice.svelte';
     import { cn } from '$lib/utils';
-    import NeroIcon from '$lib/components/icons/nero-icon.svelte';
-    import ToolActivityComponent from '$lib/components/chat/tool-activity.svelte';
+    import NeroSphere from '$lib/components/nero-sphere.svelte';
     import { getServerInfo, type ServerInfo } from '$lib/actions/health';
     import { Button } from '$lib/components/ui/button';
     import { toast } from 'svelte-sonner';
     import Mic from '@lucide/svelte/icons/mic';
     import MicOff from '@lucide/svelte/icons/mic-off';
-    import Phone from '@lucide/svelte/icons/phone';
     import PhoneOff from '@lucide/svelte/icons/phone-off';
     import Loader2 from '@lucide/svelte/icons/loader-2';
     import Copy from '@lucide/svelte/icons/copy';
@@ -39,8 +37,6 @@
         toast.success('Copied to clipboard');
     }
 
-    const ringScale = $derived(1 + Math.min(voice.rmsLevel * 8, 0.5));
-    const recentActivities = $derived(voice.activities.slice(-3));
     const isVoiceEnabled = $derived(serverInfo?.features.voice ?? false);
 </script>
 
@@ -182,115 +178,70 @@
         </div>
     </div>
 {:else}
-    <div class="flex h-full flex-col items-center justify-center relative overflow-hidden">
+    <div class="relative h-full overflow-hidden">
         <div class="absolute inset-0 pointer-events-none">
             <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl"></div>
             <div class="absolute bottom-1/3 right-1/4 w-64 h-64 bg-nero-cyan/3 rounded-full blur-3xl"></div>
         </div>
 
-        <div class="flex-1 flex flex-col items-center justify-center gap-8 relative z-10">
-            <div class="relative">
-                {#if voice.status === 'connected'}
-                    <div
-                        class="absolute inset-[-30px] rounded-full border-2 border-primary/30 transition-transform duration-75"
-                        style="transform: scale({ringScale})"
-                    ></div>
-                    <div
-                        class="absolute inset-[-50px] rounded-full border border-primary/20 transition-transform duration-100"
-                        style="transform: scale({1 + ringScale * 0.3})"
-                    ></div>
-                    <div
-                        class="absolute inset-[-70px] rounded-full border border-primary/10 transition-transform duration-150"
-                        style="transform: scale({1 + ringScale * 0.15})"
-                    ></div>
-                {/if}
-
-                {#if voice.isTalking}
-                    <div class="absolute inset-[-20px] rounded-full bg-primary/20 blur-xl animate-pulse"></div>
-                {/if}
-
-                <button
-                    type="button"
+        <div class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+            <div class="pointer-events-auto">
+                <NeroSphere
+                    status={voice.status}
+                    rmsLevel={voice.rmsLevel}
+                    isTalking={voice.isTalking}
+                    isProcessing={voice.isProcessing}
+                    isMuted={voice.isMuted}
+                    outputRms={voice.outputRms}
                     onclick={handleToggleConnection}
-                    disabled={voice.status === 'connecting'}
-                    class={cn(
-                        'relative flex h-32 w-32 items-center justify-center rounded-full transition-all',
-                        voice.status === 'connected'
-                            ? 'bg-gradient-to-br from-primary to-primary/80 nero-glow-strong'
-                            : 'glass-panel hover:border-primary/40',
-                        voice.status === 'connecting' && 'opacity-70'
-                    )}
-                >
-                    {#if voice.status === 'connecting'}
-                        <Loader2 class="h-12 w-12 text-primary animate-spin" />
-                    {:else if voice.status === 'connected'}
-                        <NeroIcon class="h-16 w-12 text-primary-foreground" />
-                    {:else}
-                        <Phone class="h-10 w-10 text-primary" />
-                    {/if}
-                </button>
+                />
             </div>
+        </div>
 
-            <div class="text-center space-y-2">
-                {#if voice.status === 'idle'}
-                    <h2 class="text-2xl font-semibold text-foreground">Voice Mode</h2>
-                    <p class="text-muted-foreground">Tap to start talking with Nero</p>
-                {:else if voice.status === 'connecting'}
-                    <h2 class="text-2xl font-semibold text-foreground">Connecting...</h2>
-                    <p class="text-muted-foreground">Setting up voice connection</p>
-                {:else if voice.status === 'connected'}
-                    <h2 class="text-2xl font-semibold text-gradient-nero">
-                        {voice.isTalking ? 'Nero is speaking' : voice.isMuted ? 'Muted' : 'Listening'}
-                    </h2>
+        <div class="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-4 pb-8">
+            {#if voice.status === 'idle'}
+                <p class="text-sm text-muted-foreground/50">Tap to start talking with Nero</p>
+            {:else if voice.status === 'connecting'}
+                <p class="text-sm text-muted-foreground">Setting up voice connection...</p>
+            {:else if voice.status === 'error'}
+                <p class="text-sm text-red-400">{voice.errorMessage || 'Connection failed'}</p>
+            {:else if voice.status === 'connected'}
+                <p class="text-sm text-muted-foreground/60 max-w-md text-center">
                     {#if voice.transcript}
-                        <p class="text-muted-foreground max-w-md">{voice.transcript}</p>
+                        {voice.transcript}
                     {:else}
-                        <p class="text-muted-foreground">Say something to Nero</p>
+                        Say something to Nero
                     {/if}
-                {:else if voice.status === 'error'}
-                    <h2 class="text-2xl font-semibold text-red-400">Connection Error</h2>
-                    <p class="text-muted-foreground">{voice.errorMessage || 'Something went wrong'}</p>
-                {/if}
-            </div>
+                </p>
 
-            {#if voice.status === 'connected'}
-                <div class="flex items-center gap-4">
+                <div class="flex items-center gap-3">
                     <button
                         type="button"
                         onclick={voice.toggleMute}
                         class={cn(
-                            'flex h-14 w-14 items-center justify-center rounded-full transition-all',
+                            'flex h-11 w-11 items-center justify-center rounded-full transition-all',
                             voice.isMuted
                                 ? 'bg-red-500/20 border border-red-500/40 text-red-400'
                                 : 'glass-panel text-primary hover:border-primary/40'
                         )}
                     >
                         {#if voice.isMuted}
-                            <MicOff class="h-6 w-6" />
+                            <MicOff class="h-5 w-5" />
                         {:else}
-                            <Mic class="h-6 w-6" />
+                            <Mic class="h-5 w-5" />
                         {/if}
                     </button>
 
                     <button
                         type="button"
                         onclick={voice.disconnect}
-                        class="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 border border-red-500/40 text-red-400 transition-all hover:bg-red-500/30"
+                        class="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/20 border border-red-500/40 text-red-400 transition-all hover:bg-red-500/30"
                     >
-                        <PhoneOff class="h-6 w-6" />
+                        <PhoneOff class="h-5 w-5" />
                     </button>
                 </div>
             {/if}
-        </div>
 
-        {#if recentActivities.length > 0}
-            <div class="w-full max-w-lg px-4 pb-6 space-y-2 relative z-20">
-                {#each recentActivities as activity (activity.tool + activity.status)}
-                    <div class="animate-[floatUp_0.3s_ease-out]">
-                        <ToolActivityComponent {activity} />
-                    </div>
-                {/each}
-            </div>
-        {/if}
+        </div>
     </div>
 {/if}

@@ -10,7 +10,9 @@ function createVoiceStore() {
     let status = $state<VoiceStatus>('idle');
     let isMuted = $state(false);
     let isTalking = $state(false);
+    let isProcessing = $state(false);
     let rmsLevel = $state(0);
+    let outputRms = $state(0);
     let transcript = $state('');
     let activities = $state<ToolActivity[]>([]);
     let errorMessage = $state<string | null>(null);
@@ -49,14 +51,26 @@ function createVoiceStore() {
 
                 if (data.type === 'audio') {
                     const pcm = Buffer.from(data.data.audio, 'base64');
-                    player?.play(bufferToInt16Array(pcm));
+                    const int16 = bufferToInt16Array(pcm);
+
+                    let sum = 0;
+                    for (let i = 0; i < int16.length; i++) {
+                        const s = int16[i] / 0x8000;
+                        sum += s * s;
+                    }
+                    outputRms = Math.sqrt(sum / int16.length);
+
+                    player?.play(int16);
                     isTalking = true;
+                    isProcessing = false;
                 } else if (data.type === 'clear') {
                     player?.clear();
                     isTalking = false;
+                    outputRms = 0;
                 } else if (data.type === 'transcript') {
                     activities = [];
                     transcript = data.data.text || '';
+                    isProcessing = true;
                 } else if (data.type === 'activity') {
                     const existing = activities.findIndex((a) => a.tool === data.data.tool);
                     if (existing >= 0) {
@@ -126,7 +140,9 @@ function createVoiceStore() {
         status = 'idle';
         isMuted = false;
         isTalking = false;
+        isProcessing = false;
         rmsLevel = 0;
+        outputRms = 0;
         transcript = '';
         activities = [];
     }
@@ -157,8 +173,14 @@ function createVoiceStore() {
         get isTalking() {
             return isTalking;
         },
+        get isProcessing() {
+            return isProcessing;
+        },
         get rmsLevel() {
             return rmsLevel;
+        },
+        get outputRms() {
+            return outputRms;
         },
         get transcript() {
             return transcript;

@@ -48,6 +48,7 @@ export class HumeEmotionDetector {
     private muted: boolean;
     private killed: boolean;
     private reconnecting: boolean;
+    private lastReconnectAttempt: number;
 
     constructor() {
         this.client = new HumeClient({ apiKey: process.env.HUME_API_KEY! });
@@ -59,6 +60,7 @@ export class HumeEmotionDetector {
         this.muted = false;
         this.killed = false;
         this.reconnecting = false;
+        this.lastReconnectAttempt = 0;
     }
 
     connect(): void {
@@ -67,6 +69,7 @@ export class HumeEmotionDetector {
                 config: { prosody: {} },
                 onOpen: () => {
                     this.connected = true;
+                    this.reconnecting = false;
                     console.log(chalk.dim('[emotion] Connected to Hume Expression Measurement'));
                 },
                 onError: (err) => {
@@ -76,10 +79,12 @@ export class HumeEmotionDetector {
                         ),
                     );
                     this.connected = false;
+                    this.reconnecting = false;
                 },
                 onClose: () => {
                     console.log(chalk.dim('[emotion] WebSocket closed'));
                     this.connected = false;
+                    this.reconnecting = false;
                 },
             });
 
@@ -92,6 +97,7 @@ export class HumeEmotionDetector {
         } catch (err) {
             console.error(chalk.red(`[emotion] Failed to connect: ${(err as Error).message}`));
             this.connected = false;
+            this.reconnecting = false;
         }
     }
 
@@ -109,6 +115,9 @@ export class HumeEmotionDetector {
         if (this.muted) return;
 
         if (!this.connected && !this.killed && !this.reconnecting) {
+            const now = Date.now();
+            if (now - this.lastReconnectAttempt < 5000) return;
+            this.lastReconnectAttempt = now;
             this.reconnecting = true;
             console.log(chalk.dim('[emotion] Reconnecting...'));
             try {
@@ -116,7 +125,6 @@ export class HumeEmotionDetector {
             } catch {}
             this.socket = null;
             this.connect();
-            this.reconnecting = false;
         }
 
         this.pcmBuffer.push(pcmAudio);

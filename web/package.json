@@ -19,6 +19,7 @@
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
 		"@tailwindcss/typography": "^0.5.19",
 		"@tailwindcss/vite": "^4.1",
+		"@types/three": "^0.183.0",
 		"bits-ui": "^2.15",
 		"clsx": "^2.1.1",
 		"svelte": "^5.48.2",
@@ -34,6 +35,7 @@
 	"dependencies": {
 		"@pompeii-labs/audio": "^0.2.2",
 		"buffer": "^6.0.3",
-		"marked": "^17.0.1"
+		"marked": "^17.0.1",
+		"three": "^0.183.0"
 	}
 }
