@@ -257,9 +257,15 @@ export class VoiceWebSocketManager {
                     }
 
                     emotionDetector?.mute();
-                    await this.agent.chat(messageText, (chunk) =>
-                        flow?.inputText(stripTags(chunk)),
-                    );
+                    try {
+                        await this.agent.chat(messageText, (chunk) =>
+                            flow?.inputText(stripTags(chunk)),
+                        );
+                    } catch (err) {
+                        const msg = (err as Error).message || 'Something went wrong';
+                        console.error(chalk.red(`[twilio] Chat error: ${msg}`));
+                        flow?.inputText('Sorry, I ran into an error. Try again in a moment.');
+                    }
                     flow?.inputText(null as unknown as string);
                     this.agent.setActivityCallback(undefined);
                 },
@@ -294,6 +300,13 @@ export class VoiceWebSocketManager {
                             .chat('<start />', (chunk) => flow?.inputText(stripTags(chunk)))
                             .then(() => {
                                 flow?.inputText(null as unknown as string);
+                            })
+                            .catch((err) => {
+                                console.error(
+                                    chalk.red(
+                                        `[twilio] Start chat error: ${(err as Error).message}`,
+                                    ),
+                                );
                             });
                         break;
                     case 'media':
@@ -405,9 +418,18 @@ export class VoiceWebSocketManager {
                     }
 
                     emotionDetector?.mute();
-                    await this.agent.chat(messageText, (chunk) =>
-                        flow?.inputText(stripTags(chunk)),
-                    );
+                    try {
+                        await this.agent.chat(messageText, (chunk) =>
+                            flow?.inputText(stripTags(chunk)),
+                        );
+                    } catch (err) {
+                        const msg = (err as Error).message || 'Something went wrong';
+                        console.error(chalk.red(`[web-voice] Chat error: ${msg}`));
+                        flow?.inputText('Sorry, I ran into an error. Try again in a moment.');
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ type: 'error', data: { message: msg } }));
+                        }
+                    }
                     flow?.inputText(null as unknown as string);
                     this.agent.setActivityCallback(undefined);
                 },
@@ -440,6 +462,21 @@ export class VoiceWebSocketManager {
                                 .chat('<start />', (chunk) => flow?.inputText(stripTags(chunk)))
                                 .then(() => {
                                     flow?.inputText(null as unknown as string);
+                                })
+                                .catch((err) => {
+                                    console.error(
+                                        chalk.red(
+                                            `[web-voice] Start chat error: ${(err as Error).message}`,
+                                        ),
+                                    );
+                                    if (ws.readyState === WebSocket.OPEN) {
+                                        ws.send(
+                                            JSON.stringify({
+                                                type: 'error',
+                                                data: { message: (err as Error).message },
+                                            }),
+                                        );
+                                    }
                                 });
                         }
                         console.log(chalk.dim(`[web-voice] Flow initialized`));
@@ -452,6 +489,21 @@ export class VoiceWebSocketManager {
                                 .chat('<start />', (chunk) => flow?.inputText(stripTags(chunk)))
                                 .then(() => {
                                     flow?.inputText(null as unknown as string);
+                                })
+                                .catch((err) => {
+                                    console.error(
+                                        chalk.red(
+                                            `[web-voice] Start chat error: ${(err as Error).message}`,
+                                        ),
+                                    );
+                                    if (ws.readyState === WebSocket.OPEN) {
+                                        ws.send(
+                                            JSON.stringify({
+                                                type: 'error',
+                                                data: { message: (err as Error).message },
+                                            }),
+                                        );
+                                    }
                                 });
                             console.log(chalk.dim(`[web-voice] Flow initialized (from audio)`));
                         }

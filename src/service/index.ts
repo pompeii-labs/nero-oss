@@ -264,6 +264,17 @@ export class NeroService {
 
         process.on('SIGTERM', () => shutdown('SIGTERM'));
         process.on('SIGINT', () => shutdown('SIGINT'));
+
+        process.on('uncaughtException', (err) => {
+            this.logger.error(`Uncaught exception: ${err.message}`);
+            console.error(err.stack);
+        });
+
+        process.on('unhandledRejection', (reason) => {
+            const msg = reason instanceof Error ? reason.message : String(reason);
+            this.logger.error(`Unhandled rejection: ${msg}`);
+            if (reason instanceof Error) console.error(reason.stack);
+        });
     }
 
     async start(): Promise<void> {
