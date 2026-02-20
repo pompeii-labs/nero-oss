@@ -127,6 +127,8 @@ export interface NeroConfig {
     };
     pompeii?: {
         webhookSecret?: string;
+        agentKey?: string;
+        url?: string;
     };
 }
 

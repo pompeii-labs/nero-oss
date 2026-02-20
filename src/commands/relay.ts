@@ -4,7 +4,7 @@ import fs from 'fs';
 import { join } from 'path';
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises';
 import { spawn, execSync } from 'child_process';
-import { loadConfig, getNeroHome } from '../config.js';
+import { loadConfig, getNeroHome, type NeroConfig } from '../config.js';
 
 const TUNNEL_STATE_FILE = join(getNeroHome(), '.nero', 'tunnel.json');
 const RELAY_WATCH_STATE_FILE = join(getNeroHome(), '.nero', 'relay-watch.json');
@@ -74,6 +74,31 @@ async function clearWatchState(): Promise<void> {
     } catch {}
 }
 
+async function updatePompeiiWebhookUrl(tunnelUrl: string, config: NeroConfig): Promise<void> {
+    const agentKey = config.pompeii?.agentKey || process.env.POMPEII_AGENT_KEY;
+    const pompeiiUrl = config.pompeii?.url || process.env.POMPEII_URL;
+    if (!agentKey || !pompeiiUrl) return;
+
+    try {
+        const response = await fetch(`${pompeiiUrl}/v1/bot`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Agent-Key': agentKey,
+            },
+            body: JSON.stringify({ webhook_url: `${tunnelUrl}/webhook/pompeii` }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        console.log(chalk.green('Updated Pompeii agent webhook URL.'));
+    } catch (error) {
+        console.error(chalk.dim(`Pompeii webhook update failed: ${(error as Error).message}`));
+    }
+}
+
 async function registerTunnelUrlWithBackend(tunnelUrl: string): Promise<void> {
     const config = await loadConfig();
     const licenseKey = config.licenseKey || process.env.NERO_LICENSE_KEY;
@@ -100,6 +125,8 @@ async function registerTunnelUrlWithBackend(tunnelUrl: string): Promise<void> {
     } catch (error) {
         console.error(chalk.red(`Auto-register failed: ${(error as Error).message}`));
     }
+
+    await updatePompeiiWebhookUrl(tunnelUrl, config);
 }
 
 async function runTunnelStart(
