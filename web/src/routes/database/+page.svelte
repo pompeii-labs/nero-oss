@@ -10,7 +10,7 @@
     import { Button } from '$lib/components/ui/button';
     import { toast } from 'svelte-sonner';
 
-    let serverInfo: ServerInfo | null = $state(null);
+    let serverInfo = $state<ServerInfo | null>(null);
     let loading = $state(true);
 
     onMount(async () => {

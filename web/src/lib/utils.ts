@@ -9,6 +9,8 @@ export type WithoutChildrenOrChild<T> = T extends infer U ? Omit<U, 'children' |
 
 export type WithoutChildren<T> = WithoutChildrenOrChild<T>;
 
+export type WithoutChild<T> = T extends infer U ? Omit<U, 'child'> : never;
+
 export type WithElementRef<T, E extends HTMLElement = HTMLElement> = T & {
     ref?: E | null;
 };

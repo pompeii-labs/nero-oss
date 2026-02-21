@@ -1,6 +1,7 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { voice } from '$lib/stores/voice.svelte';
+    import { graph } from '$lib/stores/graph.svelte';
     import { cn } from '$lib/utils';
     import NeroSphere from '$lib/components/nero-sphere.svelte';
     import { getServerInfo, type ServerInfo } from '$lib/actions/health';
@@ -13,15 +14,20 @@
     import Copy from '@lucide/svelte/icons/copy';
     import Key from '@lucide/svelte/icons/key';
 
-    let serverInfo: ServerInfo | null = $state(null);
+    let serverInfo = $state<ServerInfo | null>(null);
     let loading = $state(true);
 
     onMount(async () => {
+        graph.startPolling();
         const response = await getServerInfo();
         if (response.success) {
             serverInfo = response.data;
         }
         loading = false;
+    });
+
+    onDestroy(() => {
+        graph.stopPolling();
     });
 
     function handleToggleConnection() {
@@ -38,6 +44,20 @@
     }
 
     const isVoiceEnabled = $derived(serverInfo?.features.voice ?? false);
+
+    let seenActivityTools = new Set<string>();
+
+    $effect(() => {
+        const acts = voice.activities;
+        for (const a of acts) {
+            const key = `${a.tool}-${a.id}`;
+            if (a.status === 'running' && !seenActivityTools.has(key)) {
+                seenActivityTools.add(key);
+                graph.fireToolName(a.tool);
+            }
+        }
+        if (acts.length === 0) seenActivityTools = new Set();
+    });
 </script>
 
 {#if loading}
@@ -185,7 +205,7 @@
         </div>
 
         <div class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-            <div class="pointer-events-auto">
+            <div class="pointer-events-auto w-[300px] h-[300px]">
                 <NeroSphere
                     status={voice.status}
                     rmsLevel={voice.rmsLevel}
@@ -194,6 +214,9 @@
                     isMuted={voice.isMuted}
                     outputRms={voice.outputRms}
                     onclick={handleToggleConnection}
+                    graphData={graph.graphData}
+                    activatedNodeIds={graph.activatedNodeIds}
+                    toolFires={graph.toolFires}
                 />
             </div>
         </div>

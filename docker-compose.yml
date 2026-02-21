@@ -25,7 +25,7 @@ services:
     restart: unless-stopped
 
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     ports:
       - "5432:5432"
     environment:
@@ -44,3 +44,5 @@ services:
 volumes:
   nero-data:
   postgres-data:
+    external: true
+    name: opennero_postgres-data

@@ -1,3 +1,5 @@
+// @ts-nocheck -- AudioWorklet global scope, not standard TS context
+
 class RMSProcessor extends AudioWorkletProcessor {
     process(inputs: Float32Array[][]): boolean {
         const input = inputs[0];

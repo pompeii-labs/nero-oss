@@ -10,3 +10,5 @@ export { Note, type NoteData } from './note.js';
 export { BackgroundLog, type BackgroundLogData } from './background-log.js';
 export { AutonomyProject, type AutonomyProjectData } from './autonomy-project.js';
 export { AutonomyJournal, type AutonomyJournalData } from './autonomy-journal.js';
+export { GraphNode, type GraphNodeData } from './graph-node.js';
+export { GraphEdge, type GraphEdgeData } from './graph-edge.js';

@@ -1,6 +1,8 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import * as THREE from 'three';
+    import type { GraphData } from '$lib/actions/graph';
+    import type { ToolFire } from '$lib/stores/graph.svelte';
 
     interface Props {
         status: 'idle' | 'connecting' | 'connected' | 'error';
@@ -10,9 +12,12 @@
         isMuted: boolean;
         outputRms: number;
         onclick: () => void;
+        graphData?: GraphData | null;
+        activatedNodeIds?: number[];
+        toolFires?: ToolFire[];
     }
 
-    let { status, rmsLevel, isTalking, isProcessing, isMuted, outputRms, onclick }: Props = $props();
+    let { status, rmsLevel, isTalking, isProcessing, isMuted, outputRms, onclick, graphData, activatedNodeIds, toolFires }: Props = $props();
 
     let container: HTMLDivElement;
     let animationId: number;
@@ -25,16 +30,27 @@
     let instancedMesh: THREE.InstancedMesh;
     let linesMesh: THREE.LineSegments;
 
-    const NODE_COUNT = 80;
+    const STATIC_NODE_COUNT = 80;
+    const MIN_NODE_COUNT = 40;
+    const MAX_NODE_COUNT = 500;
     const BASE_COLOR = new THREE.Color(0x4d94ff);
     const FIRING_COLOR = new THREE.Color(0x33ccff);
+    const CORE_COLOR = new THREE.Color(0x6699ff);
     const ERROR_COLOR = new THREE.Color(0xff4444);
+    const TOOL_FIRE_COLOR = new THREE.Color(0xffcc44);
+    const NEW_EDGE_COLOR = new THREE.Color(0xfff0c0);
+    const EDGE_ANIM_DURATION = 1500;
+    const TOOL_GLOW_DURATION = 2000;
 
     interface NodeData {
         position: THREE.Vector3;
         neighbors: number[];
         waveIntensity: number;
         displayIntensity: number;
+        graphNodeId: number | null;
+        isGhost: boolean;
+        baseSize: number;
+        isCore: boolean;
     }
 
     interface Wave {
@@ -46,12 +62,21 @@
 
     const MAX_WAVES = 20;
 
+    let nodeCount = STATIC_NODE_COUNT;
     let nodes: NodeData[] = [];
     let edges: [number, number][] = [];
     let displacedPositions: THREE.Vector3[] = [];
     let depthFades: Float32Array;
     let waves: Wave[] = [];
     let lastWaveTime = 0;
+    let graphNodeIdToIndex: Map<number, number> = new Map();
+    let toolLabelToIndex: Map<string, number> = new Map();
+    let prevActivatedSet = new Set<number>();
+    let processedToolSeqs = new Set<number>();
+    let toolGlowTimes: Map<number, number> = new Map();
+    let prevGraphEdgeIds = new Set<string>();
+    let newEdgeBirthTimes: Map<number, number> = new Map();
+    let initialized = false;
 
     const tempMatrix = new THREE.Matrix4();
     const tempColor = new THREE.Color();
@@ -75,27 +100,143 @@
         return points;
     }
 
-    function buildNodes(positions: THREE.Vector3[]): NodeData[] {
+    function buildStaticNodes(positions: THREE.Vector3[]): NodeData[] {
         const result: NodeData[] = positions.map((p) => ({
             position: p.clone(),
             neighbors: [],
             waveIntensity: 0,
             displayIntensity: 0,
+            graphNodeId: null,
+            isGhost: false,
+            baseSize: 0.02,
+            isCore: false,
         }));
-        for (let i = 0; i < result.length; i++) {
-            const distances: { idx: number; dist: number }[] = [];
-            for (let j = 0; j < result.length; j++) {
-                if (i === j) continue;
-                distances.push({ idx: j, dist: result[i].position.distanceTo(result[j].position) });
-            }
-            distances.sort((a, b) => a.dist - b.dist);
-            result[i].neighbors = distances.slice(0, 4).map((d) => d.idx);
-        }
+        computeNeighbors(result);
         return result;
     }
 
+    function buildGraphNodes(data: GraphData): { nodes: NodeData[]; edges: [number, number][] } {
+        const realCount = Math.min(data.nodes.length, MAX_NODE_COUNT);
+        const totalCount = Math.max(realCount, MIN_NODE_COUNT);
+        const positions = fibonacciSphere(totalCount);
+
+        const result: NodeData[] = [];
+        const idMap = new Map<number, number>();
+
+        for (let i = 0; i < realCount; i++) {
+            const gn = data.nodes[i];
+            idMap.set(gn.id, i);
+            result.push({
+                position: positions[i].clone(),
+                neighbors: [],
+                waveIntensity: 0,
+                displayIntensity: 0,
+                graphNodeId: gn.id,
+                isGhost: false,
+                baseSize: 0.015 + gn.strength * 0.01,
+                isCore: gn.category === 'core',
+            });
+        }
+
+        for (let i = realCount; i < totalCount; i++) {
+            result.push({
+                position: positions[i].clone(),
+                neighbors: [],
+                waveIntensity: 0,
+                displayIntensity: 0,
+                graphNodeId: null,
+                isGhost: true,
+                baseSize: 0.012,
+                isCore: false,
+            });
+        }
+
+        computeNeighbors(result);
+
+        const graphEdges: [number, number][] = [];
+        const edgeSet = new Set<string>();
+
+        for (const e of data.edges) {
+            const si = idMap.get(e.source);
+            const ti = idMap.get(e.target);
+            if (si !== undefined && ti !== undefined) {
+                const key = `${Math.min(si, ti)}-${Math.max(si, ti)}`;
+                if (!edgeSet.has(key)) {
+                    edgeSet.add(key);
+                    graphEdges.push([si, ti]);
+                }
+            }
+        }
+
+        for (let i = 0; i < result.length; i++) {
+            if (!result[i].isGhost) continue;
+            for (const j of result[i].neighbors) {
+                const key = `${Math.min(i, j)}-${Math.max(i, j)}`;
+                if (!edgeSet.has(key)) {
+                    edgeSet.add(key);
+                    graphEdges.push([i, j]);
+                }
+            }
+        }
+
+        return { nodes: result, edges: graphEdges };
+    }
+
+    function computeNeighbors(nodeList: NodeData[]) {
+        const n = nodeList.length;
+        const K = 4;
+        const cellSize = Math.max(0.3, 4 / Math.sqrt(n));
+        const grid = new Map<string, number[]>();
+
+        for (let i = 0; i < n; i++) {
+            const p = nodeList[i].position;
+            const cx = Math.floor(p.x / cellSize);
+            const cy = Math.floor(p.y / cellSize);
+            const cz = Math.floor(p.z / cellSize);
+            const key = `${cx},${cy},${cz}`;
+            let bucket = grid.get(key);
+            if (!bucket) {
+                bucket = [];
+                grid.set(key, bucket);
+            }
+            bucket.push(i);
+        }
+
+        for (let i = 0; i < n; i++) {
+            const p = nodeList[i].position;
+            const cx = Math.floor(p.x / cellSize);
+            const cy = Math.floor(p.y / cellSize);
+            const cz = Math.floor(p.z / cellSize);
+
+            const candidates: { idx: number; dist: number }[] = [];
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dz = -1; dz <= 1; dz++) {
+                        const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
+                        if (!bucket) continue;
+                        for (const j of bucket) {
+                            if (j === i) continue;
+                            candidates.push({ idx: j, dist: p.distanceTo(nodeList[j].position) });
+                        }
+                    }
+                }
+            }
+
+            if (candidates.length < K) {
+                for (let j = 0; j < n; j++) {
+                    if (j === i) continue;
+                    if (candidates.some((c) => c.idx === j)) continue;
+                    candidates.push({ idx: j, dist: p.distanceTo(nodeList[j].position) });
+                }
+            }
+
+            candidates.sort((a, b) => a.dist - b.dist);
+            nodeList[i].neighbors = candidates.slice(0, K).map((d) => d.idx);
+        }
+    }
+
     function bfsDistances(source: number): number[] {
-        const dist = new Array(NODE_COUNT).fill(-1);
+        const dist = new Array(nodeCount).fill(-1);
         dist[source] = 0;
         const queue = [source];
         let head = 0;
@@ -114,7 +255,8 @@
         return dist;
     }
 
-    function spawnWave(strength = 1, speed = 4) {
+    function spawnWave(strength = 1, speed = 4, sourceNode?: number) {
+        const origin = sourceNode ?? Math.floor(Math.random() * nodeCount);
         if (waves.length >= MAX_WAVES) {
             let oldestIdx = 0;
             let oldestTime = waves[0].startTime;
@@ -128,7 +270,7 @@
                 startTime: performance.now(),
                 speed,
                 strength,
-                distances: bfsDistances(Math.floor(Math.random() * NODE_COUNT)),
+                distances: bfsDistances(origin),
             };
             return;
         }
@@ -136,8 +278,203 @@
             startTime: performance.now(),
             speed,
             strength,
-            distances: bfsDistances(Math.floor(Math.random() * NODE_COUNT)),
+            distances: bfsDistances(origin),
         });
+    }
+
+    function buildScene() {
+        let useGraph = graphData && graphData.nodes.length > 0;
+        let built: { nodes: NodeData[]; edges: [number, number][] };
+
+        if (useGraph) {
+            built = buildGraphNodes(graphData!);
+            graphNodeIdToIndex = new Map();
+            toolLabelToIndex = new Map();
+            for (let i = 0; i < built.nodes.length; i++) {
+                const gid = built.nodes[i].graphNodeId;
+                if (gid !== null) {
+                    graphNodeIdToIndex.set(gid, i);
+                    const gNode = graphData!.nodes.find((n) => n.id === gid);
+                    if (gNode && gNode.type === 'tool') {
+                        toolLabelToIndex.set(gNode.label.toLowerCase(), i);
+                    }
+                }
+            }
+        } else {
+            const positions = fibonacciSphere(STATIC_NODE_COUNT);
+            built = {
+                nodes: buildStaticNodes(positions),
+                edges: [],
+            };
+            graphNodeIdToIndex = new Map();
+            toolLabelToIndex = new Map();
+        }
+
+        nodes = built.nodes;
+        nodeCount = nodes.length;
+        displacedPositions = nodes.map((n) => n.position.clone());
+        depthFades = new Float32Array(nodeCount);
+
+        if (instancedMesh) {
+            sphereGroup.remove(instancedMesh);
+            instancedMesh.geometry.dispose();
+            (instancedMesh.material as THREE.Material).dispose();
+        }
+        if (linesMesh) {
+            sphereGroup.remove(linesMesh);
+            linesMesh.geometry.dispose();
+            (linesMesh.material as THREE.Material).dispose();
+        }
+
+        const nodeGeo = new THREE.SphereGeometry(1, 6, 6);
+        const nodeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        instancedMesh = new THREE.InstancedMesh(nodeGeo, nodeMat, nodeCount);
+        instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+        const colors = new Float32Array(nodeCount * 3);
+        instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
+        instancedMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+
+        for (let i = 0; i < nodeCount; i++) {
+            const s = nodes[i].baseSize;
+            tempMatrix.makeScale(s, s, s);
+            posMat.makeTranslation(nodes[i].position.x, nodes[i].position.y, nodes[i].position.z);
+            tempMatrix.premultiply(posMat);
+            instancedMesh.setMatrixAt(i, tempMatrix);
+            instancedMesh.setColorAt(i, BASE_COLOR);
+        }
+        instancedMesh.instanceMatrix.needsUpdate = true;
+        if (instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
+        sphereGroup.add(instancedMesh);
+
+        if (useGraph) {
+            edges = built.edges;
+        } else {
+            const edgeSet = new Set<string>();
+            edges = [];
+            for (let i = 0; i < nodes.length; i++) {
+                for (const j of nodes[i].neighbors) {
+                    const key = `${Math.min(i, j)}-${Math.max(i, j)}`;
+                    if (edgeSet.has(key)) continue;
+                    edgeSet.add(key);
+                    edges.push([i, j]);
+                }
+            }
+        }
+
+        const now = performance.now();
+        newEdgeBirthTimes = new Map();
+        if (useGraph) {
+            const currentEdgeIds = new Set<string>();
+            for (let e = 0; e < edges.length; e++) {
+                const nodeI = nodes[edges[e][0]];
+                const nodeJ = nodes[edges[e][1]];
+                if (nodeI.graphNodeId !== null && nodeJ.graphNodeId !== null) {
+                    const key = `${Math.min(nodeI.graphNodeId, nodeJ.graphNodeId)}-${Math.max(nodeI.graphNodeId, nodeJ.graphNodeId)}`;
+                    currentEdgeIds.add(key);
+                    if (prevGraphEdgeIds.size > 0 && !prevGraphEdgeIds.has(key)) {
+                        newEdgeBirthTimes.set(e, now);
+                    }
+                }
+            }
+            prevGraphEdgeIds = currentEdgeIds;
+        }
+
+        const linePositions: number[] = [];
+        const lineColors: number[] = [];
+
+        for (let e = 0; e < edges.length; e++) {
+            const [i, j] = edges[e];
+            const isNew = newEdgeBirthTimes.has(e);
+            linePositions.push(
+                nodes[i].position.x, nodes[i].position.y, nodes[i].position.z,
+                isNew ? nodes[i].position.x : nodes[j].position.x,
+                isNew ? nodes[i].position.y : nodes[j].position.y,
+                isNew ? nodes[i].position.z : nodes[j].position.z,
+            );
+            lineColors.push(
+                BASE_COLOR.r, BASE_COLOR.g, BASE_COLOR.b,
+                BASE_COLOR.r, BASE_COLOR.g, BASE_COLOR.b,
+            );
+        }
+
+        const lineGeo = new THREE.BufferGeometry();
+        lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions.length > 0 ? linePositions : [0, 0, 0, 0, 0, 0], 3));
+        (lineGeo.getAttribute('position') as THREE.BufferAttribute).setUsage(THREE.DynamicDrawUsage);
+        lineGeo.setAttribute('color', new THREE.Float32BufferAttribute(lineColors.length > 0 ? lineColors : [0, 0, 0, 0, 0, 0], 3));
+        const lineMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.35 });
+        linesMesh = new THREE.LineSegments(lineGeo, lineMat);
+        sphereGroup.add(linesMesh);
+
+        if (newEdgeBirthTimes.size > 0) {
+            for (const edgeIdx of newEdgeBirthTimes.keys()) {
+                const ni = edges[edgeIdx][0];
+                const nj = edges[edgeIdx][1];
+                spawnWave(1.2, 4, ni);
+                spawnWave(1.2, 4, nj);
+            }
+        } else {
+            waves = [];
+            lastWaveTime = now;
+            spawnWave(0.4, 2.5);
+        }
+    }
+
+    let lastGraphJson = '';
+
+    function checkGraphUpdate() {
+        const json = graphData ? JSON.stringify({ n: graphData.nodes.length, e: graphData.edges.length }) : '';
+        if (json !== lastGraphJson) {
+            lastGraphJson = json;
+            buildScene();
+        }
+    }
+
+    function checkActivatedNodes() {
+        if (!activatedNodeIds || activatedNodeIds.length === 0) {
+            prevActivatedSet = new Set();
+            return;
+        }
+        const currentSet = new Set(activatedNodeIds);
+        for (const id of currentSet) {
+            if (!prevActivatedSet.has(id)) {
+                const idx = graphNodeIdToIndex.get(id);
+                if (idx !== undefined) {
+                    spawnWave(1.5, 5, idx);
+                }
+            }
+        }
+        prevActivatedSet = currentSet;
+    }
+
+    function hashToolName(name: string): number {
+        let h = 0;
+        for (let i = 0; i < name.length; i++) {
+            h = ((h << 5) - h) + name.charCodeAt(i);
+            h |= 0;
+        }
+        return Math.abs(h);
+    }
+
+    function checkToolFires() {
+        if (!toolFires || toolFires.length === 0) {
+            processedToolSeqs = new Set();
+            return;
+        }
+        const now = performance.now();
+        for (const fire of toolFires) {
+            if (!processedToolSeqs.has(fire.seq)) {
+                processedToolSeqs.add(fire.seq);
+                const idx = toolLabelToIndex.get(fire.name.toLowerCase())
+                    ?? (hashToolName(fire.name) % nodeCount);
+                spawnWave(1.5, 5, idx);
+                toolGlowTimes.set(idx, now);
+            }
+        }
+        const activeSeqs = new Set(toolFires.map((f) => f.seq));
+        for (const seq of processedToolSeqs) {
+            if (!activeSeqs.has(seq)) processedToolSeqs.delete(seq);
+        }
     }
 
     function initScene() {
@@ -152,59 +489,6 @@
 
         sphereGroup = new THREE.Group();
         scene.add(sphereGroup);
-
-        const positions = fibonacciSphere(NODE_COUNT);
-        nodes = buildNodes(positions);
-        displacedPositions = nodes.map((n) => n.position.clone());
-        depthFades = new Float32Array(NODE_COUNT);
-
-        const nodeGeo = new THREE.SphereGeometry(0.02, 6, 6);
-        const nodeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        instancedMesh = new THREE.InstancedMesh(nodeGeo, nodeMat, NODE_COUNT);
-        instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-
-        const colors = new Float32Array(NODE_COUNT * 3);
-        instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
-        instancedMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
-
-        for (let i = 0; i < NODE_COUNT; i++) {
-            tempMatrix.makeTranslation(nodes[i].position.x, nodes[i].position.y, nodes[i].position.z);
-            instancedMesh.setMatrixAt(i, tempMatrix);
-            instancedMesh.setColorAt(i, BASE_COLOR);
-        }
-        instancedMesh.instanceMatrix.needsUpdate = true;
-        if (instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
-        sphereGroup.add(instancedMesh);
-
-        const edgeSet = new Set<string>();
-        const linePositions: number[] = [];
-        const lineColors: number[] = [];
-        edges = [];
-
-        for (let i = 0; i < nodes.length; i++) {
-            for (const j of nodes[i].neighbors) {
-                const key = `${Math.min(i, j)}-${Math.max(i, j)}`;
-                if (edgeSet.has(key)) continue;
-                edgeSet.add(key);
-                edges.push([i, j]);
-                linePositions.push(
-                    nodes[i].position.x, nodes[i].position.y, nodes[i].position.z,
-                    nodes[j].position.x, nodes[j].position.y, nodes[j].position.z,
-                );
-                lineColors.push(
-                    BASE_COLOR.r, BASE_COLOR.g, BASE_COLOR.b,
-                    BASE_COLOR.r, BASE_COLOR.g, BASE_COLOR.b,
-                );
-            }
-        }
-
-        const lineGeo = new THREE.BufferGeometry();
-        lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
-        (lineGeo.getAttribute('position') as THREE.BufferAttribute).setUsage(THREE.DynamicDrawUsage);
-        lineGeo.setAttribute('color', new THREE.Float32BufferAttribute(lineColors, 3));
-        const lineMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.35 });
-        linesMesh = new THREE.LineSegments(lineGeo, lineMat);
-        sphereGroup.add(linesMesh);
 
         const glowGeo = new THREE.SphereGeometry(0.35, 24, 24);
         const glowMat = new THREE.MeshBasicMaterial({
@@ -221,8 +505,8 @@
         pointLight = new THREE.PointLight(0x4d94ff, 0.5, 5);
         sphereGroup.add(pointLight);
 
-        lastWaveTime = performance.now();
-        spawnWave(0.4, 2.5);
+        buildScene();
+        initialized = true;
 
         handleResize();
     }
@@ -259,6 +543,12 @@
 
     function animate(time: number) {
         animationId = requestAnimationFrame(animate);
+
+        if (initialized) {
+            checkGraphUpdate();
+            checkActivatedNodes();
+            checkToolFires();
+        }
 
         smoothedOutputRms = lerp(smoothedOutputRms, outputRms, LERP_FAST);
         smoothedRms = lerp(smoothedRms, rmsLevel, LERP_FAST);
@@ -388,14 +678,27 @@
         for (let i = 0; i < nodes.length; i++) {
             const node = nodes[i];
             const fire = node.displayIntensity;
+            const ghostDim = node.isGhost ? 0.3 : 1;
 
-            const displacement = 1 + fire * 0.07;
+            const glowStart = toolGlowTimes.get(i);
+            let toolGlow = 0;
+            if (glowStart !== undefined) {
+                const elapsed = time - glowStart;
+                if (elapsed >= TOOL_GLOW_DURATION) {
+                    toolGlowTimes.delete(i);
+                } else {
+                    toolGlow = 1 - (elapsed / TOOL_GLOW_DURATION);
+                    toolGlow = toolGlow * toolGlow;
+                }
+            }
+
+            const displacement = 1 + fire * 0.07 + toolGlow * 0.12;
             const px = node.position.x * displacement;
             const py = node.position.y * displacement;
             const pz = node.position.z * displacement;
             displacedPositions[i].set(px, py, pz);
 
-            const scale = 1 + fire * 0.6;
+            const scale = node.baseSize * (1 + fire * 0.6 + toolGlow * 1.5);
             tempMatrix.makeScale(scale, scale, scale);
             posMat.makeTranslation(px, py, pz);
             tempMatrix.premultiply(posMat);
@@ -405,8 +708,16 @@
             const df = 1 - ((tempVec.project(camera).z + 1) / 2) * 0.7;
             depthFades[i] = df;
 
-            tempColor.lerpColors(currentColor, FIRING_COLOR, Math.min(fire, 1));
-            tempColor.multiplyScalar(df * brightDim);
+            if (toolGlow > 0) {
+                const nodeColor = node.isCore ? CORE_COLOR : currentColor;
+                tempColor.lerpColors(nodeColor, FIRING_COLOR, Math.min(fire, 1));
+                tempColor.lerp(TOOL_FIRE_COLOR, toolGlow);
+                tempColor.multiplyScalar(df * (brightDim + toolGlow * 1.5) * ghostDim);
+            } else {
+                const nodeColor = node.isCore ? CORE_COLOR : currentColor;
+                tempColor.lerpColors(nodeColor, FIRING_COLOR, Math.min(fire, 1));
+                tempColor.multiplyScalar(df * brightDim * ghostDim);
+            }
             instancedMesh.setColorAt(i, tempColor);
         }
 
@@ -419,13 +730,39 @@
             const nj = edge[1];
             const pi = displacedPositions[ni];
             const pj = displacedPositions[nj];
+            const birthTime = newEdgeBirthTimes.get(e);
 
             linePosAttr.setXYZ(e * 2, pi.x, pi.y, pi.z);
-            linePosAttr.setXYZ(e * 2 + 1, pj.x, pj.y, pj.z);
+
+            if (birthTime !== undefined) {
+                const elapsed = time - birthTime;
+                if (elapsed >= EDGE_ANIM_DURATION) {
+                    newEdgeBirthTimes.delete(e);
+                    linePosAttr.setXYZ(e * 2 + 1, pj.x, pj.y, pj.z);
+                } else {
+                    const raw = elapsed / EDGE_ANIM_DURATION;
+                    const t = raw * raw * (3 - 2 * raw);
+                    linePosAttr.setXYZ(
+                        e * 2 + 1,
+                        pi.x + (pj.x - pi.x) * t,
+                        pi.y + (pj.y - pi.y) * t,
+                        pi.z + (pj.z - pi.z) * t,
+                    );
+                    const colorT = raw * raw;
+                    tempColor.lerpColors(NEW_EDGE_COLOR, currentColor, colorT);
+                    const brightness = (1.5 - colorT * 0.5) * brightDim;
+                    lineColorAttr.setXYZ(e * 2, tempColor.r * brightness, tempColor.g * brightness, tempColor.b * brightness);
+                    lineColorAttr.setXYZ(e * 2 + 1, tempColor.r * brightness * t, tempColor.g * brightness * t, tempColor.b * brightness * t);
+                    continue;
+                }
+            } else {
+                linePosAttr.setXYZ(e * 2 + 1, pj.x, pj.y, pj.z);
+            }
 
             const edgeFire = (nodes[ni].displayIntensity + nodes[nj].displayIntensity) * 0.5;
-            const fadei = depthFades[ni] * brightDim;
-            const fadej = depthFades[nj] * brightDim;
+            const ghostDim = (nodes[ni].isGhost && nodes[nj].isGhost) ? 0.2 : (nodes[ni].isGhost || nodes[nj].isGhost) ? 0.4 : 1;
+            const fadei = depthFades[ni] * brightDim * ghostDim;
+            const fadej = depthFades[nj] * brightDim * ghostDim;
 
             tempColor.lerpColors(currentColor, FIRING_COLOR, Math.min(edgeFire, 1));
             lineColorAttr.setXYZ(e * 2, tempColor.r * fadei, tempColor.g * fadei, tempColor.b * fadei);
@@ -485,8 +822,12 @@
 <style>
     .sphere-container {
         position: relative;
-        width: 300px;
-        height: 300px;
+        width: 100%;
+        height: 100%;
+        min-width: 80px;
+        min-height: 80px;
+        max-width: 300px;
+        max-height: 300px;
         display: flex;
         align-items: center;
         justify-content: center;

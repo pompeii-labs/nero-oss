@@ -1,3 +1,5 @@
+// @ts-nocheck -- AudioWorklet global scope, not standard TS context
+
 interface WriteMessage {
     event: 'write';
     buffer: Int16Array;

@@ -7,8 +7,10 @@ struct VoiceView: View {
     @EnvironmentObject var voiceManager: VoiceManager
     @EnvironmentObject var toastManager: ToastManager
     @EnvironmentObject var tabRouter: TabRouter
+    @EnvironmentObject var graphManager: GraphManager
 
     @State private var showActivitySheet = false
+    @State private var lastActivityCount = 0
 
     private var sphereStatus: SphereStatus {
         switch voiceManager.status {
@@ -82,6 +84,17 @@ struct VoiceView: View {
             }
         }
         .animation(.spring(response: 0.3), value: voiceManager.status)
+        .onAppear { graphManager.startPolling() }
+        .onDisappear { graphManager.stopPolling() }
+        .onChange(of: voiceManager.activities) { _, newActivities in
+            let running = newActivities.filter { $0.status == .running }
+            if running.count > lastActivityCount {
+                for activity in running.suffix(running.count - lastActivityCount) {
+                    graphManager.fireToolName(activity.tool)
+                }
+            }
+            lastActivityCount = running.count
+        }
     }
 
     private var disconnectedState: some View {
@@ -93,7 +106,9 @@ struct VoiceView: View {
                 isTalking: false,
                 isProcessing: false,
                 isMuted: false,
-                onTap: {}
+                onTap: {},
+                graphData: graphManager.graphData,
+                toolFires: graphManager.toolFires
             )
             .frame(width: 260, height: 260)
             .floatUp(delay: 0.1)
@@ -136,7 +151,9 @@ struct VoiceView: View {
                 isTalking: voiceManager.status == .speaking,
                 isProcessing: voiceManager.isProcessing,
                 isMuted: voiceManager.isMuted,
-                onTap: { handleOrbTap() }
+                onTap: { handleOrbTap() },
+                graphData: graphManager.graphData,
+                toolFires: graphManager.toolFires
             )
             .frame(width: 280, height: 280)
 
@@ -407,5 +424,6 @@ struct OrbButtonStyle: ButtonStyle {
         .environmentObject(VoiceManager.shared)
         .environmentObject(ToastManager.shared)
         .environmentObject(TabRouter())
+        .environmentObject(GraphManager.shared)
         .preferredColorScheme(.dark)
 }

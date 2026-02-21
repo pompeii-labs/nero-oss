@@ -1,7 +1,8 @@
 <script lang="ts">
     import { goto } from '$app/navigation';
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { streamChat, clearHistory, abortChat, type ToolActivity, type AttachmentUpload } from '$lib/actions/chat';
+    import { graph } from '$lib/stores/graph.svelte';
     import { getHistory, type FileRef } from '$lib/actions/health';
     import { executeCommand, isSlashCommand, checkAndToggleSkill, refreshLoadedSkills, type CommandContext, type CommandWidget } from '$lib/commands';
     import ChatMessage from '$lib/components/chat/chat-message.svelte';
@@ -54,6 +55,7 @@
 
     onMount(async () => {
         refreshLoadedSkills();
+        graph.startPolling();
 
         const historyResponse = await getHistory();
         if (historyResponse.success) {
@@ -69,6 +71,10 @@
             }));
             scrollToBottom();
         }
+    });
+
+    onDestroy(() => {
+        graph.stopPolling();
     });
 
     function scrollToBottom() {
@@ -287,6 +293,8 @@
                     if (isAtBottom) scrollToBottom();
                 },
                 onActivity: (activity) => {
+                    graph.fireToolName(activity.tool);
+
                     if (streamingContent.trim()) {
                         timeline = [...timeline, {
                             type: 'message',
@@ -388,6 +396,7 @@
                     streamingContent = '';
                     loading = false;
                     abortController = null;
+                    graph.refresh();
                     scrollToBottom();
                 },
                 onError: (error) => {

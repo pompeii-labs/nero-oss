@@ -4,6 +4,7 @@ import {
     ThinkingRun,
     Note,
     BackgroundLog,
+    GraphNode,
     type ThinkingRunData,
     type NoteData,
 } from '../models/index.js';
@@ -112,6 +113,10 @@ export class ProactivityManager {
 
             await this.cleanupOldThoughts();
             await BackgroundLog.deleteOlderThan(RETENTION_DAYS);
+
+            try {
+                await GraphNode.decayAll();
+            } catch {}
         } catch (error) {
             console.error(chalk.dim(`[proactivity] Error: ${(error as Error).message}`));
         } finally {

@@ -87,6 +87,62 @@ function createTTS(config: NeroConfig): MagmaFlowTextToSpeech {
     return primary;
 }
 
+const SUPPRESS_CONTENT_TAGS = new Set(['caller_emotion']);
+
+class StreamTagStripper {
+    private pending = '';
+    private suppressUntilClose = '';
+
+    process(chunk: string): string {
+        const input = this.pending + chunk;
+        this.pending = '';
+        let output = '';
+
+        let i = 0;
+        while (i < input.length) {
+            if (this.suppressUntilClose) {
+                const closeTag = `</${this.suppressUntilClose}>`;
+                const closeIdx = input.indexOf(closeTag, i);
+                if (closeIdx === -1) {
+                    break;
+                }
+                i = closeIdx + closeTag.length;
+                this.suppressUntilClose = '';
+                continue;
+            }
+
+            if (input[i] === '<') {
+                const closeAngle = input.indexOf('>', i);
+                if (closeAngle === -1) {
+                    if (input.length - i > 50) {
+                        output += input[i];
+                        i++;
+                    } else {
+                        this.pending = input.slice(i);
+                        break;
+                    }
+                    continue;
+                }
+
+                const tagContent = input.slice(i + 1, closeAngle);
+                const tagName = tagContent.replace(/^\//, '').split(/[\s/>]/)[0];
+
+                if (!tagContent.startsWith('/') && SUPPRESS_CONTENT_TAGS.has(tagName)) {
+                    this.suppressUntilClose = tagName;
+                }
+
+                i = closeAngle + 1;
+                continue;
+            }
+
+            output += input[i];
+            i++;
+        }
+
+        return output;
+    }
+}
+
 function stripTags(text: string): string {
     return text.replace(/<[^>]*>/g, '');
 }
@@ -194,6 +250,7 @@ export class VoiceWebSocketManager {
         let streamSid: string | undefined;
         let flow: MagmaFlow | undefined;
         let emotionDetector: HumeEmotionDetector | undefined;
+        const tagStripper = new StreamTagStripper();
 
         console.log(chalk.dim(`[twilio] Connection established: ${connectionId}`));
 
@@ -258,9 +315,10 @@ export class VoiceWebSocketManager {
 
                     emotionDetector?.mute();
                     try {
-                        await this.agent.chat(messageText, (chunk) =>
-                            flow?.inputText(stripTags(chunk)),
-                        );
+                        await this.agent.chat(messageText, (chunk) => {
+                            const cleaned = tagStripper.process(chunk);
+                            if (cleaned) flow?.inputText(cleaned);
+                        });
                     } catch (err) {
                         const msg = (err as Error).message || 'Something went wrong';
                         console.error(chalk.red(`[twilio] Chat error: ${msg}`));
@@ -297,7 +355,10 @@ export class VoiceWebSocketManager {
 
                         this.agent.setMedium('voice');
                         this.agent
-                            .chat('<start />', (chunk) => flow?.inputText(stripTags(chunk)))
+                            .chat('<start />', (chunk) => {
+                                const cleaned = tagStripper.process(chunk);
+                                if (cleaned) flow?.inputText(cleaned);
+                            })
                             .then(() => {
                                 flow?.inputText(null as unknown as string);
                             })
@@ -349,6 +410,7 @@ export class VoiceWebSocketManager {
         const connectionId = crypto.randomUUID();
         let flow: MagmaFlow | undefined;
         let emotionDetector: HumeEmotionDetector | undefined;
+        const tagStripper = new StreamTagStripper();
 
         console.log(chalk.dim(`[web-voice] Connection established: ${connectionId}`));
 
@@ -419,9 +481,10 @@ export class VoiceWebSocketManager {
 
                     emotionDetector?.mute();
                     try {
-                        await this.agent.chat(messageText, (chunk) =>
-                            flow?.inputText(stripTags(chunk)),
-                        );
+                        await this.agent.chat(messageText, (chunk) => {
+                            const cleaned = tagStripper.process(chunk);
+                            if (cleaned) flow?.inputText(cleaned);
+                        });
                     } catch (err) {
                         const msg = (err as Error).message || 'Something went wrong';
                         console.error(chalk.red(`[web-voice] Chat error: ${msg}`));
@@ -459,7 +522,10 @@ export class VoiceWebSocketManager {
                             setupFlow();
                             this.agent.setMedium('voice');
                             this.agent
-                                .chat('<start />', (chunk) => flow?.inputText(stripTags(chunk)))
+                                .chat('<start />', (chunk) => {
+                                    const cleaned = tagStripper.process(chunk);
+                                    if (cleaned) flow?.inputText(cleaned);
+                                })
                                 .then(() => {
                                     flow?.inputText(null as unknown as string);
                                 })
@@ -486,7 +552,10 @@ export class VoiceWebSocketManager {
                             setupFlow();
                             this.agent.setMedium('voice');
                             this.agent
-                                .chat('<start />', (chunk) => flow?.inputText(stripTags(chunk)))
+                                .chat('<start />', (chunk) => {
+                                    const cleaned = tagStripper.process(chunk);
+                                    if (cleaned) flow?.inputText(cleaned);
+                                })
                                 .then(() => {
                                     flow?.inputText(null as unknown as string);
                                 })

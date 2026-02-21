@@ -325,6 +325,28 @@ class APIManager: ObservableObject {
         }
     }
 
+    func getGraph() async throws -> GraphData {
+        let request = buildRequest(endpoint: "/api/graph")
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.httpError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+
+        return try JSONDecoder().decode(GraphData.self, from: data)
+    }
+
+    func deleteGraphNode(id: Int) async throws {
+        let request = buildRequest(endpoint: "/api/graph/nodes/\(id)", method: "DELETE")
+        let (_, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.httpError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+    }
+
     func reload() async throws -> Int {
         let request = buildRequest(endpoint: "/api/reload", method: "POST")
         let (data, response) = try await URLSession.shared.data(for: request)

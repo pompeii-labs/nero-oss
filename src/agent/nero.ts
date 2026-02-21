@@ -32,9 +32,17 @@ import {
     Note,
     BackgroundLog,
     type BackgroundLogData,
+    GraphNode,
     AutonomyProject,
     AutonomyJournal,
 } from '../models/index.js';
+import {
+    activate,
+    ingestConversation,
+    embed,
+    trackToolUse,
+    type ActivatedNode,
+} from '../graph/index.js';
 import { describeRecurrence, parseRecurrence } from '../actions/recurrence.js';
 import { generateDiff } from '../util/diff.js';
 import { hostToContainer, containerToHost } from '../util/paths.js';
@@ -119,6 +127,7 @@ export class Nero extends MagmaAgent {
     private onPermissionRequest?: PermissionCallback;
     private onActivity?: ActivityCallback;
     private memoriesCache: Array<{ body: string; created_at: string }> = [];
+    private graphCache: ActivatedNode[] = [];
     private actionsCache: Array<{ request: string; timestamp: string }> = [];
     private loadedMessages: LoadedMessage[] = [];
     private hasSummary: boolean = false;
@@ -210,9 +219,12 @@ export class Nero extends MagmaAgent {
         } else {
             await this.loadRecentMessages(this.config.settings.historyLimit);
         }
+        await this.migrateExistingMemories();
         await this.refreshMemoriesCache();
         await this.refreshActionsCache();
-        if (this.memoriesCache.length > 0) {
+        if (this.graphCache.length > 0) {
+            console.log(chalk.dim(`[setup] Loaded ${this.graphCache.length} graph nodes`));
+        } else if (this.memoriesCache.length > 0) {
             console.log(chalk.dim(`[setup] Loaded ${this.memoriesCache.length} memories`));
         }
     }
@@ -634,6 +646,12 @@ Be thorough - this summary will be the primary context for future conversations.
     private async refreshMemoriesCache(): Promise<void> {
         if (!isDbConnected()) return;
         try {
+            const hasGraphNodes = await GraphNode.count();
+            if (hasGraphNodes > 0) {
+                await this.refreshGraphCache();
+                return;
+            }
+
             const coreMemories = await Memory.getCore();
             const recentMemories = await Memory.getRecentNonCore(15);
 
@@ -646,6 +664,148 @@ Be thorough - this summary will be the primary context for future conversations.
             }));
         } catch (error) {
             console.error(chalk.dim(`[db] Failed to load memories`));
+        }
+    }
+
+    private async refreshGraphCache(query?: string): Promise<void> {
+        if (!isDbConnected()) return;
+        try {
+            const contextQuery = query || this.getRecentConversationContext();
+            if (!contextQuery) {
+                const coreNodes = await GraphNode.getCore();
+                this.graphCache = coreNodes.map((n) => ({
+                    id: n.id,
+                    type: n.type,
+                    label: n.label,
+                    body: n.body,
+                    category: n.category,
+                    strength: n.strength,
+                    score: 1.0,
+                    connections: [],
+                }));
+            } else {
+                this.graphCache = await activate(contextQuery);
+            }
+
+            this.memoriesCache = this.graphCache.map((n) => ({
+                body: n.body || n.label,
+                created_at: '',
+            }));
+        } catch (error) {
+            console.error(
+                chalk.dim(`[graph] Failed to refresh graph cache: ${(error as Error).message}`),
+            );
+        }
+    }
+
+    private getRecentConversationContext(): string {
+        const messages = this.getMessages(5);
+        if (messages.length === 0) return '';
+        return messages
+            .map((m) => m.content)
+            .join(' ')
+            .slice(0, 500);
+    }
+
+    private async ingestToGraph(userMessage: string, response: string): Promise<void> {
+        if (!isDbConnected()) return;
+
+        try {
+            const messages = [
+                { role: 'user', content: userMessage },
+                { role: 'assistant', content: response },
+            ];
+
+            await ingestConversation(messages);
+
+            await this.refreshGraphCache();
+        } catch (error) {
+            console.error(chalk.dim(`[graph] Ingestion failed: ${(error as Error).message}`));
+        }
+    }
+
+    private async trackToolUsage(toolName: string): Promise<void> {
+        if (!isDbConnected()) return;
+
+        try {
+            let toolNode: InstanceType<typeof GraphNode> | null = null;
+
+            const labelMatch = await GraphNode.findByLabel(toolName, 'tool');
+            if (labelMatch) {
+                toolNode = labelMatch;
+                await GraphNode.touch(toolNode.id);
+            } else {
+                const server = toolName.includes(':') ? toolName.split(':')[0] : null;
+                const body = server ? `MCP tool from ${server} server` : `Tool: ${toolName}`;
+                const toolEmbedding = await embed(toolName);
+                toolNode = await GraphNode.createWithEmbedding({
+                    type: 'tool',
+                    label: toolName,
+                    body,
+                    embedding: toolEmbedding,
+                    strength: 1.0,
+                    category: null,
+                    metadata: {},
+                    memory_id: null,
+                });
+            }
+
+            const recentNodes = this.graphCache
+                .filter((n) => n.type !== 'tool' && n.score > 0.3)
+                .slice(0, 3);
+
+            for (const node of recentNodes) {
+                const { GraphEdge } = await import('../models/graph-edge.js');
+                await GraphEdge.upsert(toolNode.id, node.id, 'mentioned_with');
+            }
+        } catch (error) {
+            console.error(chalk.dim(`[graph] Tool tracking failed: ${(error as Error).message}`));
+        }
+    }
+
+    async migrateExistingMemories(): Promise<void> {
+        if (!isDbConnected()) return;
+
+        try {
+            const { rows: unmigrated } = await db.query(
+                `SELECT m.* FROM memories m
+                 LEFT JOIN graph_nodes gn ON gn.memory_id = m.id
+                 WHERE gn.id IS NULL`,
+            );
+
+            if (unmigrated.length === 0) return;
+
+            console.log(
+                chalk.dim(`[graph] Migrating ${unmigrated.length} existing memories to graph...`),
+            );
+
+            for (const memory of unmigrated) {
+                try {
+                    const embedding = await embed(memory.body);
+                    await GraphNode.createWithEmbedding({
+                        type: 'memory',
+                        label: memory.body.slice(0, 80),
+                        body: memory.body,
+                        embedding,
+                        strength: memory.category === 'core' ? 2.0 : 1.0,
+                        category: memory.category,
+                        metadata: {},
+                        memory_id: memory.id,
+                    });
+                } catch (err) {
+                    console.error(
+                        chalk.dim(
+                            `[graph] Failed to migrate memory ${memory.id}: ${(err as Error).message}`,
+                        ),
+                    );
+                }
+            }
+
+            console.log(chalk.dim(`[graph] Migration complete`));
+        } catch (error) {
+            console.error(
+                chalk.dim(`[graph] Memory migration failed: ${(error as Error).message}`),
+            );
         }
     }
 
@@ -734,7 +894,14 @@ Be thorough - this summary will be the primary context for future conversations.
             },
         };
 
-        if (memories.length > 0) {
+        if (this.graphCache.length > 0) {
+            context.knowledge = this.graphCache.map((n) => ({
+                type: n.type,
+                label: n.label,
+                content: n.body || n.label,
+                connections: n.connections.length > 0 ? n.connections.join(', ') : undefined,
+            }));
+        } else if (memories.length > 0) {
             context.memories = memories.map((m) => ({
                 content: m.body,
                 date: m.created_at,
@@ -947,6 +1114,8 @@ You are responding inside a Pompeii workspace where users @mention or DM you.
             this.hooksManager
                 .runOnMainFinish(response?.content || '', this.turnToolCount, this.currentCwd)
                 .catch(() => {});
+
+            this.ingestToGraph(cleanMessage || message, response?.content || '').catch(() => {});
 
             return {
                 content: response?.content || '',
@@ -1420,16 +1589,51 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
         return `Action #${actionId} ("${action.request}") ${enabled ? 'enabled' : 'disabled'}.`;
     }
 
-    @tool({ description: 'Search and retrieve memories relevant to the conversation' })
-    async findMemories(_call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const messages = this.getMessages(5);
-        const context = messages.map((m) => m.content).join(' ');
+    @tool({
+        description:
+            'Search and retrieve knowledge from the graph or memories. Use a specific query for targeted results, or omit to search based on recent conversation.',
+    })
+    @toolparam({
+        key: 'query',
+        type: 'string',
+        required: false,
+        description:
+            'Search query (e.g. "Project X", "Sarah preferences"). Uses recent conversation context if omitted.',
+    })
+    async findMemories(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const hasGraphNodes = await GraphNode.count();
+
+        const searchQuery =
+            call.fn_args.query ||
+            this.getMessages(5)
+                .map((m) => m.content)
+                .join(' ')
+                .slice(0, 500);
+
+        if (hasGraphNodes > 0) {
+            try {
+                const results = await activate(searchQuery, { topK: 10 });
+                if (results.length === 0) return 'No relevant knowledge found.';
+
+                await this.refreshGraphCache(searchQuery);
+
+                return results
+                    .map((n) => {
+                        const conns =
+                            n.connections.length > 0 ? ` [${n.connections.join(', ')}]` : '';
+                        return `- [${n.type}] ${n.label}: ${n.body || n.label}${conns}`;
+                    })
+                    .join('\n');
+            } catch {
+                return 'Error searching knowledge graph.';
+            }
+        }
 
         const result = await db.query(
             `SELECT body, created_at FROM memories
              WHERE body ILIKE $1
              ORDER BY created_at DESC LIMIT 10`,
-            [`%${context.slice(0, 100)}%`],
+            [`%${searchQuery.slice(0, 100)}%`],
         );
 
         if (result.rows.length === 0) {
@@ -1479,6 +1683,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
             activity.status = 'complete';
             activity.result = result.length > 100 ? result.slice(0, 100) + '...' : result;
             this.emitActivity(activity);
+            this.trackToolUsage(toolName).catch(() => {});
             return result;
         } catch (error) {
             activity.status = 'error';
@@ -1731,11 +1936,24 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
         return this.memoriesCache;
     }
 
+    getGraphCache(): ActivatedNode[] {
+        return this.graphCache;
+    }
+
     private getCurrentActions(): Array<{ request: string; timestamp: string }> {
         return this.actionsCache;
     }
 
     async getMemories(): Promise<Array<{ body: string; created_at: string }>> {
+        const hasGraphNodes = await GraphNode.count();
+        if (hasGraphNodes > 0) {
+            const nodes = await GraphNode.getAll();
+            return nodes.map((n) => ({
+                body: n.body || n.label,
+                created_at: String(n.created_at),
+            }));
+        }
+
         const coreMemories = await Memory.getCore();
         const recentMemories = await Memory.getRecentNonCore(15);
 
@@ -1898,6 +2116,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
 
         if (activity.status === 'running') {
             this.turnToolCount++;
+            trackToolUse(activity.tool).catch(() => {});
         }
 
         if (activity.status === 'complete' || activity.status === 'error') {
@@ -2440,6 +2659,28 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
 
         try {
             await Memory.create({ body: content, related_to: [], category: core ? 'core' : null });
+
+            try {
+                const label = content.slice(0, 80);
+                const embedding = await embed(content);
+                await GraphNode.createWithEmbedding({
+                    type: 'memory',
+                    label,
+                    body: content,
+                    embedding,
+                    strength: core ? 2.0 : 1.0,
+                    category: core ? 'core' : null,
+                    metadata: {},
+                    memory_id: null,
+                });
+            } catch (graphErr) {
+                console.error(
+                    chalk.dim(
+                        `[graph] Failed to create graph node: ${(graphErr as Error).message}`,
+                    ),
+                );
+            }
+
             await this.refreshMemoriesCache();
             activity.status = 'complete';
             activity.result = core ? 'Core memory stored' : 'Memory stored';

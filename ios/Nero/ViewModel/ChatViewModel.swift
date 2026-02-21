@@ -56,6 +56,9 @@ class ChatViewModel: ObservableObject {
 
                     case .activity(let activity):
                         updateActivity(activity)
+                        if activity.status == .running {
+                            GraphManager.shared.fireToolName(activity.tool)
+                        }
 
                     case .permission(let id, let activity):
                         pendingPermission = PermissionRequest(id: id, activity: activity)
@@ -71,6 +74,7 @@ class ChatViewModel: ObservableObject {
                             let assistantMessage = Message(role: .assistant, content: content)
                             timeline.append(.message(assistantMessage))
                         }
+                        Task { await GraphManager.shared.refresh() }
 
                     case .error(let errorMsg):
                         if let msgId = streamingMessageId,
