@@ -2,6 +2,20 @@
 
 All notable changes to Nero are documented here.
 
+## 1.30.0 (2026-02-20)
+
+### Features
+
+- Knowledge graph memory: conversations are automatically ingested into a persistent graph of people, projects, concepts, events, preferences, and tools connected by typed edges
+- Embedding-based entity extraction and deduplication via LLM
+- Graph activation spreading: mentioning a topic activates related nodes through edge connections, surfacing relevant context automatically
+- Interactive 3D graph explorer on web (Three.js) and iOS (SceneKit) with orbit controls, tap selection, camera focus animation, and search
+- Node detail panel with type badge, connections list, strength meter, access stats, and delete
+- Graph API routes for fetching full graph and deleting nodes
+- Agent graph tools: `recall` searches the graph by query or recent conversation context
+- Proactive graph activation during voice calls
+- Auto-update Pompeii agent webhook URL on tunnel change
+
 ## 1.29.0 (2026-02-19)
 
 ### Features

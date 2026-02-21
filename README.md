@@ -55,7 +55,7 @@ Nero isn't tied to one interface. Every medium shares the same conversation, mem
 | Interface | What it is |
 |-----------|------------|
 | **Terminal** | Interactive REPL or one-shot commands via `nero -m "..."` |
-| **Web Dashboard** | Chat, memories, logs, settings -- all in a self-hosted UI at `localhost:4848` |
+| **Web Dashboard** | Chat, knowledge graph explorer, logs, settings -- all in a self-hosted UI at `localhost:4848` |
 | **Voice Calls** | Real phone calls with Deepgram STT, ElevenLabs/Hume TTS, and real-time emotion detection |
 | **SMS** | Text it from your phone, get responses back |
 | **iOS App** | Native SwiftUI app with chat, voice mode, and memory management |
@@ -86,6 +86,12 @@ When you step away, Nero watches your environment -- git status, logs, MCP tools
 nero think on
 nero think notify on
 ```
+
+### Knowledge Graph Memory
+
+Nero builds a persistent knowledge graph from every conversation. People, projects, concepts, events, preferences, and tools are extracted as nodes and connected by edges. When you mention something, related memories activate and spread through the graph -- so Nero recalls not just what you said, but the context around it.
+
+The web dashboard and iOS app both render the graph as an interactive 3D sphere you can rotate, zoom, tap into, and search.
 
 ### Emotion Detection
 
@@ -160,6 +166,10 @@ Spawn parallel agents for independent research or build tasks. Each runs in isol
 │  │ Browser  │ │Autonomy │ │Background│ │
 │  │(Playwrt) │ │ Engine  │ │ Thinking │ │
 │  └─────────┘ └─────────┘ └──────────┘ │
+│                                         │
+│  ┌──────────────────────────────────┐  │
+│  │  Knowledge Graph (Embeddings)    │  │
+│  └──────────────────────────────────┘  │
 ├─────────────────────────────────────────┤
 │           PostgreSQL                    │
 └─────────────────────────────────────────┘
@@ -268,7 +278,7 @@ bun test                 # Run tests
 
 ## iOS App
 
-Native SwiftUI companion app with chat, voice mode with the neural sphere, memory management, live log streaming, and MCP server management.
+Native SwiftUI companion app with chat, voice mode with the neural sphere, an interactive 3D knowledge graph explorer, live log streaming, and MCP server management.
 
 <p align="center">
   <img src="assets/ios.jpg" alt="Nero iOS" width="300" />
