@@ -6,4 +6,12 @@ export {
     DEFAULT_IMAGE,
     DEFAULT_BROWSER_IMAGE,
 } from './compose.js';
-export { hasComposeV2, getComposeCommand, generateRunScript, docker, compose } from './commands.js';
+export {
+    hasComposeV2,
+    hasComposeV1,
+    hasCompose,
+    getComposeCommand,
+    generateRunScript,
+    docker,
+    compose,
+} from './commands.js';

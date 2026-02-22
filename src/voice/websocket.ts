@@ -15,7 +15,6 @@ import {
 import { Nero } from '../agent/nero.js';
 import { NeroConfig } from '../config.js';
 import { HumeEmotionDetector } from './emotion.js';
-import { FallbackTTS } from './fallbackTts.js';
 import { Logger } from '../util/logger.js';
 import { verifyWsToken } from '../util/wstoken.js';
 
@@ -33,11 +32,11 @@ interface Connection {
 }
 
 function createSTT(config: NeroConfig): MagmaFlowSpeechToText {
-    if (config.voice.sttModel === 'flux') {
+    if (config.voice.stt.model === 'flux') {
         return new DeepgramFluxSTT({
-            eotThreshold: config.voice.flux.eotThreshold,
-            eagerEotThreshold: config.voice.flux.eagerEotThreshold,
-            eotTimeoutMs: config.voice.flux.eotTimeoutMs,
+            eotThreshold: config.voice.stt.flux.eotThreshold,
+            eagerEotThreshold: config.voice.stt.flux.eagerEotThreshold,
+            eotTimeoutMs: config.voice.stt.flux.eotTimeoutMs,
         });
     }
     return new DeepgramSTT({ model: DeepgramModel.NOVA_3 });
@@ -48,7 +47,7 @@ function createTTSByProvider(
     config: NeroConfig,
 ): MagmaFlowTextToSpeech {
     if (provider === 'hume') {
-        const humeConfig = config.voice.hume;
+        const humeConfig = config.voice.tts.hume;
         return new HumeTTS({
             voice: humeConfig.voice
                 ? { name: humeConfig.voice, provider: humeConfig.voiceProvider }
@@ -58,8 +57,8 @@ function createTTSByProvider(
             version: humeConfig.version,
         });
     }
-    const el = config.voice.elevenlabs;
-    const voiceId = el.voiceId || config.voice.elevenlabsVoiceId || 'cjVigY5qzO86Huf0OWal';
+    const el = config.voice.tts.elevenlabs;
+    const voiceId = el.voiceId || 'cjVigY5qzO86Huf0OWal';
     return new ElevenLabsTTS({
         model: el.model,
         voice: voiceId,
@@ -75,16 +74,7 @@ function createTTSByProvider(
 }
 
 function createTTS(config: NeroConfig): MagmaFlowTextToSpeech {
-    const primary = createTTSByProvider(config.voice.ttsProvider, config);
-    const fallbackProvider = config.voice.ttsFallback;
-    if (fallbackProvider && fallbackProvider !== config.voice.ttsProvider) {
-        const fallback = createTTSByProvider(fallbackProvider, config);
-        console.log(
-            chalk.dim(`[tts] Using ${config.voice.ttsProvider} with ${fallbackProvider} fallback`),
-        );
-        return new FallbackTTS(primary, fallback);
-    }
-    return primary;
+    return createTTSByProvider(config.voice.tts.provider, config);
 }
 
 const SUPPRESS_CONTENT_TAGS = new Set(['caller_emotion']);

@@ -40,10 +40,7 @@ Other AI agents are chatbots with plugins. Nero is one thing -- voice, terminal,
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pompeii-labs/nero-oss/main/install.sh | bash
 
-mkdir -p ~/.nero
-echo "OPENROUTER_API_KEY=your_key" > ~/.nero/.env
-
-nero setup --compose
+nero setup
 ```
 
 That's it. Nero is running at `http://localhost:4848`.
@@ -182,13 +179,15 @@ The relay always runs on port `4848` as the single entry point. The internal ser
 ### Docker (Recommended)
 
 ```bash
-nero setup --compose --integrated    # Full host access (default)
-nero setup --compose --contained     # Sandboxed, no host access
+nero setup --db --integrated    # Full host access (default)
+nero setup --db --contained     # Standalone, no host mounts
 nero status                          # Check current mode
 nero update                          # Pull latest image + restart
 ```
 
-**Integrated mode** gives Nero access to your host filesystem (`~/`), Docker, and network. **Contained mode** sandboxes everything.
+**--db Flag** (requires docker compose) includes a local postgres database for Nero to store information
+
+**Integrated mode** gives Nero access to your host filesystem (`~/`), Docker, and network. **Contained mode** runs standalone with no host mounts.
 
 ### Local Models
 
@@ -248,7 +247,7 @@ nero config               # Show config
 nero config set <k> <v>   # Set config value
 nero models               # List available models
 nero status               # Installation status
-nero setup --compose      # Setup Docker
+nero setup                # Interactive setup
 nero update               # Update to latest
 nero reload               # Reload MCP servers, skills, NERO.md
 nero restart              # Restart service

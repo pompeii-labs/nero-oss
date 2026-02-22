@@ -25,8 +25,8 @@ export function createHealthRouter(agent: Nero) {
             if (!isOpenRouter(config)) {
                 res.json({
                     local: true,
-                    model: config.settings.model,
-                    baseUrl: config.settings.baseUrl,
+                    model: config.llm.model,
+                    baseUrl: config.llm.baseUrl,
                 });
                 return;
             }

@@ -7,6 +7,7 @@ import {
     loadConfig,
     saveConfig,
     updateSettings,
+    updateLlmSettings,
     getAllowedTools,
     removeAllowedTool,
     isOpenRouter,
@@ -46,6 +47,8 @@ export function createWebRouter(agent: Nero, port?: number) {
     const router = Router();
     const logger = new Logger('Web');
     const pendingAuths = new Map<string, PendingAuth>();
+    const supportedSttProviders = new Set(['deepgram']);
+    const supportedSttModels = new Set(['flux', 'nova-3']);
 
     router.get('/memories', async (req: Request, res: Response) => {
         if (!isDbConnected()) {
@@ -199,6 +202,7 @@ export function createWebRouter(agent: Nero, port?: number) {
                 licenseKey: config.licenseKey ? '••••••••' : null,
                 tunnelUrl: config.tunnelUrl,
                 port: config.port,
+                llm: config.llm,
                 voice: config.voice,
                 sms: config.sms,
                 settings: config.settings,
@@ -226,6 +230,181 @@ export function createWebRouter(agent: Nero, port?: number) {
         } catch (error) {
             logger.error(`Failed to update settings: ${(error as Error).message}`);
             res.status(500).json({ error: 'Failed to update settings' });
+        }
+    });
+
+    router.get('/settings/model', async (req: Request, res: Response) => {
+        try {
+            const config = await loadConfig();
+            res.json({
+                model: config.llm.model,
+                baseUrl: config.llm.baseUrl,
+            });
+        } catch (error) {
+            logger.error(`Failed to get model settings: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to get model settings' });
+        }
+    });
+
+    router.put('/settings/model', async (req: Request, res: Response) => {
+        const { model, baseUrl } = req.body as { model?: string; baseUrl?: string };
+
+        if (!model || typeof model !== 'string' || model.trim().length === 0) {
+            res.status(400).json({ error: 'model is required' });
+            return;
+        }
+
+        try {
+            const config = await updateLlmSettings({
+                model: model.trim(),
+                baseUrl: baseUrl?.trim() ? baseUrl.trim() : undefined,
+            });
+            res.json({
+                model: config.llm.model,
+                baseUrl: config.llm.baseUrl,
+            });
+        } catch (error) {
+            logger.error(`Failed to update model settings: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to update model settings' });
+        }
+    });
+
+    router.get('/settings/general', async (req: Request, res: Response) => {
+        try {
+            const config = await loadConfig();
+            res.json({
+                settings: config.settings,
+            });
+        } catch (error) {
+            logger.error(`Failed to get general settings: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to get general settings' });
+        }
+    });
+
+    router.put('/settings/general', async (req: Request, res: Response) => {
+        const { settings } = req.body as { settings?: Partial<NeroConfig['settings']> };
+        if (!settings || typeof settings !== 'object') {
+            res.status(400).json({ error: 'Settings object is required' });
+            return;
+        }
+
+        try {
+            const config = await updateSettings(settings);
+            res.json({
+                settings: config.settings,
+            });
+        } catch (error) {
+            logger.error(`Failed to update general settings: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to update general settings' });
+        }
+    });
+
+    router.get('/settings/voice', async (req: Request, res: Response) => {
+        try {
+            const config = await loadConfig();
+            res.json({
+                voice: config.voice,
+            });
+        } catch (error) {
+            logger.error(`Failed to get voice settings: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to get voice settings' });
+        }
+    });
+
+    router.put('/settings/voice', async (req: Request, res: Response) => {
+        const { voice } = req.body as { voice: Partial<NeroConfig['voice']> };
+
+        if (!voice || typeof voice !== 'object') {
+            res.status(400).json({ error: 'Voice object is required' });
+            return;
+        }
+
+        if (voice.stt?.model && !supportedSttModels.has(voice.stt.model)) {
+            res.status(400).json({ error: 'stt.model must be "flux" or "nova-3"' });
+            return;
+        }
+        if (voice.stt?.provider && !supportedSttProviders.has(voice.stt.provider)) {
+            res.status(400).json({ error: 'stt.provider must currently be "deepgram"' });
+            return;
+        }
+        if (
+            voice.tts?.provider &&
+            voice.tts.provider !== 'elevenlabs' &&
+            voice.tts.provider !== 'hume'
+        ) {
+            res.status(400).json({ error: 'tts.provider must be "elevenlabs" or "hume"' });
+            return;
+        }
+
+        const flux = voice.stt?.flux;
+        if (flux) {
+            if (
+                flux.eotThreshold !== undefined &&
+                (typeof flux.eotThreshold !== 'number' ||
+                    Number.isNaN(flux.eotThreshold) ||
+                    flux.eotThreshold < 0 ||
+                    flux.eotThreshold > 1)
+            ) {
+                res.status(400).json({
+                    error: 'flux.eotThreshold must be a number between 0 and 1',
+                });
+                return;
+            }
+
+            if (
+                flux.eagerEotThreshold !== undefined &&
+                (typeof flux.eagerEotThreshold !== 'number' ||
+                    Number.isNaN(flux.eagerEotThreshold) ||
+                    flux.eagerEotThreshold < 0 ||
+                    flux.eagerEotThreshold > 1)
+            ) {
+                res.status(400).json({
+                    error: 'flux.eagerEotThreshold must be a number between 0 and 1',
+                });
+                return;
+            }
+
+            if (
+                flux.eotTimeoutMs !== undefined &&
+                (!Number.isInteger(flux.eotTimeoutMs) || flux.eotTimeoutMs <= 0)
+            ) {
+                res.status(400).json({ error: 'flux.eotTimeoutMs must be a positive integer' });
+                return;
+            }
+        }
+
+        try {
+            const config = await loadConfig();
+            config.voice = {
+                ...config.voice,
+                ...voice,
+                stt: {
+                    ...config.voice.stt,
+                    ...(voice.stt || {}),
+                    flux: {
+                        ...config.voice.stt.flux,
+                        ...(voice.stt?.flux || {}),
+                    },
+                },
+                tts: {
+                    ...config.voice.tts,
+                    ...(voice.tts || {}),
+                    elevenlabs: {
+                        ...config.voice.tts.elevenlabs,
+                        ...(voice.tts?.elevenlabs || {}),
+                    },
+                    hume: {
+                        ...config.voice.tts.hume,
+                        ...(voice.tts?.hume || {}),
+                    },
+                },
+            };
+            await saveConfig(config);
+            logger.info('Voice settings updated');
+            res.json({ voice: config.voice });
+        } catch (error) {
+            logger.error(`Failed to update voice settings: ${(error as Error).message}`);
+            res.status(500).json({ error: 'Failed to update voice settings' });
         }
     });
 

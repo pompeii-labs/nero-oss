@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { readFile, writeFile } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { spawn } from 'child_process';
 import { Logger } from '../../util/logger.js';
 import { getConfigDir } from '../../config.js';
 
@@ -18,6 +19,81 @@ const ENV_KEYS = [
 
 function getEnvPath(): string {
     return join(getConfigDir(), '.env');
+}
+
+function isIntegratedMode(): boolean {
+    if (process.env.NERO_MODE === 'contained') return false;
+    if (process.env.NERO_MODE === 'integrated') return true;
+    return !!process.env.HOST_HOME;
+}
+
+function canReadEnv(): boolean {
+    if (process.env.NERO_MODE === 'contained') return true;
+    if (process.env.NERO_MODE === 'integrated') return true;
+    return !!process.env.HOST_HOME;
+}
+
+function canManageEnv(): boolean {
+    if (process.env.NERO_MODE === 'contained') return false;
+    if (process.env.NERO_MODE === 'integrated') return true;
+    return !!process.env.HOST_HOME;
+}
+
+function getConfiguredImage(): string {
+    const defaultImage = 'ghcr.io/pompeii-labs/nero-oss:latest';
+    const setupPath = join(getConfigDir(), 'setup.json');
+    if (!existsSync(setupPath)) return defaultImage;
+
+    try {
+        const setup = JSON.parse(readFileSync(setupPath, 'utf-8')) as { image?: string };
+        return setup.image || defaultImage;
+    } catch {
+        return defaultImage;
+    }
+}
+
+function triggerIntegratedRestart(): void {
+    const hostHome = process.env.HOST_HOME?.trim();
+    if (hostHome) {
+        const image = getConfiguredImage();
+        const helperName = `nero-restart-helper-${Date.now()}`;
+
+        const child = spawn(
+            'docker',
+            [
+                'run',
+                '--rm',
+                '-d',
+                '--name',
+                helperName,
+                '-v',
+                '/var/run/docker.sock:/var/run/docker.sock',
+                '-v',
+                `${hostHome}:/host/home`,
+                '-e',
+                `HOST_HOME=${hostHome}`,
+                '-e',
+                `HOME=${hostHome}`,
+                image,
+                'sh',
+                '-lc',
+                'HOME="$HOST_HOME" nero restart',
+            ],
+            {
+                detached: true,
+                stdio: 'ignore',
+            },
+        );
+
+        child.unref();
+        return;
+    }
+
+    const child = spawn('sh', ['-lc', 'nero restart'], {
+        detached: true,
+        stdio: 'ignore',
+    });
+    child.unref();
 }
 
 function parseEnvFile(content: string): Record<string, string> {
@@ -69,6 +145,14 @@ export function createAdminRouter() {
     const router = Router();
 
     router.get('/admin/env', async (req: Request, res: Response) => {
+        if (!canReadEnv()) {
+            res.status(403).json({
+                error: 'Env management from dashboard is disabled in contained mode.',
+                manualCommand: 'Edit ~/.nero/.env on the host and run: nero restart',
+            });
+            return;
+        }
+
         try {
             const envPath = getEnvPath();
             let envVars: Record<string, string> = {};
@@ -76,6 +160,14 @@ export function createAdminRouter() {
             if (existsSync(envPath)) {
                 const content = await readFile(envPath, 'utf-8');
                 envVars = parseEnvFile(content);
+            }
+
+            if (process.env.NERO_MODE === 'contained') {
+                for (const key of ENV_KEYS) {
+                    if (process.env[key]) {
+                        envVars[key] = process.env[key] as string;
+                    }
+                }
             }
 
             const result: Record<string, { value: string; isSet: boolean }> = {};
@@ -95,6 +187,14 @@ export function createAdminRouter() {
     });
 
     router.post('/admin/env', async (req: Request, res: Response) => {
+        if (!canManageEnv()) {
+            res.status(403).json({
+                error: 'Env management from dashboard is disabled in contained mode.',
+                manualCommand: 'Edit ~/.nero/.env on the host and run: nero restart',
+            });
+            return;
+        }
+
         try {
             const { env: newEnv } = req.body as { env: Record<string, string> };
 
@@ -133,13 +233,26 @@ export function createAdminRouter() {
     });
 
     router.post('/admin/restart', async (req: Request, res: Response) => {
-        logger.info('Restart requested from dashboard');
-        res.json({ success: true, message: 'Restarting...' });
+        if (!isIntegratedMode()) {
+            res.status(403).json({
+                error: 'Dashboard restart is disabled in contained mode.',
+                manualCommand: 'Run: nero restart',
+            });
+            return;
+        }
 
-        setTimeout(() => {
-            logger.info('Exiting for restart...');
-            process.exit(0);
-        }, 500);
+        try {
+            triggerIntegratedRestart();
+            logger.info('Restart requested from dashboard (integrated mode)');
+            res.json({ success: true, message: 'Recreating container...' });
+        } catch (error) {
+            const message = (error as Error).message;
+            logger.error(`Failed to trigger restart: ${message}`);
+            res.status(500).json({
+                error: `Failed to trigger restart: ${message}`,
+                manualCommand: 'Run: nero restart',
+            });
+        }
     });
 
     return router;

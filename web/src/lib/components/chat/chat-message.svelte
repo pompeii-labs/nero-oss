@@ -131,7 +131,7 @@
         </div>
     </div>
 {:else}
-    <div class="message-appear flex gap-4 items-end">
+    <div class={cn("flex gap-4 items-end", isStreaming && 'message-appear')}>
         <div class="relative flex h-10 w-10 shrink-0 items-center justify-center group/icon">
             <div class="absolute inset-0 rounded-full bg-gradient-to-br from-muted to-background border border-primary/20"></div>
             <div class="absolute inset-0 rounded-full bg-primary/5 blur-lg opacity-40 group-hover/icon:opacity-70 transition-opacity"></div>

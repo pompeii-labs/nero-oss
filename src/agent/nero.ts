@@ -152,18 +152,18 @@ export class Nero extends MagmaAgent {
     private turnToolCount: number = 0;
 
     constructor(config: NeroConfig) {
-        const baseUrl = config.settings.baseUrl || OPENROUTER_BASE_URL;
+        const baseUrl = config.llm.baseUrl || OPENROUTER_BASE_URL;
         const apiKey = isOpenRouter(config) ? process.env.OPENROUTER_API_KEY! : 'ollama';
         const client = new OpenAI({
             baseURL: baseUrl,
-            apiKey,
+            apiKey: apiKey ?? '',
             timeout: isOpenRouter(config) ? 120_000 : 600_000,
             maxRetries: isOpenRouter(config) ? 2 : 0,
         });
 
         super({
             provider: 'openai',
-            model: config.settings.model,
+            model: config.llm.model,
             client,
             settings: {
                 temperature: 0.7,
@@ -185,7 +185,7 @@ export class Nero extends MagmaAgent {
         if (this.config.settings.sessions?.enabled) {
             this.sessionManager = new SessionManager({
                 openaiClient: this.openaiClient,
-                model: this.config.settings.model,
+                model: this.config.llm.model,
                 settings: this.config.settings.sessions,
                 verbose: this.config.settings.verbose,
             });
@@ -205,7 +205,7 @@ export class Nero extends MagmaAgent {
         }
 
         await this.loadUserInstructions();
-        await this.fetchContextLimit(this.config.settings.model);
+        await this.fetchContextLimit(this.config.llm.model);
         await this.mcpClient.connect();
         await this.loadSkills();
 
@@ -584,7 +584,7 @@ Be thorough - this summary will be the primary context for future conversations.
             .join('\n\n');
 
         const response = await this.openaiClient.chat.completions.create({
-            model: this.config.settings.model,
+            model: this.config.llm.model,
             messages: [
                 { role: 'system', content: summaryPrompt },
                 {
@@ -1979,7 +1979,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
     }
 
     setModel(model: string, baseUrl?: string): void {
-        const resolvedBaseUrl = baseUrl || this.config.settings.baseUrl || OPENROUTER_BASE_URL;
+        const resolvedBaseUrl = baseUrl || this.config.llm.baseUrl || OPENROUTER_BASE_URL;
         const isLocal = resolvedBaseUrl !== OPENROUTER_BASE_URL;
         const apiKey = isLocal ? 'ollama' : process.env.OPENROUTER_API_KEY!;
         const client = new OpenAI({
@@ -1994,8 +1994,8 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
             model,
             client,
         });
-        this.config.settings.model = model;
-        if (baseUrl !== undefined) this.config.settings.baseUrl = baseUrl;
+        this.config.llm.model = model;
+        if (baseUrl !== undefined) this.config.llm.baseUrl = baseUrl;
         this.fetchContextLimit(model);
     }
 
@@ -3483,7 +3483,7 @@ Example blocks: [{"type":"section","text":{"type":"mrkdwn","text":"*Bold* and _i
             subagentTasks.map((st) =>
                 runSubagent({
                     task: st,
-                    model: this.config.settings.model,
+                    model: this.config.llm.model,
                     client: this.openaiClient,
                     cwd,
                     onToolUse: (toolName, args, status, result) => {

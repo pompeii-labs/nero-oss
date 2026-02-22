@@ -3,20 +3,340 @@ import chalk from 'chalk';
 import os from 'os';
 import fs from 'fs';
 import { join } from 'path';
-import { mkdir, writeFile, readFile } from 'fs/promises';
+import { mkdir, writeFile, readFile, copyFile } from 'fs/promises';
 import { execSync } from 'child_process';
+import { createInterface } from 'readline/promises';
+import { emitKeypressEvents } from 'readline';
 import semver from 'semver';
-import { getNeroHome, getConfigPath } from '../config.js';
+import { getNeroHome, getConfigPath, ensureConfigComplete } from '../config.js';
 import { VERSION } from '../util/version.js';
+import { setConfigJsonEnv } from '../util/env-file.js';
 import {
     generateComposeYaml,
     generateRunScript,
     docker,
     compose,
+    hasCompose,
     DEFAULT_IMAGE,
     DEFAULT_BROWSER_IMAGE,
     type DockerConfig,
 } from '../docker/index.js';
+
+interface SetupOptions {
+    name: string;
+    port: string;
+    db: boolean;
+    integrated: boolean;
+    contained: boolean;
+    browser: boolean;
+    image?: string;
+    pull: boolean;
+}
+
+const DEFAULT_NERO_ENV = `# Required for hosted models
+OPENROUTER_API_KEY=
+
+# Optional - Database
+DATABASE_URL=
+
+# Optional - Voice/SMS
+ELEVENLABS_API_KEY=
+NERO_LICENSE_KEY=
+`;
+
+async function ensureSetupPaths(
+    neroDir: string,
+): Promise<{ envPath: string; createdEnv: boolean; copiedFromHomeEnv: boolean }> {
+    const envPath = join(neroDir, '.env');
+    const homeEnvPath = join(getNeroHome(), '.env');
+
+    await mkdir(neroDir, { recursive: true });
+
+    if (fs.existsSync(envPath)) {
+        return { envPath, createdEnv: false, copiedFromHomeEnv: false };
+    }
+
+    if (fs.existsSync(homeEnvPath)) {
+        await copyFile(homeEnvPath, envPath);
+        return { envPath, createdEnv: true, copiedFromHomeEnv: true };
+    }
+
+    await writeFile(envPath, DEFAULT_NERO_ENV, { flag: 'wx' });
+    return { envPath, createdEnv: true, copiedFromHomeEnv: false };
+}
+
+async function syncConfigJsonEnv(envPath: string): Promise<void> {
+    try {
+        const config = await ensureConfigComplete();
+        await setConfigJsonEnv(envPath, config);
+    } catch (error) {
+        const message = (error as Error).message;
+        console.log(chalk.yellow(`Warning: failed to write NERO_CONFIG_JSON: ${message}`));
+    }
+}
+
+interface SelectItem<T> {
+    label: string;
+    value: T;
+}
+
+interface MultiSelectItem<T extends string> {
+    label: string;
+    value: T;
+    selected?: boolean;
+}
+
+async function selectWithKeyboard<T>(
+    question: string,
+    items: SelectItem<T>[],
+    defaultIndex = 0,
+): Promise<T> {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        return items[defaultIndex].value;
+    }
+
+    return await new Promise<T>((resolve, reject) => {
+        let selected = defaultIndex;
+        const lineCount = items.length + 2;
+        const wasRaw = (process.stdin as NodeJS.ReadStream).isRaw;
+        let rendered = false;
+
+        const render = () => {
+            const lines = [
+                chalk.cyan(question),
+                ...items.map(
+                    (item, index) => `${index === selected ? chalk.green('>') : ' '} ${item.label}`,
+                ),
+                chalk.dim('Use up/down arrows, then press Enter'),
+            ];
+
+            if (rendered) {
+                process.stdout.write(`\x1b[${lineCount}A`);
+            }
+
+            for (const line of lines) {
+                process.stdout.write('\x1b[2K');
+                process.stdout.write(`${line}\n`);
+            }
+
+            rendered = true;
+        };
+
+        const cleanup = () => {
+            process.stdin.removeListener('keypress', onKeypress);
+            if (process.stdin.isTTY) {
+                process.stdin.setRawMode(Boolean(wasRaw));
+            }
+            process.stdout.write('\x1b[?25h');
+        };
+
+        const onKeypress = (_: string, key: { name?: string; ctrl?: boolean }) => {
+            if (key.ctrl && key.name === 'c') {
+                cleanup();
+                reject(new Error('Setup cancelled by user'));
+                return;
+            }
+
+            if (key.name === 'up' || key.name === 'k') {
+                selected = selected > 0 ? selected - 1 : items.length - 1;
+                render();
+                return;
+            }
+
+            if (key.name === 'down' || key.name === 'j') {
+                selected = selected < items.length - 1 ? selected + 1 : 0;
+                render();
+                return;
+            }
+
+            if (key.name === 'return' || key.name === 'enter') {
+                const selectedValue = items[selected].value;
+                cleanup();
+                resolve(selectedValue);
+            }
+        };
+
+        emitKeypressEvents(process.stdin);
+        if (process.stdin.isTTY) {
+            process.stdin.setRawMode(true);
+        }
+        process.stdout.write('\x1b[?25l');
+        process.stdin.on('keypress', onKeypress);
+        render();
+    });
+}
+
+async function multiSelectWithKeyboard<T extends string>(
+    question: string,
+    items: MultiSelectItem<T>[],
+): Promise<Set<T>> {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        return new Set(items.filter((item) => item.selected).map((item) => item.value));
+    }
+
+    return await new Promise<Set<T>>((resolve, reject) => {
+        let selectedIndex = 0;
+        const selectedValues = new Set<T>(
+            items.filter((item) => item.selected).map((item) => item.value),
+        );
+        const lineCount = items.length + 2;
+        const wasRaw = (process.stdin as NodeJS.ReadStream).isRaw;
+        let rendered = false;
+
+        const render = () => {
+            const lines = [
+                chalk.cyan(question),
+                ...items.map((item, index) => {
+                    const cursor = index === selectedIndex ? chalk.green('>') : ' ';
+                    const checked = selectedValues.has(item.value)
+                        ? chalk.green('[x]')
+                        : chalk.dim('[ ]');
+                    return `${cursor} ${checked} ${item.label}`;
+                }),
+                chalk.dim('Use up/down, space to toggle, Enter to confirm'),
+            ];
+
+            if (rendered) {
+                process.stdout.write(`\x1b[${lineCount}A`);
+            }
+
+            for (const line of lines) {
+                process.stdout.write('\x1b[2K');
+                process.stdout.write(`${line}\n`);
+            }
+
+            rendered = true;
+        };
+
+        const cleanup = () => {
+            process.stdin.removeListener('keypress', onKeypress);
+            if (process.stdin.isTTY) {
+                process.stdin.setRawMode(Boolean(wasRaw));
+            }
+            process.stdout.write('\x1b[?25h');
+        };
+
+        const onKeypress = (_: string, key: { name?: string; ctrl?: boolean }) => {
+            if (key.ctrl && key.name === 'c') {
+                cleanup();
+                reject(new Error('Setup cancelled by user'));
+                return;
+            }
+
+            if (key.name === 'up' || key.name === 'k') {
+                selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : items.length - 1;
+                render();
+                return;
+            }
+
+            if (key.name === 'down' || key.name === 'j') {
+                selectedIndex = selectedIndex < items.length - 1 ? selectedIndex + 1 : 0;
+                render();
+                return;
+            }
+
+            if (key.name === 'space') {
+                const value = items[selectedIndex].value;
+                if (selectedValues.has(value)) {
+                    selectedValues.delete(value);
+                } else {
+                    selectedValues.add(value);
+                }
+                render();
+                return;
+            }
+
+            if (key.name === 'return' || key.name === 'enter') {
+                cleanup();
+                resolve(selectedValues);
+            }
+        };
+
+        emitKeypressEvents(process.stdin);
+        if (process.stdin.isTTY) {
+            process.stdin.setRawMode(true);
+        }
+        process.stdout.write('\x1b[?25l');
+        process.stdin.on('keypress', onKeypress);
+        render();
+    });
+}
+
+async function promptText(question: string, defaultValue: string): Promise<string> {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    try {
+        const answer = (await rl.question(`${question} (default: ${defaultValue}): `)).trim();
+        return answer || defaultValue;
+    } finally {
+        rl.close();
+    }
+}
+
+async function promptSetupOptions(defaults: SetupOptions): Promise<SetupOptions> {
+    const recommendedTag = chalk.green('(recommended)');
+
+    const promptMode = async (): Promise<'integrated' | 'contained'> =>
+        await selectWithKeyboard(
+            'Choose setup mode',
+            [
+                {
+                    label: `Integrated ${recommendedTag} (full host access: filesystem, docker, network)`,
+                    value: 'integrated',
+                },
+                { label: 'Contained (standalone, no host mounts)', value: 'contained' },
+            ],
+            defaults.contained ? 1 : 0,
+        );
+
+    const promptFeatureSelection = async (): Promise<Set<'db' | 'browser'>> =>
+        await multiSelectWithKeyboard<'db' | 'browser'>('Select additional features', [
+            {
+                label: `Local postgres database ${recommendedTag} (requires docker compose)`,
+                value: 'db',
+                selected: defaults.db,
+            },
+            {
+                label: `Browser automation ${recommendedTag} (larger image with Chromium)`,
+                value: 'browser',
+                selected: defaults.browser,
+            },
+        ]);
+
+    const promptContainerName = async (): Promise<string> => {
+        while (true) {
+            const answer = await promptText('Container name', defaults.name);
+            if (answer.length > 0) {
+                return answer;
+            }
+        }
+    };
+
+    const promptPort = async (): Promise<string> => {
+        while (true) {
+            const value = await promptText('Port to expose', defaults.port);
+            const port = Number(value);
+            if (Number.isInteger(port) && port > 0 && port <= 65535) {
+                return value;
+            }
+        }
+    };
+
+    const mode = await promptMode();
+    const selectedFeatures = await promptFeatureSelection();
+    const name = await promptContainerName();
+    const port = await promptPort();
+
+    return {
+        name,
+        port,
+        db: selectedFeatures.has('db'),
+        integrated: mode === 'integrated',
+        contained: mode === 'contained',
+        browser: selectedFeatures.has('browser'),
+        image: defaults.image,
+        pull: defaults.pull,
+    };
+}
 
 export function registerSetupCommands(program: Command) {
     program
@@ -24,28 +344,57 @@ export function registerSetupCommands(program: Command) {
         .description('Set up Nero Docker configuration')
         .option('-n, --name <name>', 'Container name', 'nero')
         .option('-p, --port <port>', 'Port to expose', '4848')
-        .option('-c, --compose', 'Use Docker Compose (includes Postgres)')
+        .option('--db', 'Include a postgres database (requires docker compose)')
         .option('--integrated', 'Full host access: filesystem, docker, network (default)')
-        .option('--contained', 'Sandboxed mode: no host access')
+        .option('--contained', 'Standalone mode: no host mounts')
         .option('--browser', 'Enable browser automation (larger image with Chromium)')
-        .action(async (options) => {
-            const neroDir = join(getNeroHome(), '.nero');
-            const envPath = join(neroDir, '.env');
-            const setupStatePath = join(neroDir, 'setup.json');
-
-            await mkdir(neroDir, { recursive: true });
-
-            if (!fs.existsSync(envPath)) {
-                console.log(chalk.yellow('No .env file found at ~/.nero/.env'));
-                console.log(chalk.dim('Create one with your environment variables:'));
-                console.log(chalk.dim('  OPENROUTER_API_KEY=...'));
-                console.log(chalk.dim('\nThen run: nero setup'));
-                return;
+        .option('--image <image>', 'Override Docker image')
+        .option('--no-pull', 'Skip pulling images before start')
+        .action(async (options: SetupOptions, command: Command) => {
+            const hasCliFlags = (
+                [
+                    'name',
+                    'port',
+                    'db',
+                    'integrated',
+                    'contained',
+                    'browser',
+                    'image',
+                    'pull',
+                ] as const
+            ).some((optionName) => command.getOptionValueSource(optionName) === 'cli');
+            const useInteractive = !hasCliFlags && process.stdin.isTTY && process.stdout.isTTY;
+            let setupOptions = options;
+            if (useInteractive) {
+                try {
+                    setupOptions = await promptSetupOptions(options);
+                } catch (error) {
+                    const message = (error as Error).message;
+                    if (message === 'Setup cancelled by user') {
+                        console.log(chalk.yellow('\nSetup cancelled.'));
+                        return;
+                    }
+                    throw error;
+                }
             }
 
-            const mode = options.contained ? 'contained' : 'integrated';
+            const neroDir = join(getNeroHome(), '.nero');
+            const setupStatePath = join(neroDir, 'setup.json');
+            const { envPath, createdEnv, copiedFromHomeEnv } = await ensureSetupPaths(neroDir);
+
+            if (createdEnv) {
+                console.log(chalk.green(`Created ${envPath}`));
+                if (!copiedFromHomeEnv) {
+                    console.log(chalk.dim('Fill in values in ~/.nero/.env as needed.'));
+                }
+            }
+
+            const mode = setupOptions.contained ? 'contained' : 'integrated';
             const isIntegrated = mode === 'integrated';
-            const image = options.browser ? DEFAULT_BROWSER_IMAGE : DEFAULT_IMAGE;
+            await syncConfigJsonEnv(envPath);
+            const image =
+                setupOptions.image ||
+                (setupOptions.browser ? DEFAULT_BROWSER_IMAGE : DEFAULT_IMAGE);
 
             console.log(chalk.dim(`Setting up Nero in ${chalk.cyan(mode)} mode...`));
             if (isIntegrated) {
@@ -57,27 +406,39 @@ export function registerSetupCommands(program: Command) {
                 console.log(chalk.dim('  - No docker access'));
                 console.log(chalk.dim('  - Isolated network'));
             }
-            if (options.browser) {
+            if (setupOptions.browser) {
                 console.log(chalk.dim('  - Browser automation (Chromium)'));
             }
             console.log();
 
+            if (setupOptions.db && !hasCompose()) {
+                console.log(
+                    chalk.red('Docker Compose is required when using --db, but it was not found.'),
+                );
+                console.log(
+                    chalk.dim(
+                        'Install Docker Compose (v2 preferred: `docker compose`) and run `nero setup --db` again.',
+                    ),
+                );
+                return;
+            }
+
             const setupState = {
                 mode,
-                compose: !!options.compose,
-                name: options.name,
-                port: options.port,
+                compose: !!setupOptions.db,
+                name: setupOptions.name,
+                port: setupOptions.port,
                 image,
                 createdAt: new Date().toISOString(),
             };
             await writeFile(setupStatePath, JSON.stringify(setupState, null, 2));
 
-            if (options.compose) {
+            if (setupOptions.db) {
                 const composePath = join(neroDir, 'docker-compose.yml');
 
                 const dockerConfig: DockerConfig = {
-                    name: options.name,
-                    port: options.port,
+                    name: setupOptions.name,
+                    port: setupOptions.port,
                     relayPort: '4848',
                     mode,
                     image,
@@ -87,26 +448,32 @@ export function registerSetupCommands(program: Command) {
                 await writeFile(composePath, composeFile);
                 console.log(chalk.green('Created ~/.nero/docker-compose.yml'));
 
-                console.log(chalk.dim('\nPulling images...'));
-                compose.pull(neroDir);
+                if (setupOptions.pull) {
+                    console.log(chalk.dim('\nPulling images...'));
+                    compose.pull(neroDir);
+                } else {
+                    console.log(chalk.dim('\nSkipping image pull (--no-pull)'));
+                }
 
                 console.log(chalk.dim('Starting services...'));
                 compose.up(neroDir);
 
                 console.log(chalk.green(`\nNero is running in ${mode} mode with Postgres!`));
-                console.log(chalk.dim(`\nDashboard: http://localhost:${options.port}`));
+                console.log(
+                    chalk.dim(`\nDashboard: http://localhost:${setupOptions.port}/quickstart`),
+                );
                 console.log(chalk.dim('To update: nero update'));
                 console.log(
                     chalk.dim(
-                        `To switch modes: nero setup --compose --${mode === 'integrated' ? 'contained' : 'integrated'}`,
+                        `To switch modes: nero setup ${options.db ? '--db' : ''} ${options.browser ? '--browser' : ''} --${mode === 'integrated' ? 'contained' : 'integrated'}`,
                     ),
                 );
             } else {
                 const dockerRunPath = join(neroDir, 'docker-run.sh');
 
                 const dockerConfig: DockerConfig = {
-                    name: options.name,
-                    port: options.port,
+                    name: setupOptions.name,
+                    port: setupOptions.port,
                     relayPort: '4848',
                     mode,
                     image,
@@ -118,17 +485,23 @@ export function registerSetupCommands(program: Command) {
 
                 console.log(chalk.green('Created ~/.nero/docker-run.sh'));
 
-                console.log(chalk.dim('\nPulling latest image...'));
-                docker.pull(image);
+                if (setupOptions.pull) {
+                    console.log(chalk.dim('\nPulling latest image...'));
+                    docker.pull(image);
+                } else {
+                    console.log(chalk.dim('\nSkipping image pull (--no-pull)'));
+                }
 
                 console.log(chalk.dim('Stopping any existing container...'));
-                docker.stopAndRemove(options.name);
+                docker.stopAndRemove(setupOptions.name);
 
                 console.log(chalk.dim('Starting Nero...'));
                 execSync(`bash ${dockerRunPath}`, { stdio: 'inherit' });
 
                 console.log(chalk.green(`\nNero is running in ${mode} mode!`));
-                console.log(chalk.dim(`\nDashboard: http://localhost:${options.port}`));
+                console.log(
+                    chalk.dim(`\nDashboard: http://localhost:${setupOptions.port}/quickstart`),
+                );
                 console.log(chalk.dim('To update: nero update'));
                 console.log(
                     chalk.dim(
@@ -305,7 +678,7 @@ export function registerSetupCommands(program: Command) {
 
             console.log(`Install Type: ${chalk.cyan(installType)}`);
             console.log(
-                `Mode: ${chalk.cyan(mode)}${mode === 'integrated' ? chalk.dim(' (full host access)') : mode === 'contained' ? chalk.dim(' (sandboxed)') : ''}`,
+                `Mode: ${chalk.cyan(mode)}${mode === 'integrated' ? chalk.dim(' (full host access)') : mode === 'contained' ? chalk.dim(' (standalone)') : ''}`,
             );
             console.log(`Browser: ${hasBrowser ? chalk.green('enabled') : chalk.dim('disabled')}`);
             console.log(`Container: ${chalk.cyan(containerName)}`);
@@ -379,7 +752,7 @@ export function registerSetupCommands(program: Command) {
                 if (hasBrowser) console.log(chalk.dim('  - Browser automation (Chromium)'));
             } else if (mode === 'contained') {
                 console.log(chalk.dim('Capabilities:'));
-                console.log(chalk.dim('  - Container-only filesystem'));
+                console.log(chalk.dim('  - No host mounts'));
                 console.log(chalk.dim('  - No docker access'));
                 console.log(chalk.dim('  - Isolated network'));
                 if (hasBrowser) console.log(chalk.dim('  - Browser automation (Chromium)'));

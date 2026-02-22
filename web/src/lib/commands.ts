@@ -2,7 +2,12 @@ import { reloadConfig, getHealth, getContext, getUsage, installSlack } from './a
 import { getAllowedTools, revokeAllowedTool } from './actions/settings';
 import { getMemories } from './actions/memories';
 import { getMcpServers } from './actions/mcp';
-import { getSettings, updateSettings, validateModel } from './actions/settings';
+import {
+    getSettings,
+    updateModelSettings,
+    updateSettings,
+    validateModel,
+} from './actions/settings';
 import { compactContext, streamThink, abortChat, type ToolActivity } from './actions/chat';
 import {
     getSkills,
@@ -320,9 +325,9 @@ export const commands: SlashCommand[] = [
             if (!response.success) {
                 return { error: 'Failed to load settings' };
             }
-            const { settings } = response.data;
+            const { settings, llm } = response.data;
             return {
-                message: `Settings:\n\n  Model: ${settings.model}\n  Streaming: ${settings.streaming ? 'on' : 'off'}\n  Verbose: ${settings.verbose ? 'on' : 'off'}`,
+                message: `Settings:\n\n  Model: ${llm.model}\n  Streaming: ${settings.streaming ? 'on' : 'off'}\n  Verbose: ${settings.verbose ? 'on' : 'off'}`,
             };
         },
     },
@@ -340,7 +345,7 @@ export const commands: SlashCommand[] = [
             }
 
             if (args.length === 0) {
-                return { message: `Current model: ${response.data.settings.model}` };
+                return { message: `Current model: ${response.data.llm.model}` };
             }
 
             const newModel = args.join('/');
@@ -356,7 +361,7 @@ export const commands: SlashCommand[] = [
             }
 
             ctx.setLoading('Updating model');
-            const updateResponse = await updateSettings({ model: newModel });
+            const updateResponse = await updateModelSettings(newModel);
             ctx.setLoading(null);
 
             if (!updateResponse.success) {
