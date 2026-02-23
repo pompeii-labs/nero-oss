@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import {
         getSettings,
-        updateSettings,
+        updateGeneralSettings,
         getAllowedTools,
         revokeAllowedTool,
         type NeroConfig
@@ -29,13 +29,15 @@
     import Sliders from '@lucide/svelte/icons/sliders';
     import Zap from '@lucide/svelte/icons/zap';
     import Activity from '@lucide/svelte/icons/activity';
-    import Cpu from '@lucide/svelte/icons/cpu';
     import Copy from '@lucide/svelte/icons/copy';
     import RefreshCw from '@lucide/svelte/icons/refresh-cw';
     import Terminal from '@lucide/svelte/icons/terminal';
     import ArrowUp from '@lucide/svelte/icons/arrow-up';
     import Save from '@lucide/svelte/icons/save';
     import { cn } from '$lib/utils';
+    import ModelConfig from '$components/settings/model-config.svelte';
+    import VoiceSttConfig from '$components/settings/voice-stt-config.svelte';
+    import VoiceTtsConfig from '$components/settings/voice-tts-config.svelte';
 
     const envVarsMeta = [
         { name: 'OPENROUTER_API_KEY', required: true, description: 'OpenRouter API key for LLM access' },
@@ -45,29 +47,63 @@
         { name: 'DEEPGRAM_API_KEY', required: false, description: 'Deepgram API key for STT' },
         { name: 'TAVILY_API_KEY', required: false, description: 'Tavily API key for web search' },
     ];
+    const manualEnvPath = '~/.nero/.env';
+    const manualRestartCommand = 'nero restart';
+    type SettingsTabId = 'system' | 'environment' | 'model' | 'general' | 'tools';
+    const settingsTabs: Array<{ id: SettingsTabId; label: string }> = [
+        { id: 'system', label: 'System' },
+        { id: 'environment', label: 'Environment' },
+        { id: 'model', label: 'Model' },
+        { id: 'general', label: 'General' },
+        { id: 'tools', label: 'Tools' },
+    ];
 
     async function copyToClipboard(text: string) {
         await navigator.clipboard.writeText(text);
         toast.success('Copied to clipboard');
     }
 
+    async function waitForServiceAndReload(): Promise<boolean> {
+        // Give the service a moment to terminate before polling.
+        await new Promise(resolve => setTimeout(resolve, 2500));
+
+        const timeoutMs = 120000;
+        const intervalMs = 1500;
+        const start = Date.now();
+
+        while (Date.now() - start < timeoutMs) {
+            try {
+                const response = await fetch('/api', { cache: 'no-store' });
+                if (response.ok) {
+                    window.location.reload();
+                    return true;
+                }
+            } catch {
+                // Service is still restarting.
+            }
+
+            await new Promise(resolve => setTimeout(resolve, intervalMs));
+        }
+
+        return false;
+    }
+
     let config: NeroConfig | null = $state(null);
-    let serverInfo: ServerInfo | null = $state(null);
+    let serverInfo = $state<ServerInfo | null>(null);
     let updateInfo: UpdateInfo | null = $state(null);
     let envInfo: EnvInfo | null = $state(null);
     let allowedTools: string[] = $state([]);
     let loading = $state(true);
 
     let historyLimit = $state(20);
-    let modelValue = $state('');
-    let baseUrlValue = $state('');
     let savingSettings = $state(false);
-    let savingModel = $state(false);
 
     let envValues: Record<string, string> = $state({});
     let savingEnv = $state(false);
     let restarting = $state(false);
     let envDirty = $state(false);
+    let activeTab = $state<SettingsTabId>('system');
+    let isContainedMode = $derived(serverInfo?.mode === 'contained');
 
     onMount(async () => {
         await loadData();
@@ -87,8 +123,6 @@
         if (configRes.success) {
             config = configRes.data;
             historyLimit = config.settings.historyLimit;
-            modelValue = config.settings.model;
-            baseUrlValue = config.settings.baseUrl || '';
         }
 
         if (serverRes.success) {
@@ -115,30 +149,13 @@
 
     async function handleSaveSettings() {
         savingSettings = true;
-        const response = await updateSettings({ historyLimit });
+        const response = await updateGeneralSettings({ historyLimit });
         if (response.success) {
             toast.success('Settings saved');
         } else {
             toast.error('Failed to save settings');
         }
         savingSettings = false;
-    }
-
-    async function handleSaveModel() {
-        savingModel = true;
-        const updates: Record<string, unknown> = { model: modelValue };
-        if (baseUrlValue.trim()) {
-            updates.baseUrl = baseUrlValue.trim();
-        } else {
-            updates.baseUrl = undefined;
-        }
-        const response = await updateSettings(updates as any);
-        if (response.success) {
-            toast.success('Model settings saved. Restart to apply.');
-        } else {
-            toast.error('Failed to save model settings');
-        }
-        savingModel = false;
     }
 
     async function handleRevokeTool(tool: string) {
@@ -157,6 +174,11 @@
     }
 
     async function handleSaveEnv() {
+        if (isContainedMode) {
+            toast.info(`Contained mode: edit ${manualEnvPath} and run ${manualRestartCommand}`);
+            return;
+        }
+
         savingEnv = true;
         const toSave: Record<string, string> = {};
         for (const [key, value] of Object.entries(envValues)) {
@@ -176,13 +198,20 @@
     }
 
     async function handleRestart() {
+        if (isContainedMode) {
+            toast.info(`Contained mode: run ${manualRestartCommand}`);
+            return;
+        }
+
         restarting = true;
         const response = await restartService();
         if (response.success) {
-            toast.success('Restarting Nero...');
-            setTimeout(() => {
-                window.location.reload();
-            }, 2000);
+            toast.success('Restarting Nero... waiting for service to come back.');
+            const reloaded = await waitForServiceAndReload();
+            if (!reloaded) {
+                toast.error('Service is taking longer than expected. Refresh manually in a moment.');
+                restarting = false;
+            }
         } else {
             toast.error('Failed to restart');
             restarting = false;
@@ -211,6 +240,26 @@
                     <p class="mt-4 text-sm text-muted-foreground">Loading settings...</p>
                 </div>
             {:else}
+                <div class="rounded-xl border border-border/50 bg-card/60 p-2 opacity-0 animate-[floatUp_0.3s_ease-out_forwards]">
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                        {#each settingsTabs as tab}
+                            <Button
+                                variant="ghost"
+                                class={cn(
+                                    'h-9 justify-center font-medium',
+                                    activeTab === tab.id
+                                        ? 'bg-primary/15 text-primary border border-primary/30'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                )}
+                                onclick={() => (activeTab = tab.id)}
+                            >
+                                {tab.label}
+                            </Button>
+                        {/each}
+                    </div>
+                </div>
+
+                {#if activeTab === 'system'}
                 {#if updateInfo?.updateAvailable}
                     <div
                         class="rounded-xl border border-primary/50 bg-gradient-to-br from-primary/10 to-primary/5 overflow-hidden opacity-0 animate-[floatUp_0.4s_ease-out_forwards]"
@@ -303,7 +352,9 @@
                         {/if}
                     </div>
                 </div>
+                {/if}
 
+                {#if activeTab === 'environment'}
                 <div
                     class="rounded-xl border border-border/50 bg-gradient-to-br from-card/80 to-card/40 overflow-hidden opacity-0 animate-[floatUp_0.4s_ease-out_forwards]"
                     style="animation-delay: 50ms"
@@ -317,7 +368,9 @@
                                 <div>
                                     <h2 class="font-medium text-foreground">Environment Variables</h2>
                                     <p class="text-xs text-muted-foreground">
-                                        {#if envInfo?.path}
+                                        {#if isContainedMode}
+                                            Contained mode requires manual env file edits
+                                        {:else if envInfo?.path}
                                             Stored in <code class="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">{envInfo.path}</code>
                                         {:else}
                                             API keys and configuration
@@ -325,63 +378,91 @@
                                     </p>
                                 </div>
                             </div>
-                            <Button onclick={handleSaveEnv} disabled={savingEnv || !envDirty} class="gap-2">
-                                {#if savingEnv}
-                                    <Loader2 class="h-4 w-4 animate-spin" />
-                                {:else}
-                                    <Save class="h-4 w-4" />
-                                {/if}
-                                Save
-                            </Button>
+                            {#if !isContainedMode}
+                                <Button onclick={handleSaveEnv} disabled={savingEnv || !envDirty} class="gap-2">
+                                    {#if savingEnv}
+                                        <Loader2 class="h-4 w-4 animate-spin" />
+                                    {:else}
+                                        <Save class="h-4 w-4" />
+                                    {/if}
+                                    Save
+                                </Button>
+                            {/if}
                         </div>
                     </div>
                     <div class="p-4 space-y-3">
-                        {#each envVarsMeta as env, i}
-                            <div
-                                class="rounded-lg bg-muted/30 border border-border/30 p-3 opacity-0 animate-[floatUp_0.3s_ease-out_forwards]"
-                                style="animation-delay: {i * 30}ms"
-                            >
-                                <div class="flex items-center gap-2 mb-2">
-                                    <code class="font-mono text-sm text-foreground">{env.name}</code>
-                                    {#if env.required}
-                                        <span class="rounded-full bg-red-500/20 border border-red-500/40 dark:border-red-500/30 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400 uppercase tracking-wide">
-                                            Required
-                                        </span>
-                                    {:else}
-                                        <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                                            Optional
-                                        </span>
-                                    {/if}
-                                    {#if envInfo?.env[env.name]?.isSet}
-                                        <span class="rounded-full bg-green-500/20 border border-green-500/40 dark:border-green-500/30 px-1.5 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400 uppercase tracking-wide ml-auto flex items-center gap-1">
-                                            <Check class="h-3 w-3" />
-                                            Set
-                                        </span>
-                                    {:else}
-                                        <span class="rounded-full bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide ml-auto">
-                                            Not Set
-                                        </span>
-                                    {/if}
-                                </div>
-                                <Input
-                                    type="password"
-                                    placeholder={envInfo?.env[env.name]?.isSet ? '••••••••  (leave blank to keep current)' : env.description}
-                                    value={envValues[env.name] || ''}
-                                    oninput={(e) => handleEnvChange(env.name, e.currentTarget.value)}
-                                    class="font-mono text-sm bg-background/50 border-border/50 focus:border-primary/50"
-                                />
-                            </div>
-                        {/each}
-                        {#if envDirty}
-                            <div class="rounded-lg bg-amber-500/10 border border-amber-500/30 dark:border-amber-500/20 p-3">
+                        {#if isContainedMode}
+                            <div class="rounded-lg bg-amber-500/10 border border-amber-500/30 dark:border-amber-500/20 p-3 space-y-3">
                                 <p class="text-xs text-amber-600 dark:text-amber-400">
-                                    You have unsaved changes. Save and restart to apply.
+                                    In contained mode, edit env vars from the host and restart from terminal.
                                 </p>
+                                <div class="flex items-center justify-between gap-2">
+                                    <code class="px-2 py-1 rounded bg-background border border-border font-mono text-xs">{manualEnvPath}</code>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        class="h-8 w-8 shrink-0"
+                                        onclick={() => copyToClipboard(manualEnvPath)}
+                                    >
+                                        <Copy class="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
+                        {:else}
+                            {#each envVarsMeta as env, i}
+                                <div
+                                    class="rounded-lg bg-muted/30 border border-border/30 p-3 opacity-0 animate-[floatUp_0.3s_ease-out_forwards]"
+                                    style="animation-delay: {i * 30}ms"
+                                >
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <code class="font-mono text-sm text-foreground">{env.name}</code>
+                                        {#if env.required}
+                                            <span class="rounded-full bg-red-500/20 border border-red-500/40 dark:border-red-500/30 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400 uppercase tracking-wide">
+                                                Required
+                                            </span>
+                                        {:else}
+                                            <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                                                Optional
+                                            </span>
+                                        {/if}
+                                        {#if envInfo?.env[env.name]?.isSet}
+                                            <span class="rounded-full bg-green-500/20 border border-green-500/40 dark:border-green-500/30 px-1.5 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400 uppercase tracking-wide ml-auto flex items-center gap-1">
+                                                <Check class="h-3 w-3" />
+                                                Set
+                                            </span>
+                                        {:else}
+                                            <span class="rounded-full bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide ml-auto">
+                                                Not Set
+                                            </span>
+                                        {/if}
+                                    </div>
+                                    <Input
+                                        type="password"
+                                        name={`env-${env.name.toLowerCase()}`}
+                                        autocomplete="off"
+                                        autocorrect="off"
+                                        autocapitalize="off"
+                                        spellcheck={false}
+                                        placeholder={envInfo?.env[env.name]?.isSet ? '••••••••  (leave blank to keep current)' : env.description}
+                                        value={envValues[env.name] || ''}
+                                        oninput={(e) => handleEnvChange(env.name, e.currentTarget.value)}
+                                        class="font-mono text-sm bg-background/50 border-border/50 focus:border-primary/50"
+                                    />
+                                </div>
+                            {/each}
+                            {#if envDirty}
+                                <div class="rounded-lg bg-amber-500/10 border border-amber-500/30 dark:border-amber-500/20 p-3">
+                                    <p class="text-xs text-amber-600 dark:text-amber-400">
+                                        You have unsaved changes. Save and restart to apply.
+                                    </p>
+                                </div>
+                            {/if}
                         {/if}
                     </div>
                 </div>
+                {/if}
 
+                {#if activeTab === 'system'}
                 <div
                     class="rounded-xl border border-border/50 bg-gradient-to-br from-card/80 to-card/40 overflow-hidden opacity-0 animate-[floatUp_0.4s_ease-out_forwards]"
                     style="animation-delay: 100ms"
@@ -398,74 +479,50 @@
                         </div>
                     </div>
                     <div class="p-4">
-                        <Button onclick={handleRestart} disabled={restarting} variant="outline" class="gap-2">
-                            {#if restarting}
-                                <Loader2 class="h-4 w-4 animate-spin" />
-                                Restarting...
-                            {:else}
-                                <RefreshCw class="h-4 w-4" />
-                                Restart Service
-                            {/if}
-                        </Button>
-                        <p class="mt-2 text-xs text-muted-foreground">
-                            Restart is required after changing environment variables.
-                        </p>
-                    </div>
-                </div>
-
-                <div
-                    class="rounded-xl border border-border/50 bg-gradient-to-br from-card/80 to-card/40 overflow-hidden opacity-0 animate-[floatUp_0.4s_ease-out_forwards]"
-                    style="animation-delay: 150ms"
-                >
-                    <div class="p-4 border-b border-border/30">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-3">
-                                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500/20 to-orange-500/5 border border-orange-500/30 dark:border-orange-500/20">
-                                    <Cpu class="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                                </div>
-                                <div>
-                                    <h2 class="font-medium text-foreground">Model & Provider</h2>
-                                    <p class="text-xs text-muted-foreground">Configure LLM model and API endpoint</p>
+                        {#if isContainedMode}
+                            <div class="space-y-2">
+                                <p class="text-xs text-muted-foreground">
+                                    In contained mode, restart from terminal:
+                                </p>
+                                <div class="flex items-center gap-2">
+                                    <code class="px-3 py-1.5 rounded-md bg-background border border-border font-mono text-sm text-foreground">
+                                        {manualRestartCommand}
+                                    </code>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        class="h-8 w-8 shrink-0"
+                                        onclick={() => copyToClipboard(manualRestartCommand)}
+                                    >
+                                        <Copy class="h-4 w-4" />
+                                    </Button>
                                 </div>
                             </div>
-                            <Button onclick={handleSaveModel} disabled={savingModel} class="gap-2">
-                                {#if savingModel}
+                        {:else}
+                            <Button onclick={handleRestart} disabled={restarting} variant="outline" class="gap-2">
+                                {#if restarting}
                                     <Loader2 class="h-4 w-4 animate-spin" />
+                                    Restarting...
+                                {:else}
+                                    <RefreshCw class="h-4 w-4" />
+                                    Restart Service
                                 {/if}
-                                Save
                             </Button>
-                        </div>
-                    </div>
-                    <div class="p-4 space-y-4">
-                        <div>
-                            <label for="model" class="mb-1.5 block text-sm font-medium text-foreground">Model</label>
-                            <Input
-                                id="model"
-                                type="text"
-                                bind:value={modelValue}
-                                placeholder="anthropic/claude-sonnet-4"
-                                class="font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50"
-                            />
-                            <p class="mt-1.5 text-xs text-muted-foreground">
-                                OpenRouter model ID or local model name (e.g. llama3.2:3b)
+                            <p class="mt-2 text-xs text-muted-foreground">
+                                Restart is required after changing environment variables.
                             </p>
-                        </div>
-                        <div>
-                            <label for="base-url" class="mb-1.5 block text-sm font-medium text-foreground">Base URL</label>
-                            <Input
-                                id="base-url"
-                                type="text"
-                                bind:value={baseUrlValue}
-                                placeholder="Leave blank for OpenRouter (default)"
-                                class="font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50"
-                            />
-                            <p class="mt-1.5 text-xs text-muted-foreground">
-                                Custom OpenAI-compatible endpoint. Leave blank to use OpenRouter.
-                            </p>
-                        </div>
+                        {/if}
                     </div>
                 </div>
+                {/if}
 
+                {#if activeTab === 'model'}
+                    <ModelConfig isContainedMode={isContainedMode} />
+                    <VoiceTtsConfig isContainedMode={isContainedMode} />
+                    <VoiceSttConfig isContainedMode={isContainedMode} />
+                {/if}
+
+                {#if activeTab === 'general'}
                 <div
                     class="rounded-xl border border-border/50 bg-gradient-to-br from-card/80 to-card/40 overflow-hidden opacity-0 animate-[floatUp_0.4s_ease-out_forwards]"
                     style="animation-delay: 200ms"
@@ -507,7 +564,9 @@
                         </Button>
                     </div>
                 </div>
+                {/if}
 
+                {#if activeTab === 'tools'}
                 <div
                     class="rounded-xl border border-border/50 bg-gradient-to-br from-card/80 to-card/40 overflow-hidden opacity-0 animate-[floatUp_0.4s_ease-out_forwards]"
                     style="animation-delay: 250ms"
@@ -554,6 +613,7 @@
                         {/if}
                     </div>
                 </div>
+                {/if}
             {/if}
         </div>
     </div>

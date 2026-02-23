@@ -7,6 +7,7 @@ import { createServer } from 'http';
 import {
     NeroConfig,
     updateSettings,
+    updateLlmSettings,
     getConfigPath,
     getConfigDir,
     saveConfig,
@@ -155,11 +156,11 @@ export const commands: SlashCommand[] = [
         description: 'Show or change the current model',
         execute: async (args, ctx) => {
             if (args.length === 0) {
-                const baseUrl = ctx.config.settings.baseUrl || OPENROUTER_BASE_URL;
+                const baseUrl = ctx.config.llm.baseUrl || OPENROUTER_BASE_URL;
                 const provider = isOpenRouter(ctx.config) ? 'OpenRouter' : baseUrl;
                 return {
                     message:
-                        `Current model: ${chalk.cyan(ctx.config.settings.model)}\n` +
+                        `Current model: ${chalk.cyan(ctx.config.llm.model)}\n` +
                         `Provider: ${chalk.dim(provider)}`,
                 };
             }
@@ -173,8 +174,8 @@ export const commands: SlashCommand[] = [
                 };
             }
 
-            await updateSettings({ model: newModel });
-            ctx.config.settings.model = newModel;
+            await updateLlmSettings({ model: newModel });
+            ctx.config.llm.model = newModel;
             ctx.nero.setModel(newModel);
             return { message: `Model changed to ${chalk.cyan(newModel)}` };
         },
@@ -185,7 +186,7 @@ export const commands: SlashCommand[] = [
         description: 'Show or change the API provider (base URL)',
         execute: async (args, ctx) => {
             if (args.length === 0) {
-                const baseUrl = ctx.config.settings.baseUrl || OPENROUTER_BASE_URL;
+                const baseUrl = ctx.config.llm.baseUrl || OPENROUTER_BASE_URL;
                 const label = isOpenRouter(ctx.config) ? 'OpenRouter' : 'Custom';
                 return {
                     message:
@@ -198,9 +199,9 @@ export const commands: SlashCommand[] = [
             const value = args[0];
 
             if (value === 'openrouter' || value === 'reset') {
-                await updateSettings({ baseUrl: undefined });
-                ctx.config.settings.baseUrl = undefined;
-                ctx.nero.setModel(ctx.config.settings.model, OPENROUTER_BASE_URL);
+                await updateLlmSettings({ baseUrl: undefined });
+                ctx.config.llm.baseUrl = undefined;
+                ctx.nero.setModel(ctx.config.llm.model, OPENROUTER_BASE_URL);
                 return { message: `Provider reset to ${chalk.cyan('OpenRouter')}` };
             }
 
@@ -208,9 +209,9 @@ export const commands: SlashCommand[] = [
                 return { error: 'Base URL must start with http:// or https://' };
             }
 
-            await updateSettings({ baseUrl: value });
-            ctx.config.settings.baseUrl = value;
-            ctx.nero.setModel(ctx.config.settings.model, value);
+            await updateLlmSettings({ baseUrl: value });
+            ctx.config.llm.baseUrl = value;
+            ctx.nero.setModel(ctx.config.llm.model, value);
             return { message: `Provider changed to ${chalk.cyan(value)}` };
         },
     },
@@ -339,12 +340,14 @@ export const commands: SlashCommand[] = [
             const mcpCount = Object.keys(ctx.config.mcpServers).length;
             const timezone = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-            const provider = isOpenRouter(ctx.config) ? 'OpenRouter' : settings.baseUrl || 'custom';
+            const provider = isOpenRouter(ctx.config)
+                ? 'OpenRouter'
+                : ctx.config.llm.baseUrl || 'custom';
 
             let output = `\n${chalk.bold('Settings:')}\n`;
             output += `  Streaming: ${settings.streaming ? chalk.green('on') : chalk.dim('off')}\n`;
-            output += `  Model: ${chalk.cyan(settings.model)}\n`;
-            output += `  Provider: ${chalk.cyan(provider)}${settings.baseUrl ? '' : chalk.dim(' (default)')}\n`;
+            output += `  Model: ${chalk.cyan(ctx.config.llm.model)}\n`;
+            output += `  Provider: ${chalk.cyan(provider)}${ctx.config.llm.baseUrl ? '' : chalk.dim(' (default)')}\n`;
             output += `  Timezone: ${chalk.cyan(timezone)}${!settings.timezone ? chalk.dim(' (auto)') : ''}\n`;
             output += `  Verbose: ${settings.verbose ? chalk.green('on') : chalk.dim('off')}\n`;
             output += `  MCP Servers: ${mcpCount > 0 ? chalk.green(mcpCount) : chalk.dim('none')}\n`;

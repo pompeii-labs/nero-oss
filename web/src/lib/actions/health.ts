@@ -30,6 +30,7 @@ export type ServerInfo = {
     name: string;
     version: string;
     status: string;
+    mode?: 'integrated' | 'contained' | 'native';
     features: {
         voice: boolean;
         sms: boolean;

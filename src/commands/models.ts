@@ -8,13 +8,13 @@ export function registerModelsCommand(program: Command) {
         .description('List available models from your configured provider')
         .action(async () => {
             const config = await loadConfig();
-            const baseUrl = config.settings.baseUrl;
+            const baseUrl = config.llm.baseUrl;
 
             if (isOpenRouter(config)) {
                 console.log(
                     chalk.dim('Using OpenRouter. Browse models at https://openrouter.ai/models'),
                 );
-                console.log(`Current model: ${chalk.cyan(config.settings.model)}`);
+                console.log(`Current model: ${chalk.cyan(config.llm.model)}`);
                 return;
             }
 
@@ -39,7 +39,7 @@ export function registerModelsCommand(program: Command) {
 
                 console.log(chalk.bold(`\nAvailable Models (${models.length}):\n`));
                 for (const model of models) {
-                    const isCurrent = model.id === config.settings.model;
+                    const isCurrent = model.id === config.llm.model;
                     const marker = isCurrent ? chalk.green(' (active)') : '';
                     console.log(`  ${chalk.cyan(model.id)}${marker}`);
                 }

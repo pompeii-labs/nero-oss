@@ -1091,7 +1091,7 @@ function App({ nero, initialConfig, initialHistory, hasSummary, dangerous }: App
                 {(group) => (
                     <Box key={group.id} marginBottom={1} flexDirection="column">
                         {group.type === 'banner' && (
-                            <WelcomeBanner model={config.settings.model} dangerous={dangerous} />
+                            <WelcomeBanner model={config.llm.model} dangerous={dangerous} />
                         )}
                         {group.type === 'user' && (
                             <Box flexDirection="column">

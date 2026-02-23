@@ -292,13 +292,15 @@ export class NeroClient {
     }
 
     async restart(): Promise<void> {
-        const response = await fetch(`${this.baseUrl}/admin/restart`, {
+        console.log('base url:', this.baseUrl);
+        const response = await fetch(`${this.baseUrl}/api/admin/restart`, {
             method: 'POST',
             headers: this.getHeaders(),
         });
         if (!response.ok) {
-            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-            throw new Error(error.error || `HTTP ${response.status}`);
+            const error = await response.text();
+            // const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(error || `HTTP ${response.status}`);
         }
     }
 

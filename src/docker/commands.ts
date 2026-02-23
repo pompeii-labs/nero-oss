@@ -12,8 +12,31 @@ export function hasComposeV2(): boolean {
     }
 }
 
+export function hasComposeV1(): boolean {
+    try {
+        execSync('docker-compose version', { stdio: 'ignore' });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export function hasCompose(): boolean {
+    return hasComposeV2() || hasComposeV1();
+}
+
 export function getComposeCommand(): string {
-    return hasComposeV2() ? 'docker compose' : 'docker-compose';
+    if (hasComposeV2()) {
+        return 'docker compose';
+    }
+
+    if (hasComposeV1()) {
+        return 'docker-compose';
+    }
+
+    throw new Error(
+        'Docker Compose is required but was not found. Install Docker Compose (v2 preferred) and retry.',
+    );
 }
 
 export function generateRunScript(config: DockerConfig): string {
@@ -29,8 +52,8 @@ export function generateRunScript(config: DockerConfig): string {
         } else {
             args.push(`-p ${config.port}:4848`);
         }
-        args.push('-v ~/.nero:/host/home/.nero');
-        args.push('-v ~:/host/home');
+        args.push('-v ${HOME}/.nero:/host/home/.nero');
+        args.push('-v ${HOME}:/host/home');
         const socketMount = getDockerSocketMount();
         if (socketMount) {
             args.push(`-v ${socketMount}`);
@@ -41,14 +64,13 @@ export function generateRunScript(config: DockerConfig): string {
         args.push('-e NERO_MODE=integrated');
     } else {
         args.push(`-p ${config.port}:4848`);
-        args.push('-v nero_config:/app/config');
         args.push('-e NERO_MODE=contained');
     }
 
-    args.push('--env-file ~/.nero/.env');
+    args.push('--env-file ${HOME}/.nero/.env');
     args.push(config.image);
 
-    return `#!/bin/bash\n${args.join(' \\\n  ')}\n`;
+    return `#!/bin/sh\n${args.join(' \\\n  ')}\n`;
 }
 
 export interface ExecOptions {

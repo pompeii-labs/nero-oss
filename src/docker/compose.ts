@@ -30,7 +30,7 @@ function buildNeroService(config: DockerConfig): ComposeService {
                   '${HOME}:/host/home',
                   ...(getDockerSocketMount() ? [getDockerSocketMount()!] : []),
               ]
-            : ['nero_config:/app/config'],
+            : undefined,
     };
 
     if (useHostNetwork) {
@@ -51,7 +51,7 @@ function buildDbService(isIntegrated: boolean): ComposeService {
     const useHostNetwork = isIntegrated && !isMac;
 
     const service: ComposeService = {
-        image: 'postgres:16-alpine',
+        image: 'pgvector/pgvector:pg16',
         container_name: 'nero-db',
         restart: 'unless-stopped',
         environment: ['POSTGRES_USER=nero', 'POSTGRES_PASSWORD=nero', 'POSTGRES_DB=nero'],
@@ -79,7 +79,7 @@ export function generateComposeFile(config: DockerConfig): ComposeFile {
             nero: buildNeroService(config),
             db: buildDbService(isIntegrated),
         },
-        volumes: isIntegrated ? { nero_data: {} } : { nero_data: {}, nero_config: {} },
+        volumes: { nero_data: {} },
     };
 }
 
@@ -115,9 +115,11 @@ export function composeToYaml(compose: ComposeFile): string {
             }
         }
 
-        lines.push('    volumes:');
-        for (const vol of service.volumes) {
-            lines.push(`      - ${vol}`);
+        if (service.volumes && service.volumes.length > 0) {
+            lines.push('    volumes:');
+            for (const vol of service.volumes) {
+                lines.push(`      - ${vol}`);
+            }
         }
 
         if (service.depends_on) {

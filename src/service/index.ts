@@ -91,6 +91,12 @@ export class NeroService {
 
     private setupRoutes(): void {
         const authMiddleware = createAuthMiddleware(this.config.licenseKey) as RequestHandler;
+        const mode =
+            process.env.NERO_MODE === 'contained'
+                ? 'contained'
+                : process.env.NERO_MODE === 'integrated' || process.env.HOST_HOME
+                  ? 'integrated'
+                  : 'native';
 
         this.setupStaticServing();
 
@@ -99,6 +105,7 @@ export class NeroService {
                 name: 'OpenNero',
                 version: VERSION,
                 status: 'running',
+                mode,
                 features: {
                     voice: this.config.voice?.enabled || false,
                     sms: this.config.sms?.enabled || false,
@@ -280,6 +287,7 @@ export class NeroService {
     }
 
     async start(): Promise<void> {
+        console.log(process.env);
         initLogFile(getNeroHome());
         await this.agent.setup();
 

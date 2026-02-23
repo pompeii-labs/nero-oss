@@ -27,8 +27,6 @@ export interface SessionSettings {
 
 export interface NeroSettings {
     streaming: boolean;
-    model: string;
-    baseUrl?: string;
     theme: 'dark' | 'light';
     verbose: boolean;
     historyLimit: number;
@@ -93,25 +91,36 @@ export interface FluxSTTConfig {
     eotTimeoutMs?: number;
 }
 
+export type STTProvider = 'deepgram';
+export type STTModel = 'nova-3' | 'flux';
+
 export interface VoiceConfig {
     enabled: boolean;
-    ttsProvider: 'elevenlabs' | 'hume';
-    ttsFallback?: 'elevenlabs' | 'hume';
-    sttModel: 'nova-3' | 'flux';
-    elevenlabs: ElevenLabsVoiceConfig;
-    hume: HumeVoiceConfig;
-    flux: FluxSTTConfig;
     emotionDetection?: boolean;
-    elevenlabsVoiceId?: string;
+    stt: {
+        provider: STTProvider;
+        model: STTModel;
+        flux: FluxSTTConfig;
+    };
+    tts: {
+        provider: 'elevenlabs' | 'hume';
+        elevenlabs: ElevenLabsVoiceConfig;
+        hume: HumeVoiceConfig;
+    };
 }
 
 export interface NeroConfig {
+    version: number;
     mcpServers: Record<string, McpServerConfig>;
     licenseKey: string | null;
     tunnelUrl?: string;
     port?: number;
     relayPort?: number;
     bindHost?: string;
+    llm: {
+        model: string;
+        baseUrl?: string;
+    };
     voice: VoiceConfig;
     sms: {
         enabled: boolean;
@@ -142,11 +151,14 @@ const defaultSessionSettings: SessionSettings = {
 
 const defaultSettings: NeroSettings = {
     streaming: true,
-    model: 'anthropic/claude-opus-4.5',
     theme: 'dark',
     verbose: false,
     historyLimit: 20,
     sessions: defaultSessionSettings,
+};
+
+const defaultLlm: NeroConfig['llm'] = {
+    model: 'anthropic/claude-opus-4.5',
 };
 
 const defaultProactivity: ProactivityConfig = {
@@ -170,29 +182,36 @@ const defaultAutonomy: AutonomyConfig = {
 };
 
 const defaultConfig: NeroConfig = {
+    version: 1,
     mcpServers: {},
     licenseKey: null,
     relayPort: 4848,
     bindHost: '0.0.0.0',
+    llm: { ...defaultLlm },
     voice: {
         enabled: true,
-        ttsProvider: 'elevenlabs',
-        sttModel: 'flux',
-        elevenlabs: {
-            voiceId: 'cjVigY5qzO86Huf0OWal',
-            model: 'eleven_flash_v2_5',
-            stability: 0.5,
-            similarityBoost: 0.75,
-            speed: 1.05,
+        stt: {
+            provider: 'deepgram',
+            model: 'flux',
+            flux: {
+                eotThreshold: 0.7,
+                eotTimeoutMs: 3000,
+            },
         },
-        hume: {
-            voice: 'Kora',
-            version: '2',
-            speed: 1.0,
-        },
-        flux: {
-            eotThreshold: 0.7,
-            eotTimeoutMs: 3000,
+        tts: {
+            provider: 'elevenlabs',
+            elevenlabs: {
+                voiceId: 'cjVigY5qzO86Huf0OWal',
+                model: 'eleven_flash_v2_5',
+                stability: 0.5,
+                similarityBoost: 0.75,
+                speed: 1.05,
+            },
+            hume: {
+                voice: 'Kora',
+                version: '2',
+                speed: 1.0,
+            },
         },
     },
     sms: {
@@ -205,68 +224,173 @@ const defaultConfig: NeroConfig = {
 
 let cachedConfig: NeroConfig | null = null;
 let configPath: string | null = null;
+const CURRENT_CONFIG_VERSION = 1;
 
-function envBool(key: string): boolean | undefined {
-    const val = process.env[key];
-    if (val === undefined) return undefined;
-    return val === '1' || val === 'true';
+function asRecord(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return value as Record<string, unknown>;
 }
 
-function applyEnvOverrides(config: NeroConfig): void {
-    const model = process.env.NERO_MODEL;
-    if (model) config.settings.model = model;
+function migrateV0ToV1(config: Record<string, unknown>): void {
+    const voice = asRecord(config.voice);
 
-    const baseUrl = process.env.NERO_BASE_URL;
-    if (baseUrl) config.settings.baseUrl = baseUrl;
+    const legacyTtsProvider = voice.ttsProvider;
+    const legacySttModel = voice.sttModel;
+    const legacyFlux = asRecord(voice.flux);
+    const legacyElevenlabs = asRecord(voice.elevenlabs);
+    const legacyHume = asRecord(voice.hume);
+    const legacyElevenlabsVoiceId = voice.elevenlabsVoiceId;
 
-    const streaming = envBool('NERO_STREAMING');
-    if (streaming !== undefined) config.settings.streaming = streaming;
+    const stt = asRecord(voice.stt);
+    const tts = asRecord(voice.tts);
+    const sttFlux = asRecord(stt.flux);
+    const ttsElevenlabs = asRecord(tts.elevenlabs);
 
-    const verbose = envBool('NERO_VERBOSE');
-    if (verbose !== undefined) config.settings.verbose = verbose;
+    const migratedVoice: Record<string, unknown> = {
+        ...voice,
+        stt: {
+            ...stt,
+            provider: stt.provider || 'deepgram',
+            model: stt.model || legacySttModel,
+            flux: {
+                ...legacyFlux,
+                ...sttFlux,
+            },
+        },
+        tts: {
+            ...tts,
+            provider: tts.provider || legacyTtsProvider,
+            elevenlabs: {
+                ...legacyElevenlabs,
+                ...ttsElevenlabs,
+                ...(legacyElevenlabsVoiceId ? { voiceId: legacyElevenlabsVoiceId } : {}),
+            },
+            hume: {
+                ...legacyHume,
+                ...asRecord(tts.hume),
+            },
+        },
+    };
 
-    const thinkingEnabled = envBool('NERO_THINKING_ENABLED');
-    if (thinkingEnabled !== undefined) config.proactivity.enabled = thinkingEnabled;
+    delete migratedVoice.ttsProvider;
+    delete migratedVoice.sttModel;
+    delete migratedVoice.flux;
+    delete migratedVoice.elevenlabsVoiceId;
 
-    const thinkingNotify = envBool('NERO_THINKING_NOTIFY');
-    if (thinkingNotify !== undefined) config.proactivity.notify = thinkingNotify;
+    config.voice = migratedVoice;
+}
 
-    const thinkingInterval = process.env.NERO_THINKING_INTERVAL;
-    if (thinkingInterval) {
-        const val = parseInt(thinkingInterval, 10);
-        if (!isNaN(val) && val >= 1) config.proactivity.intervalMinutes = val;
+function migrateConfig(rawConfig: unknown): { config: Record<string, unknown>; migrated: boolean } {
+    console.log('Migrating config');
+    if (!rawConfig || typeof rawConfig !== 'object' || Array.isArray(rawConfig)) {
+        return { config: {}, migrated: false };
     }
 
-    const autonomyEnabled = envBool('NERO_AUTONOMY_ENABLED');
-    if (autonomyEnabled !== undefined) config.autonomy.enabled = autonomyEnabled;
+    const config = { ...(rawConfig as Record<string, unknown>) };
+    let migrated = false;
 
-    const autonomyBudget = process.env.NERO_AUTONOMY_TOKEN_BUDGET;
-    if (autonomyBudget) {
-        const val = parseInt(autonomyBudget, 10);
-        if (!isNaN(val) && val >= 0) config.autonomy.dailyTokenBudget = val;
+    const parsedVersion =
+        typeof config.version === 'number' && Number.isInteger(config.version) ? config.version : 0;
+
+    let version = parsedVersion;
+
+    while (version < CURRENT_CONFIG_VERSION) {
+        switch (version) {
+            case 0:
+                migrateV0ToV1(config);
+                config.version = 1;
+                version = 1;
+                migrated = true;
+                break;
+            default:
+                config.version = CURRENT_CONFIG_VERSION;
+                version = CURRENT_CONFIG_VERSION;
+                migrated = true;
+                break;
+        }
     }
 
-    const voiceEnabled = envBool('NERO_VOICE_ENABLED');
-    if (voiceEnabled !== undefined) config.voice.enabled = voiceEnabled;
-
-    const ttsProvider = process.env.NERO_VOICE_TTS_PROVIDER;
-    if (ttsProvider === 'elevenlabs' || ttsProvider === 'hume')
-        config.voice.ttsProvider = ttsProvider;
-
-    const sttModel = process.env.NERO_VOICE_STT_MODEL;
-    if (sttModel === 'nova-3' || sttModel === 'flux') config.voice.sttModel = sttModel;
-
-    const emotionDetection = envBool('NERO_EMOTION_DETECTION');
-    if (emotionDetection !== undefined) config.voice.emotionDetection = emotionDetection;
-
-    const smsEnabled = envBool('NERO_SMS_ENABLED');
-    if (smsEnabled !== undefined) config.sms.enabled = smsEnabled;
-
-    const port = process.env.NERO_PORT;
-    if (port) {
-        const val = parseInt(port, 10);
-        if (!isNaN(val)) config.port = val;
+    if (config.version !== CURRENT_CONFIG_VERSION) {
+        config.version = CURRENT_CONFIG_VERSION;
+        migrated = true;
     }
+
+    return { config, migrated };
+}
+
+function normalizeUserConfig(userConfig: Partial<NeroConfig>, tunnelUrl?: string): NeroConfig {
+    const settingsInput = (userConfig.settings || {}) as Partial<NeroSettings> & {
+        model?: string;
+        baseUrl?: string;
+    };
+    const { model: legacyModel, baseUrl: legacyBaseUrl, ...settingsSansModel } = settingsInput;
+    const llmInput = (userConfig.llm || {}) as Partial<NeroConfig['llm']>;
+    const voiceInput: Partial<VoiceConfig> = userConfig.voice || {};
+    const sttInput: Partial<VoiceConfig['stt']> = voiceInput.stt || {};
+    const ttsInput: Partial<VoiceConfig['tts']> = voiceInput.tts || {};
+
+    return {
+        version: CURRENT_CONFIG_VERSION,
+        mcpServers:
+            userConfig.mcpServers && typeof userConfig.mcpServers === 'object'
+                ? userConfig.mcpServers
+                : defaultConfig.mcpServers,
+        licenseKey: loadEnvLicenseKey() || userConfig.licenseKey || null,
+        tunnelUrl: tunnelUrl || userConfig.tunnelUrl,
+        port: userConfig.port,
+        relayPort: userConfig.relayPort ?? defaultConfig.relayPort,
+        bindHost: userConfig.bindHost ?? defaultConfig.bindHost,
+        llm: {
+            model: llmInput.model || legacyModel || defaultLlm.model,
+            baseUrl: llmInput.baseUrl || legacyBaseUrl || defaultLlm.baseUrl,
+        },
+        voice: {
+            enabled: voiceInput.enabled ?? defaultConfig.voice.enabled,
+            emotionDetection: voiceInput.emotionDetection,
+            stt: {
+                provider: sttInput.provider ?? defaultConfig.voice.stt.provider,
+                model: sttInput.model ?? defaultConfig.voice.stt.model,
+                flux: {
+                    ...defaultConfig.voice.stt.flux,
+                    ...(sttInput.flux || {}),
+                },
+            },
+            tts: {
+                provider: ttsInput.provider ?? defaultConfig.voice.tts.provider,
+                elevenlabs: {
+                    ...defaultConfig.voice.tts.elevenlabs,
+                    ...(ttsInput.elevenlabs || {}),
+                },
+                hume: {
+                    ...defaultConfig.voice.tts.hume,
+                    ...(ttsInput.hume || {}),
+                },
+            },
+        },
+        sms: {
+            enabled: userConfig.sms?.enabled ?? defaultConfig.sms.enabled,
+        },
+        settings: {
+            ...defaultSettings,
+            ...settingsSansModel,
+            sessions: {
+                ...defaultSessionSettings,
+                ...(settingsSansModel.sessions || {}),
+            },
+        },
+        allowedTools: userConfig.allowedTools,
+        proactivity: {
+            ...defaultProactivity,
+            ...(userConfig.proactivity || {}),
+        },
+        autonomy: {
+            ...defaultAutonomy,
+            ...(userConfig.autonomy || {}),
+        },
+        hooks: userConfig.hooks,
+        browser: userConfig.browser,
+        pompeii: userConfig.pompeii,
+    };
 }
 
 export function getNeroHome(): string {
@@ -325,56 +449,69 @@ function loadEnvLicenseKey(): string | null {
     return null;
 }
 
-export async function loadConfig(forceReload = false): Promise<NeroConfig> {
-    if (cachedConfig && !forceReload) return cachedConfig;
-
+async function loadNormalizedConfigFromDisk(): Promise<{
+    config: NeroConfig;
+    needsSave: boolean;
+}> {
     const tunnelUrl = await loadTunnelUrl();
     const path = getConfigPath();
 
     if (existsSync(path)) {
         try {
             const content = await readFile(path, 'utf-8');
-            const userConfig = JSON.parse(content);
+            const parsed = JSON.parse(content);
+            const { config: migratedConfig, migrated } = migrateConfig(parsed);
+            const userConfig = migratedConfig as Partial<NeroConfig>;
             configPath = path;
-            const merged: NeroConfig = {
-                ...defaultConfig,
-                ...userConfig,
-                licenseKey: loadEnvLicenseKey() || userConfig.licenseKey || null,
-                tunnelUrl: tunnelUrl || userConfig.tunnelUrl,
-                voice: {
-                    ...defaultConfig.voice,
-                    ...userConfig.voice,
-                    elevenlabs: {
-                        ...defaultConfig.voice.elevenlabs,
-                        ...userConfig.voice?.elevenlabs,
-                    },
-                    hume: { ...defaultConfig.voice.hume, ...userConfig.voice?.hume },
-                    flux: { ...defaultConfig.voice.flux, ...userConfig.voice?.flux },
-                },
-                settings: {
-                    ...defaultSettings,
-                    ...userConfig.settings,
-                    sessions: { ...defaultSessionSettings, ...userConfig.settings?.sessions },
-                },
-                proactivity: { ...defaultProactivity, ...userConfig.proactivity },
-                autonomy: { ...defaultAutonomy, ...userConfig.autonomy },
-            };
-            applyEnvOverrides(merged);
-            cachedConfig = merged;
-            return merged;
+            return { config: normalizeUserConfig(userConfig, tunnelUrl), needsSave: migrated };
         } catch (error) {
             const err = error as Error;
             console.warn(chalk.yellow(`Failed to parse ${path}: ${err.message}`));
         }
     }
 
+    return { config: normalizeUserConfig({}, tunnelUrl), needsSave: false };
+}
+
+export async function loadConfig(forceReload = false): Promise<NeroConfig> {
+    if (cachedConfig && !forceReload) return cachedConfig;
+
+    const tunnelUrl = await loadTunnelUrl();
+    const path = getConfigPath();
+
+    if (process.env.NERO_MODE === 'contained' && process.env.NERO_CONFIG_JSON) {
+        try {
+            const parsed = JSON.parse(process.env.NERO_CONFIG_JSON);
+            const { config: migratedConfig } = migrateConfig(parsed);
+            const userConfig = migratedConfig as Partial<NeroConfig>;
+            const merged = normalizeUserConfig(userConfig, tunnelUrl);
+            cachedConfig = merged;
+            return merged;
+        } catch (error) {
+            const err = error as Error;
+            console.warn(chalk.yellow(`Failed to parse NERO_CONFIG_JSON: ${err.message}`));
+        }
+    }
+
+    if (existsSync(path)) {
+        const { config: merged, needsSave } = await loadNormalizedConfigFromDisk();
+        cachedConfig = merged;
+        if (needsSave) {
+            await saveConfig(merged);
+        }
+        return merged;
+    }
+
     cachedConfig = {
-        ...defaultConfig,
-        licenseKey: loadEnvLicenseKey() || null,
-        tunnelUrl,
+        ...normalizeUserConfig({}, tunnelUrl),
     };
-    applyEnvOverrides(cachedConfig);
     return cachedConfig;
+}
+
+export async function ensureConfigComplete(): Promise<NeroConfig> {
+    const { config } = await loadNormalizedConfigFromDisk();
+    await saveConfig(config);
+    return config;
 }
 
 export async function saveConfig(config: NeroConfig): Promise<void> {
@@ -385,13 +522,25 @@ export async function saveConfig(config: NeroConfig): Promise<void> {
         await mkdir(dir, { recursive: true });
     }
 
-    await writeFile(path, JSON.stringify(config, null, 2));
-    cachedConfig = config;
+    const normalized: NeroConfig = {
+        ...config,
+        version: CURRENT_CONFIG_VERSION,
+    };
+
+    await writeFile(path, JSON.stringify(normalized, null, 2));
+    cachedConfig = normalized;
 }
 
 export async function updateSettings(updates: Partial<NeroSettings>): Promise<NeroConfig> {
     const config = await loadConfig();
     config.settings = { ...config.settings, ...updates };
+    await saveConfig(config);
+    return config;
+}
+
+export async function updateLlmSettings(updates: Partial<NeroConfig['llm']>): Promise<NeroConfig> {
+    const config = await loadConfig();
+    config.llm = { ...config.llm, ...updates };
     await saveConfig(config);
     return config;
 }
@@ -403,7 +552,7 @@ export function getConfig(): NeroConfig {
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 export function isOpenRouter(config: NeroConfig): boolean {
-    return !config.settings.baseUrl || config.settings.baseUrl === OPENROUTER_BASE_URL;
+    return !config.llm.baseUrl || config.llm.baseUrl === OPENROUTER_BASE_URL;
 }
 
 export async function updateMcpServerOAuth(
