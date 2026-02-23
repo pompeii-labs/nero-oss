@@ -303,7 +303,7 @@ jobs:
           done
 
   create-release:
-    needs: [build-binaries, merge-docker]
+    needs: [build-binaries, merge-docker, merge-docker-browser]
     runs-on: ubuntu-latest
     permissions:
       contents: write

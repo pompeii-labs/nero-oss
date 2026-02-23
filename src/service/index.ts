@@ -287,7 +287,6 @@ export class NeroService {
     }
 
     async start(): Promise<void> {
-        console.log(process.env);
         initLogFile(getNeroHome());
         await this.agent.setup();
 

@@ -18,7 +18,14 @@ FROM mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble AS playwright
 FROM oven/bun:debian
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl procps docker.io \
+    ca-certificates curl gnupg \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+    git procps docker-ce-cli \
     libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
     libcups2t64 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxkbcommon0 \
     libgbm1 libpango-1.0-0 libcairo2 libasound2t64 libdbus-1-3 libexpat1 \

@@ -2,6 +2,13 @@
 
 All notable changes to Nero are documented here.
 
+## 1.31.1 (2026-02-23)
+
+### Fixes
+
+- Add Docker CLI to browser image via `docker-ce-cli`
+- Remove debug logs
+
 ## 1.31.0 (2026-02-23)
 
 ### Features
