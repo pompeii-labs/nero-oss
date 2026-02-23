@@ -51,7 +51,7 @@ function buildDbService(isIntegrated: boolean): ComposeService {
     const useHostNetwork = isIntegrated && !isMac;
 
     const service: ComposeService = {
-        image: 'postgres:16-alpine',
+        image: 'pgvector/pgvector:pg16',
         container_name: 'nero-db',
         restart: 'unless-stopped',
         environment: ['POSTGRES_USER=nero', 'POSTGRES_PASSWORD=nero', 'POSTGRES_DB=nero'],
