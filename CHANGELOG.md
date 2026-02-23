@@ -2,6 +2,22 @@
 
 All notable changes to Nero are documented here.
 
+## 1.31.0 (2026-02-23)
+
+### Features
+
+- Quickstart flow revamp with dedicated LLM config, voice config, and restart steps
+- Settings page reorganized into tabs with new LLM and voice config panels (STT/TTS)
+- Collapsible config sections that show completion state once required fields are set
+- New CLI for managing environment variables (`nero env`)
+- Config versioning/migration pipeline to normalize and evolve config safely
+
+### Fixes
+
+- Use `pgvector` Postgres image in compose setups so `vector` extension is available
+- Improve contained/integrated setup UX and dashboard instructions
+- Stabilize non-compose restart behavior
+
 ## 1.30.0 (2026-02-20)
 
 ### Features
