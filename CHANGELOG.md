@@ -2,6 +2,11 @@
 
 All notable changes to Nero are documented here.
 
+## 1.31.2 (2026-02-23)
+
+### Fixes
+- Add Docker Compose plugin to browser image
+
 ## 1.31.1 (2026-02-23)
 
 ### Fixes
