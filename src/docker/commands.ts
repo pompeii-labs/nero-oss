@@ -1,7 +1,4 @@
 import { execSync } from 'child_process';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
 import type { DockerConfig } from './types.js';
 import { getDockerSocketMount } from './socket.js';
 import { DEFAULT_IMAGE as IMAGE } from './compose.js';
@@ -55,8 +52,8 @@ export function generateRunScript(config: DockerConfig): string {
         } else {
             args.push(`-p ${config.port}:4848`);
         }
-        args.push('-v ~/.nero:/host/home/.nero');
-        args.push('-v ~:/host/home');
+        args.push('-v ${HOME}/.nero:/host/home/.nero');
+        args.push('-v ${HOME}:/host/home');
         const socketMount = getDockerSocketMount();
         if (socketMount) {
             args.push(`-v ${socketMount}`);
@@ -70,13 +67,10 @@ export function generateRunScript(config: DockerConfig): string {
         args.push('-e NERO_MODE=contained');
     }
 
-    const envFilePath = path.join(os.homedir(), '.nero', '.env');
-    if (fs.existsSync(envFilePath)) {
-        args.push(`--env-file ~/.nero/.env`);
-    }
+    args.push('--env-file ${HOME}/.nero/.env');
     args.push(config.image);
 
-    return `#!/bin/bash\n${args.join(' \\\n  ')}\n`;
+    return `#!/bin/sh\n${args.join(' \\\n  ')}\n`;
 }
 
 export interface ExecOptions {

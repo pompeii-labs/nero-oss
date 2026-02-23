@@ -8,7 +8,7 @@ import { getConfigDir, loadConfig, ensureConfigComplete, getNeroHome } from '../
 import { NeroClient } from '../client/index.js';
 import { migrateDb } from '../db/index.js';
 import { openBrowser } from '../mcp/oauth.js';
-import { compose, docker } from '../docker/index.js';
+import { compose, docker, generateRunScript, DEFAULT_IMAGE } from '../docker/index.js';
 import { setConfigJsonEnv } from '../util/env-file.js';
 
 export function registerServiceCommands(program: Command) {
@@ -93,10 +93,13 @@ export function registerServiceCommands(program: Command) {
             const setupStatePath = join(neroDir, 'setup.json');
             const dockerComposePath = join(neroDir, 'docker-compose.yml');
             const dockerRunPath = join(neroDir, 'docker-run.sh');
+            const envPath = join(neroDir, '.env');
 
             let setupState: {
                 mode?: string;
                 name?: string;
+                port?: string;
+                image?: string;
             } = {};
             try {
                 const content = await readFile(setupStatePath, 'utf-8');
@@ -123,7 +126,28 @@ export function registerServiceCommands(program: Command) {
                     }
 
                     console.log(chalk.dim('Starting new container...'));
-                    execSync(`bash ${dockerRunPath}`, { stdio: 'inherit' });
+                    try {
+                        const script = generateRunScript({
+                            name: containerName,
+                            port: setupState.port || '4848',
+                            relayPort: '4848',
+                            mode: setupState.mode === 'contained' ? 'contained' : 'integrated',
+                            image: setupState.image || DEFAULT_IMAGE,
+                        });
+                        fs.writeFileSync(dockerRunPath, script);
+                        fs.chmodSync(dockerRunPath, '755');
+                    } catch (error) {
+                        console.log(
+                            chalk.yellow(
+                                `Warning: failed to refresh docker-run.sh: ${(error as Error).message}`,
+                            ),
+                        );
+                    }
+                    if (!fs.existsSync(envPath)) {
+                        console.log(chalk.yellow(`Missing ${envPath}. Creating empty env file.`));
+                        fs.writeFileSync(envPath, '');
+                    }
+                    execSync(`sh ${dockerRunPath}`, { stdio: 'inherit' });
                     console.log(chalk.green('Container recreated'));
                 } else {
                     console.error(chalk.red('No Docker setup found for Nero.'));
