@@ -29,6 +29,7 @@ interface Connection {
     ws: WebSocket;
     flow?: MagmaFlow;
     active: boolean;
+    type: 'twilio' | 'web';
 }
 
 function createSTT(config: NeroConfig): MagmaFlowSpeechToText {
@@ -146,6 +147,8 @@ export class VoiceWebSocketManager {
     private readonly MAX_CONNECTIONS = 100;
     private readonly HEARTBEAT_INTERVAL = 30_000;
     private heartbeatTimer?: NodeJS.Timeout;
+    private _migrating = false;
+    private _migrateTimer?: NodeJS.Timeout;
 
     constructor(server: HttpServer, config: NeroConfig, agent: Nero) {
         this.config = config;
@@ -389,7 +392,26 @@ export class VoiceWebSocketManager {
 
         ws.on('error', (err) => console.error(chalk.red(`[twilio] Error: ${err.message}`)));
 
-        this.connections.set(connectionId, { id: connectionId, ws, flow, active: true });
+        this.connections.set(connectionId, {
+            id: connectionId,
+            ws,
+            flow,
+            active: true,
+            type: 'twilio',
+        });
+    }
+
+    startMigration(): void {
+        this._migrating = true;
+        if (this._migrateTimer) clearTimeout(this._migrateTimer);
+        this._migrateTimer = setTimeout(() => {
+            if (this._migrating) {
+                console.log(chalk.yellow(`[voice] Migration timed out, deactivating web voice`));
+                this._migrating = false;
+                this.agent.setWebVoiceActive(false);
+            }
+        }, 15_000);
+        console.log(chalk.dim(`[voice] Migration started, keeping webVoiceActive for 15s`));
     }
 
     private async handleWebVoice(ws: WebSocket, req: IncomingMessage): Promise<void> {
@@ -403,6 +425,16 @@ export class VoiceWebSocketManager {
         const tagStripper = new StreamTagStripper();
 
         console.log(chalk.dim(`[web-voice] Connection established: ${connectionId}`));
+
+        if (this._migrating) {
+            console.log(chalk.green(`[web-voice] Migration takeover successful`));
+            if (this._migrateTimer) clearTimeout(this._migrateTimer);
+            this._migrateTimer = undefined;
+            this._migrating = false;
+        } else {
+            this.agent.setVoiceDevice('main');
+        }
+        this.agent.setWebVoiceActive(true);
 
         const setupFlow = () => {
             const stt = createSTT(this.config);
@@ -581,6 +613,11 @@ export class VoiceWebSocketManager {
             emotionDetector?.kill();
             this.connections.get(connectionId)?.flow?.kill();
             this.connections.delete(connectionId);
+
+            const hasOtherWeb = [...this.connections.values()].some((c) => c.type === 'web');
+            if (!hasOtherWeb && !this._migrating) {
+                this.agent.setWebVoiceActive(false);
+            }
         });
 
         ws.on('pong', () => {
@@ -590,13 +627,20 @@ export class VoiceWebSocketManager {
 
         ws.on('error', (err) => console.error(chalk.red(`[web-voice] Error: ${err.message}`)));
 
-        this.connections.set(connectionId, { id: connectionId, ws, flow, active: true });
+        this.connections.set(connectionId, {
+            id: connectionId,
+            ws,
+            flow,
+            active: true,
+            type: 'web',
+        });
     }
 
     async shutdown(): Promise<void> {
         console.log(chalk.dim('[voice] Shutting down...'));
 
         if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+        if (this._migrateTimer) clearTimeout(this._migrateTimer);
 
         for (const [id, conn] of this.connections) {
             try {

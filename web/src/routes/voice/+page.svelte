@@ -13,8 +13,11 @@
     import Loader2 from '@lucide/svelte/icons/loader-2';
     import Copy from '@lucide/svelte/icons/copy';
     import Key from '@lucide/svelte/icons/key';
+    import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
+    import ArrowLeftToLine from '@lucide/svelte/icons/arrow-left-to-line';
 
     let serverInfo = $state<ServerInfo | null>(null);
+    const neroIsHere = $derived(voice.neroDisplay === 'main');
     let loading = $state(true);
 
     onMount(async () => {
@@ -204,67 +207,115 @@
             <div class="absolute bottom-1/3 right-1/4 w-64 h-64 bg-nero-cyan/3 rounded-full blur-3xl"></div>
         </div>
 
-        <div class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-            <div class="pointer-events-auto w-[300px] h-[300px]">
-                <NeroSphere
-                    status={voice.status}
-                    rmsLevel={voice.rmsLevel}
-                    isTalking={voice.isTalking}
-                    isProcessing={voice.isProcessing}
-                    isMuted={voice.isMuted}
-                    outputRms={voice.outputRms}
-                    onclick={handleToggleConnection}
-                    graphData={graph.graphData}
-                    activatedNodeIds={graph.activatedNodeIds}
-                    toolFires={graph.toolFires}
-                />
+        {#if neroIsHere}
+            <div class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none {voice.migrating === 'departing' ? 'migrate-depart' : ''} {voice.migrating === 'arriving' ? 'migrate-arrive' : ''}">
+                <div class="pointer-events-auto w-[300px] h-[300px]">
+                    <NeroSphere
+                        status={voice.status}
+                        rmsLevel={voice.rmsLevel}
+                        isTalking={voice.isTalking}
+                        isProcessing={voice.isProcessing}
+                        isMuted={voice.isMuted}
+                        outputRms={voice.outputRms}
+                        onclick={handleToggleConnection}
+                        graphData={graph.graphData}
+                        activatedNodeIds={graph.activatedNodeIds}
+                        toolFires={graph.toolFires}
+                    />
+                </div>
             </div>
-        </div>
 
-        <div class="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-4 pb-8">
-            {#if voice.status === 'idle'}
-                <p class="text-sm text-muted-foreground/50">Tap to start talking with Nero</p>
-            {:else if voice.status === 'connecting'}
-                <p class="text-sm text-muted-foreground">Setting up voice connection...</p>
-            {:else if voice.status === 'error'}
-                <p class="text-sm text-red-400">{voice.errorMessage || 'Connection failed'}</p>
-            {:else if voice.status === 'connected'}
-                <p class="text-sm text-muted-foreground/60 max-w-md text-center">
-                    {#if voice.transcript}
-                        {voice.transcript}
-                    {:else}
-                        Say something to Nero
-                    {/if}
-                </p>
-
-                <div class="flex items-center gap-3">
-                    <button
-                        type="button"
-                        onclick={voice.toggleMute}
-                        class={cn(
-                            'flex h-11 w-11 items-center justify-center rounded-full transition-all',
-                            voice.isMuted
-                                ? 'bg-red-500/20 border border-red-500/40 text-red-400'
-                                : 'glass-panel text-primary hover:border-primary/40'
-                        )}
-                    >
-                        {#if voice.isMuted}
-                            <MicOff class="h-5 w-5" />
+            <div class="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-4 pb-8">
+                {#if voice.status === 'idle' && voice.migratedTo}
+                    <div class="flex flex-col items-center gap-3">
+                        <div class="flex items-center gap-2 text-sm text-primary/70">
+                            <MonitorSmartphone class="h-4 w-4" />
+                            <span>Nero is active on {voice.migratedTo}</span>
+                        </div>
+                        <p class="text-xs text-muted-foreground/40">Tap the sphere to start a new session here</p>
+                    </div>
+                {:else if voice.status === 'idle'}
+                    <p class="text-sm text-muted-foreground/50">Tap to start talking with Nero</p>
+                {:else if voice.status === 'connecting'}
+                    <p class="text-sm text-muted-foreground">Setting up voice connection...</p>
+                {:else if voice.status === 'error'}
+                    <p class="text-sm text-red-400">{voice.errorMessage || 'Connection failed'}</p>
+                {:else if voice.status === 'connected'}
+                    <p class="text-sm text-muted-foreground/60 max-w-md text-center">
+                        {#if voice.transcript}
+                            {voice.transcript}
                         {:else}
-                            <Mic class="h-5 w-5" />
+                            Say something to Nero
                         {/if}
-                    </button>
+                    </p>
 
+                    <div class="flex items-center gap-3">
+                        <button
+                            type="button"
+                            onclick={voice.toggleMute}
+                            class={cn(
+                                'flex h-11 w-11 items-center justify-center rounded-full transition-all',
+                                voice.isMuted
+                                    ? 'bg-red-500/20 border border-red-500/40 text-red-400'
+                                    : 'glass-panel text-primary hover:border-primary/40'
+                            )}
+                        >
+                            {#if voice.isMuted}
+                                <MicOff class="h-5 w-5" />
+                            {:else}
+                                <Mic class="h-5 w-5" />
+                            {/if}
+                        </button>
+
+                        <button
+                            type="button"
+                            onclick={voice.disconnect}
+                            class="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/20 border border-red-500/40 text-red-400 transition-all hover:bg-red-500/30"
+                        >
+                            <PhoneOff class="h-5 w-5" />
+                        </button>
+                    </div>
+                {/if}
+            </div>
+        {:else}
+            <div class="absolute inset-0 flex flex-col items-center justify-center z-10">
+                <div class="flex flex-col items-center gap-6">
+                    <div class="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/5 border border-primary/10">
+                        <MonitorSmartphone class="h-10 w-10 text-primary/40" />
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                        <p class="text-sm text-muted-foreground/70">Nero is on <span class="text-primary/80 font-medium">{voice.neroDisplay}</span></p>
+                    </div>
                     <button
                         type="button"
-                        onclick={voice.disconnect}
-                        class="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/20 border border-red-500/40 text-red-400 transition-all hover:bg-red-500/30"
+                        onclick={() => voice.nudge('main')}
+                        class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary text-sm font-medium transition-all hover:bg-primary/20 hover:border-primary/30"
                     >
-                        <PhoneOff class="h-5 w-5" />
+                        <ArrowLeftToLine class="h-4 w-4" />
+                        <span>Draw Nero here</span>
                     </button>
                 </div>
-            {/if}
-
-        </div>
+            </div>
+        {/if}
     </div>
 {/if}
+
+<style>
+    :global(.migrate-depart) {
+        animation: slideOut 0.6s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+    }
+
+    :global(.migrate-arrive) {
+        animation: slideIn 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    @keyframes slideOut {
+        0% { transform: translateX(0); opacity: 1; }
+        100% { transform: translateX(110%); opacity: 0; }
+    }
+
+    @keyframes slideIn {
+        0% { transform: translateX(-110%); opacity: 0; }
+        100% { transform: translateX(0); opacity: 1; }
+    }
+</style>

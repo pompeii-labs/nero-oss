@@ -69,6 +69,19 @@ class VoiceManager: ObservableObject {
         reset()
     }
 
+    func migrateAway() {
+        stopRecording()
+        webSocket?.cancel(with: .normalClosure, reason: nil)
+        webSocket = nil
+        status = .idle
+        transcript = ""
+        activities = []
+        rmsLevel = 0
+        outputRms = 0
+        isProcessing = false
+        reset()
+    }
+
     func toggleMute() {
         isMuted.toggle()
     }

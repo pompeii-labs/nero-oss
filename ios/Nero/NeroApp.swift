@@ -7,6 +7,7 @@ struct NeroApp: App {
     @StateObject private var voiceManager = VoiceManager.shared
     @StateObject private var toastManager = ToastManager.shared
     @StateObject private var graphManager = GraphManager.shared
+    @StateObject private var presenceManager = PresenceManager.shared
 
     var body: some Scene {
         WindowGroup {
@@ -16,6 +17,7 @@ struct NeroApp: App {
                 .environmentObject(voiceManager)
                 .environmentObject(toastManager)
                 .environmentObject(graphManager)
+                .environmentObject(presenceManager)
                 .preferredColorScheme(.dark)
         }
     }

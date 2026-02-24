@@ -8,6 +8,7 @@ struct VoiceView: View {
     @EnvironmentObject var toastManager: ToastManager
     @EnvironmentObject var tabRouter: TabRouter
     @EnvironmentObject var graphManager: GraphManager
+    @EnvironmentObject var presenceManager: PresenceManager
 
     @State private var showActivitySheet = false
     @State private var lastActivityCount = 0
@@ -141,35 +142,74 @@ struct VoiceView: View {
     }
 
     private var connectedContent: some View {
-        VStack(spacing: 0) {
+        Group {
+            if presenceManager.neroIsHere {
+                VStack(spacing: 0) {
+                    Spacer()
+
+                    NeroSphereView(
+                        status: sphereStatus,
+                        rmsLevel: voiceManager.rmsLevel,
+                        outputRms: voiceManager.outputRms,
+                        isTalking: voiceManager.status == .speaking,
+                        isProcessing: voiceManager.isProcessing,
+                        isMuted: voiceManager.isMuted,
+                        onTap: { handleOrbTap() },
+                        graphData: graphManager.graphData,
+                        toolFires: graphManager.toolFires
+                    )
+                    .frame(width: 280, height: 280)
+
+                    Spacer()
+
+                    VStack(spacing: 24) {
+                        statusText
+                            .padding(.horizontal, 32)
+
+                        if isActive {
+                            controls
+                        }
+                    }
+                    .padding(.bottom, 48)
+                }
+                .padding(.horizontal, 24)
+            } else {
+                neroElsewhereView
+            }
+        }
+    }
+
+    private var neroElsewhereView: some View {
+        VStack(spacing: 24) {
             Spacer()
 
-            NeroSphereView(
-                status: sphereStatus,
-                rmsLevel: voiceManager.rmsLevel,
-                outputRms: voiceManager.outputRms,
-                isTalking: voiceManager.status == .speaking,
-                isProcessing: voiceManager.isProcessing,
-                isMuted: voiceManager.isMuted,
-                onTap: { handleOrbTap() },
-                graphData: graphManager.graphData,
-                toolFires: graphManager.toolFires
-            )
-            .frame(width: 280, height: 280)
+            VStack(spacing: 16) {
+                Image(systemName: "display")
+                    .font(.system(size: 40))
+                    .foregroundStyle(LinearGradient.neroGradient.opacity(0.4))
 
-            Spacer()
-
-            VStack(spacing: 24) {
-                statusText
-                    .padding(.horizontal, 32)
-
-                if isActive {
-                    controls
+                VStack(spacing: 6) {
+                    Text("Nero is on \(presenceManager.neroDisplay)")
+                        .font(.system(size: 15))
+                        .foregroundColor(.nMutedForeground.opacity(0.7))
                 }
             }
-            .padding(.bottom, 48)
+
+            Button {
+                let generator = UIImpactFeedbackGenerator(style: .medium)
+                generator.impactOccurred()
+                Task { await presenceManager.nudge() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.left.to.line")
+                    Text("Draw Nero here")
+                }
+                .neroButton()
+            }
+            .padding(.horizontal, 48)
+
+            Spacer()
         }
-        .padding(.horizontal, 24)
     }
 
     private var tronBackground: some View {
@@ -425,5 +465,6 @@ struct OrbButtonStyle: ButtonStyle {
         .environmentObject(ToastManager.shared)
         .environmentObject(TabRouter())
         .environmentObject(GraphManager.shared)
+        .environmentObject(PresenceManager.shared)
         .preferredColorScheme(.dark)
 }

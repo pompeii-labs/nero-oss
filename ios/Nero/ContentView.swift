@@ -3,6 +3,9 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var neroManager: NeroManager
     @EnvironmentObject var toastManager: ToastManager
+    @EnvironmentObject var presenceManager: PresenceManager
+
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -17,6 +20,21 @@ struct ContentView: View {
         .task {
             if !neroManager.serverURL.isEmpty {
                 await neroManager.checkConnection()
+                await presenceManager.fetchPresence()
+                presenceManager.connect()
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .active:
+                if neroManager.isConnected {
+                    presenceManager.connect()
+                    Task { await presenceManager.fetchPresence() }
+                }
+            case .background:
+                presenceManager.disconnect()
+            default:
+                break
             }
         }
     }
@@ -94,4 +112,5 @@ struct ToastView: View {
         .environmentObject(APIManager.shared)
         .environmentObject(VoiceManager.shared)
         .environmentObject(ToastManager.shared)
+        .environmentObject(PresenceManager.shared)
 }

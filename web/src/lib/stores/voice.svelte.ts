@@ -1,8 +1,9 @@
 import { AudioRecorder, AudioPlayer } from '$lib/audio';
 import { bufferToInt16Array, int16ArrayToBuffer } from '@pompeii-labs/audio';
 import { Buffer } from 'buffer';
-import { getServerUrl } from '$lib/actions/helpers';
+import { getServerUrl, get, post } from '$lib/actions/helpers';
 import type { ToolActivity } from '$lib/actions/chat';
+import { interfaces } from '$lib/stores/interfaces.svelte';
 
 export type VoiceStatus = 'idle' | 'connecting' | 'connected' | 'error';
 
@@ -16,6 +17,10 @@ function createVoiceStore() {
     let transcript = $state('');
     let activities = $state<ToolActivity[]>([]);
     let errorMessage = $state<string | null>(null);
+    let migrating = $state<'departing' | 'arriving' | null>(null);
+    let audioSuspended = $state(false);
+    let migratedTo = $state<string | null>(null);
+    let neroDisplay = $state('main');
 
     let ws: WebSocket | null = null;
     let recorder: AudioRecorder | null = null;
@@ -26,15 +31,9 @@ function createVoiceStore() {
 
         status = 'connecting';
         errorMessage = null;
+        migratedTo = null;
 
         try {
-            player = new AudioPlayer();
-            await player.connect(() => {
-                isTalking = false;
-            });
-
-            recorder = new AudioRecorder();
-
             const baseUrl = getServerUrl('/webhook/voice/stream');
             const wsUrl = baseUrl.replace(/^http/, 'ws');
 
@@ -43,7 +42,7 @@ function createVoiceStore() {
             ws.onopen = () => {
                 status = 'connected';
                 ws?.send(JSON.stringify({ type: 'medium', data: { medium: 'web-voice' } }));
-                startRecording();
+                initAudio();
             };
 
             ws.onmessage = (event) => {
@@ -99,6 +98,53 @@ function createVoiceStore() {
         }
     }
 
+    async function initAudio() {
+        player = new AudioPlayer();
+        await player.connect(() => {
+            isTalking = false;
+        });
+
+        try {
+            recorder = new AudioRecorder();
+            await startRecording();
+        } catch {
+            recorder = null;
+        }
+
+        if (player.suspended) {
+            audioSuspended = true;
+            await player.tryResume();
+            audioSuspended = player.suspended;
+        }
+    }
+
+    async function resumeAudio() {
+        const playerResume = player?.tryResume();
+
+        let recorderStart: Promise<void> | null = null;
+        if (!recorder) {
+            try {
+                recorder = new AudioRecorder();
+                recorderStart = startRecording();
+            } catch {
+                recorder = null;
+            }
+        }
+
+        if (playerResume) {
+            await playerResume;
+            audioSuspended = player!.suspended;
+        }
+
+        if (recorderStart) {
+            try {
+                await recorderStart;
+            } catch {
+                recorder = null;
+            }
+        }
+    }
+
     async function startRecording() {
         if (!recorder) return;
 
@@ -145,6 +191,43 @@ function createVoiceStore() {
         outputRms = 0;
         transcript = '';
         activities = [];
+        audioSuspended = false;
+        migratedTo = null;
+        interfaces.closeAll();
+    }
+
+    function migrateAway(targetDevice?: string) {
+        migrating = 'departing';
+        migratedTo = targetDevice || 'another display';
+
+        setTimeout(() => {
+            recorder?.stop();
+            player?.disconnect();
+            ws?.close();
+
+            recorder = null;
+            player = null;
+            ws = null;
+
+            status = 'idle';
+            isMuted = false;
+            isTalking = false;
+            isProcessing = false;
+            rmsLevel = 0;
+            outputRms = 0;
+            transcript = '';
+            activities = [];
+            audioSuspended = false;
+            migrating = null;
+        }, 600);
+    }
+
+    function connectAsTarget() {
+        migrating = 'arriving';
+        connect();
+        setTimeout(() => {
+            migrating = null;
+        }, 700);
     }
 
     function toggleMute() {
@@ -161,6 +244,24 @@ function createVoiceStore() {
 
     function clearActivities() {
         activities = [];
+    }
+
+    function setNeroDisplay(display: string) {
+        neroDisplay = display;
+    }
+
+    async function fetchPresence() {
+        const res = await get<{ display: string }>('/api/presence');
+        if (res.success) {
+            neroDisplay = res.data.display;
+        }
+    }
+
+    async function nudge(display: string) {
+        const res = await post<{ display: string }>('/api/presence', { display });
+        if (res.success) {
+            neroDisplay = res.data.display;
+        }
     }
 
     return {
@@ -194,10 +295,28 @@ function createVoiceStore() {
         get isConnected() {
             return status === 'connected';
         },
+        get migrating() {
+            return migrating;
+        },
+        get audioSuspended() {
+            return audioSuspended;
+        },
+        get migratedTo() {
+            return migratedTo;
+        },
+        get neroDisplay() {
+            return neroDisplay;
+        },
         connect,
+        connectAsTarget,
         disconnect,
+        migrateAway,
         toggleMute,
         clearActivities,
+        resumeAudio,
+        setNeroDisplay,
+        fetchPresence,
+        nudge,
     };
 }
 

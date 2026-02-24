@@ -54,6 +54,8 @@ import { isDestructiveToolCall } from '../proactivity/destructive.js';
 import { SessionManager } from '../services/session-manager.js';
 import { processManager } from '../services/process-manager.js';
 import { BrowserManager } from '../browser/index.js';
+import { InterfaceManager } from '../interfaces/manager.js';
+import type { NeroComponent, InterfaceUpdatePatch } from '../interfaces/types.js';
 import { HooksManager } from '../hooks/index.js';
 import type { FileRef } from '../files/index.js';
 import {
@@ -148,6 +150,8 @@ export class Nero extends MagmaAgent {
     private _isProcessing: boolean = false;
     private _aborted: boolean = false;
     browserManager: BrowserManager;
+    interfaceManager: InterfaceManager;
+    voiceManager: import('../voice/websocket.js').VoiceWebSocketManager | null = null;
     private hooksManager: HooksManager;
     private turnToolCount: number = 0;
 
@@ -159,6 +163,10 @@ export class Nero extends MagmaAgent {
             apiKey: apiKey ?? '',
             timeout: isOpenRouter(config) ? 120_000 : 600_000,
             maxRetries: isOpenRouter(config) ? 2 : 0,
+            defaultHeaders: {
+                'X-Title': 'Nero',
+                'HTTP-Referer': 'https://nero.pompeiilabs.com',
+            },
         });
 
         super({
@@ -177,6 +185,7 @@ export class Nero extends MagmaAgent {
         this.proactivity = new ProactivityManager(config);
         this.proactivity.setAgent(this);
         this.browserManager = new BrowserManager(config.browser);
+        this.interfaceManager = new InterfaceManager();
         this.hooksManager = new HooksManager(config);
         this.initSessionManager();
     }
@@ -917,6 +926,17 @@ Be thorough - this summary will be the primary context for future conversations.
 
         if (mcpToolsList.length > 0) {
             context.mcpTools = mcpToolsList;
+        }
+
+        const connectedDisplays = this.interfaceManager.getDevices();
+        if (connectedDisplays.length > 0) {
+            context.connectedDisplays = connectedDisplays.map((d) => d.name);
+        }
+
+        context.activeDisplay = this._activeDisplay;
+
+        if (this._webVoiceActive) {
+            context.voiceDevice = this._voiceDevice;
         }
 
         if (this.pendingThoughts.length > 0) {
@@ -1795,9 +1815,46 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
 
     private currentMedium: 'cli' | 'voice' | 'sms' | 'slack' | 'api' | 'pompeii' = 'cli';
     private currentCwd: string = process.env.HOST_HOME ? '/host/home' : process.cwd();
+    private _webVoiceActive = false;
+    private _voiceDevice: string = 'main';
+    private _activeDisplay: string = 'main';
 
     setMedium(medium: 'cli' | 'voice' | 'sms' | 'slack' | 'api' | 'pompeii'): void {
         this.currentMedium = medium;
+    }
+
+    getMedium(): string {
+        return this.currentMedium;
+    }
+
+    setWebVoiceActive(active: boolean): void {
+        this._webVoiceActive = active;
+        if (!active) {
+            this._voiceDevice = 'main';
+            this._activeDisplay = 'main';
+            this.interfaceManager.emitPresence('main');
+        }
+    }
+
+    isWebVoiceActive(): boolean {
+        return this._webVoiceActive;
+    }
+
+    setVoiceDevice(device: string): void {
+        this._voiceDevice = device;
+    }
+
+    getVoiceDevice(): string {
+        return this._voiceDevice;
+    }
+
+    getActiveDisplay(): string {
+        return this._activeDisplay;
+    }
+
+    setActiveDisplay(display: string): void {
+        this._activeDisplay = display;
+        this.interfaceManager.emitPresence(display);
     }
 
     setCwd(cwd: string): void {
@@ -1810,6 +1867,10 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
 
     isProcessing(): boolean {
         return this._isProcessing;
+    }
+
+    async callMcpTool(toolName: string, args: Record<string, unknown>): Promise<string> {
+        return this.mcpClient.callTool(toolName, args);
     }
 
     async onUsageUpdate(usage: {
@@ -1987,6 +2048,10 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
             apiKey,
             timeout: isLocal ? 600_000 : 120_000,
             maxRetries: isLocal ? 0 : 2,
+            defaultHeaders: {
+                'X-Title': 'Nero',
+                'HTTP-Referer': 'https://nero.pompeiilabs.com',
+            },
         });
         this.openaiClient = client;
         this.setProviderConfig({
@@ -3957,6 +4022,363 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
             this.emitActivity(activity);
             return `Failed to get Pompeii messages: ${activity.error}`;
         }
+    }
+
+    @tool({
+        description:
+            'Create a dynamic interface panel. Opens a UI panel with interactive components the user can interact with. Use for controls, dashboards, forms, monitoring, or any interactive display. Button actions execute shell commands directly - prefill the full command including auth headers, API endpoints, CLI args, etc. Only works when the user has the web dashboard or a display open. Panels appear inline on the target display. Check connected_displays in your context to see available displays before targeting one.',
+        enabled: (agent) => (agent as Nero).isWebVoiceActive(),
+    })
+    @toolparam({ key: 'title', type: 'string', required: true, description: 'Panel title' })
+    @toolparam({
+        key: 'width',
+        type: 'number',
+        required: false,
+        description: 'Panel width in pixels (default: 400)',
+    })
+    @toolparam({
+        key: 'height',
+        type: 'number',
+        required: false,
+        description: 'Panel height in pixels (default: 500)',
+    })
+    @toolparam({
+        key: 'accentColor',
+        type: 'string',
+        required: false,
+        description: 'CSS color for the accent/primary color override',
+    })
+    @toolparam({
+        key: 'targetDevice',
+        type: 'string',
+        required: false,
+        description:
+            'Name of the display to show the panel on (e.g. "kitchen", "office", "main"). Defaults to your current display during voice.',
+    })
+    @toolparam({
+        key: 'components',
+        type: 'string',
+        required: true,
+        description:
+            'JSON array of UI components. Types: button (with action, variant: default|primary|destructive|ghost, icon), toggle (stateKey, action), slider (min/max/step/stateKey, action), text (content, variant: heading|body|caption|mono), text-input (stateKey, placeholder, action fires on Enter), select (stateKey, options:[{label,value}], action fires on change), image (src URL, alt, fit: cover|contain|fill, height in px), progress (value number or "$state.key", max default 100, color, label), list (items: string[] or NeroComponent[], variant: ordered|unordered|none), separator, grid (columns, children), flex (direction, children), icon (name from Lucide). Actions: {type:"tool",toolName,args,resultKey?} to call an MCP tool directly (preferred - use resultKey to store the result in state for reactive display), {type:"command",command:"shell cmd",resultKey?} for raw shell commands, {type:"update",stateKey,value} for local UI state, {type:"stream",command:"shell cmd",stateKey} for long-running commands with live output (streams stdout/stderr into stateKey, sets stateKey_status to running/complete/error/killed), {type:"kill",stateKey} to stop a running stream. Use $state.key in text content, progress value, args values, or visible/disabled for reactivity.',
+    })
+    @toolparam({
+        key: 'state',
+        type: 'string',
+        required: false,
+        description:
+            'JSON object of initial state values for reactive bindings (e.g. {"count": 0, "muted": false})',
+    })
+    @toolparam({
+        key: 'triggers',
+        type: 'string',
+        required: false,
+        description:
+            'JSON array of triggers that fire automatically. Types: {type:"onOpen",action} fires once when interface opens, {type:"interval",action,intervalMs} fires immediately then repeats (min 10s). Actions are same as button actions (tool, command, stream, etc).',
+    })
+    async createInterface(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { title, width, height, accentColor, components, state, triggers, targetDevice } =
+            call.fn_args;
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'create_interface',
+            displayName: `Interface: ${title}`,
+            args: { title, targetDevice },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            const parsedComponents =
+                typeof components === 'string' ? JSON.parse(components) : components || [];
+            const parsedState = typeof state === 'string' ? JSON.parse(state) : state || {};
+            const parsedTriggers = triggers
+                ? typeof triggers === 'string'
+                    ? JSON.parse(triggers)
+                    : triggers
+                : undefined;
+
+            const iface = this.interfaceManager.create({
+                title,
+                width: width || 400,
+                height: height || 500,
+                accentColor,
+                components: parsedComponents,
+                state: parsedState,
+                triggers: parsedTriggers,
+                targetDevice:
+                    targetDevice || (this._webVoiceActive ? this._voiceDevice : undefined),
+            });
+
+            const resolvedTarget = iface.targetDevice;
+            let deliveryNote = '';
+            if (resolvedTarget) {
+                const device = this.interfaceManager.getDeviceByName(resolvedTarget);
+                if (!device) {
+                    deliveryNote = ` WARNING: Display "${resolvedTarget}" is not currently connected. The interface was created but nobody will see it until that display connects.`;
+                }
+            } else if (!this.interfaceManager.hasWebClients()) {
+                deliveryNote =
+                    ' WARNING: No web clients are connected. Nobody will see this interface.';
+            }
+
+            activity.status = 'complete';
+            activity.result = `Interface "${title}" created (${iface.id})${deliveryNote}`;
+            this.emitActivity(activity);
+            return `Interface created with ID: ${iface.id}.${deliveryNote}`;
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Failed to create interface: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description:
+            'Update an existing interface window. Can replace/add/remove components, change title, or update state values.',
+        enabled: (agent) => (agent as Nero).interfaceManager.list().length > 0,
+    })
+    @toolparam({
+        key: 'interfaceId',
+        type: 'string',
+        required: true,
+        description: 'The interface ID to update',
+    })
+    @toolparam({
+        key: 'title',
+        type: 'string',
+        required: false,
+        description: 'New window title',
+    })
+    @toolparam({
+        key: 'width',
+        type: 'number',
+        required: false,
+        description: 'New width in pixels',
+    })
+    @toolparam({
+        key: 'height',
+        type: 'number',
+        required: false,
+        description: 'New height in pixels',
+    })
+    @toolparam({
+        key: 'accentColor',
+        type: 'string',
+        required: false,
+        description: 'New accent color',
+    })
+    @toolparam({
+        key: 'components',
+        type: 'string',
+        required: false,
+        description:
+            'JSON array - merges by component ID (matching IDs are replaced, unmatched are kept, new IDs are appended)',
+    })
+    @toolparam({
+        key: 'addComponents',
+        type: 'string',
+        required: false,
+        description: 'JSON array - components to append',
+    })
+    @toolparam({
+        key: 'removeComponentIds',
+        type: 'array',
+        items: { type: 'string' },
+        required: false,
+        description: 'Component IDs to remove',
+    })
+    @toolparam({
+        key: 'state',
+        type: 'string',
+        required: false,
+        description: 'JSON object - state values to merge',
+    })
+    async updateInterface(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const {
+            interfaceId,
+            title,
+            width,
+            height,
+            accentColor,
+            components,
+            addComponents,
+            removeComponentIds,
+            state,
+        } = call.fn_args;
+
+        const iface = this.interfaceManager.get(interfaceId);
+        if (!iface) return `Interface ${interfaceId} not found`;
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'update_interface',
+            displayName: `Update: ${iface.title}`,
+            args: { interfaceId },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            const patch: InterfaceUpdatePatch = {};
+            if (title !== undefined) patch.title = title;
+            if (width !== undefined) patch.width = width;
+            if (height !== undefined) patch.height = height;
+            if (accentColor !== undefined) patch.accentColor = accentColor;
+            if (components)
+                patch.components =
+                    typeof components === 'string' ? JSON.parse(components) : components;
+            if (addComponents)
+                patch.addComponents =
+                    typeof addComponents === 'string' ? JSON.parse(addComponents) : addComponents;
+            if (removeComponentIds) patch.removeComponentIds = removeComponentIds;
+            if (state) patch.state = typeof state === 'string' ? JSON.parse(state) : state;
+
+            this.interfaceManager.update(interfaceId, patch);
+
+            activity.status = 'complete';
+            activity.result = `Interface updated`;
+            this.emitActivity(activity);
+            return `Interface ${interfaceId} updated`;
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Failed to update interface: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description: 'Close and remove a dynamic interface window.',
+        enabled: (agent) => (agent as Nero).interfaceManager.list().length > 0,
+    })
+    @toolparam({
+        key: 'interfaceId',
+        type: 'string',
+        required: true,
+        description: 'The interface ID to close',
+    })
+    async closeInterface(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { interfaceId } = call.fn_args;
+
+        const iface = this.interfaceManager.get(interfaceId);
+        if (!iface) return `Interface ${interfaceId} not found`;
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'close_interface',
+            displayName: `Close: ${iface.title}`,
+            args: { interfaceId },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        this.interfaceManager.close(interfaceId);
+
+        activity.status = 'complete';
+        activity.result = `Interface closed`;
+        this.emitActivity(activity);
+        return `Interface ${interfaceId} closed`;
+    }
+
+    @tool({
+        description:
+            'Move an interface panel to a different display device. Use connected_displays in your context to see available targets.',
+        enabled: (agent) =>
+            (agent as Nero).interfaceManager.list().length > 0 &&
+            (agent as Nero).interfaceManager.getDevices().length > 1,
+    })
+    @toolparam({
+        key: 'interfaceId',
+        type: 'string',
+        required: true,
+        description: 'The interface ID to move',
+    })
+    @toolparam({
+        key: 'targetDevice',
+        type: 'string',
+        required: true,
+        description: 'Name of the display to move the panel to (e.g. "kitchen", "office", "main")',
+    })
+    async moveInterface(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { interfaceId, targetDevice } = call.fn_args;
+
+        const iface = this.interfaceManager.get(interfaceId);
+        if (!iface) return `Interface ${interfaceId} not found`;
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'move_interface',
+            displayName: `Move: ${iface.title} -> ${targetDevice}`,
+            args: { interfaceId, targetDevice },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        const moved = this.interfaceManager.moveToDevice(interfaceId, targetDevice);
+        if (!moved) {
+            activity.status = 'error';
+            activity.error = 'Failed to move interface';
+            this.emitActivity(activity);
+            return 'Failed to move interface';
+        }
+
+        activity.status = 'complete';
+        activity.result = `Moved "${iface.title}" to ${targetDevice}`;
+        this.emitActivity(activity);
+        return `Interface "${iface.title}" moved to display "${targetDevice}"`;
+    }
+
+    @tool({
+        description:
+            'Migrate your active voice session to a different display device. Your full presence (voice + any open interfaces) will move to the target. Use when the user says things like "move to the kitchen" or "come to the office".',
+        enabled: (agent) => {
+            const nero = agent as Nero;
+            return nero.isWebVoiceActive() && nero.interfaceManager.getDevices().length > 1;
+        },
+    })
+    @toolparam({
+        key: 'targetDevice',
+        type: 'string',
+        required: true,
+        description: 'Name of the display to migrate voice to (e.g. "kitchen", "office", "main")',
+    })
+    async migrateVoice(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { targetDevice } = call.fn_args;
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'migrate_voice',
+            displayName: `Moving to ${targetDevice}`,
+            args: { targetDevice },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        if (!this.voiceManager) {
+            activity.status = 'error';
+            activity.error = 'Voice manager not available';
+            this.emitActivity(activity);
+            return 'Voice manager not available';
+        }
+
+        this.voiceManager.startMigration();
+        this._voiceDevice = targetDevice;
+        this._activeDisplay = targetDevice;
+
+        for (const iface of this.interfaceManager.list()) {
+            this.interfaceManager.moveToDevice(iface.id, targetDevice);
+        }
+
+        this.interfaceManager.emitVoiceMigrate(targetDevice);
+        this.interfaceManager.emitPresence(targetDevice);
+
+        activity.status = 'complete';
+        activity.result = `Voice migrating to ${targetDevice}`;
+        this.emitActivity(activity);
+        return `Voice session migrating to display "${targetDevice}". Your presence is moving there now.`;
     }
 
     @tool({

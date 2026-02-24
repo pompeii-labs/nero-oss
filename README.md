@@ -43,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/pompeii-labs/nero-oss/main/install.
 nero setup
 ```
 
-That's it. Nero is running at `http://localhost:4848`.
+That's it. Nero is running at `http://localhost:4848`. Every device on your LAN can reach it at `https://nero.local:4848` -- TLS certs are auto-generated on first run.
 
 ## How You Interact With It
 
@@ -54,6 +54,7 @@ Nero isn't tied to one interface. Every medium shares the same conversation, mem
 | **Terminal** | Interactive REPL or one-shot commands via `nero -m "..."` |
 | **Web Dashboard** | Chat, knowledge graph explorer, logs, settings -- all in a self-hosted UI at `localhost:4848` |
 | **Voice Calls** | Real phone calls with Deepgram STT, ElevenLabs/Hume TTS, and real-time emotion detection |
+| **Displays** | Mount a tablet or spare monitor as a named display -- Nero pushes dynamic UI panels and voice to it |
 | **SMS** | Text it from your phone, get responses back |
 | **iOS App** | Native SwiftUI app with chat, voice mode, and memory management |
 | **Slack** | Message it in Slack with rich Block Kit responses |
@@ -139,13 +140,30 @@ Seven events: `PreToolUse`, `PostToolUse`, `OnPrompt`, `OnResponse`, `OnMainFini
 
 Spawn parallel agents for independent research or build tasks. Each runs in isolation with its own model and context.
 
+### Dynamic Interfaces
+
+Nero can build and push interactive UI to any connected device. Buttons, sliders, toggles, text inputs, lists, progress bars, images -- 12 component types with reactive state bindings. Interfaces support automatic triggers (run on open, poll on interval) and actions that call tools, run commands, or update state.
+
+The agent decides what to build and when. Ask it for a Spotify controller and it builds one. Ask for a system dashboard and it generates a live-updating panel. Ask it to put something on the kitchen display and it moves the interface there.
+
+### Displays
+
+Turn any tablet, phone, or spare monitor into a dedicated Nero display. Open `https://nero.local:4848/display/kitchen` and that device becomes the "kitchen" display. Nero can push interfaces to specific displays and migrate voice between them.
+
+Walk into a room and say "move to the kitchen" -- Nero transfers its voice session to the kitchen display and keeps talking.
+
+### LAN Discovery & Auto-TLS
+
+Nero broadcasts `nero.local` via mDNS and auto-generates TLS certificates on first run. Any device on your LAN can reach it at `https://nero.local:4848` with full secure-context browser APIs (microphone, crypto, etc.).
+
+Certificates are stored in `~/.nero/certs/` and auto-renew before expiry. The CA cert is downloadable at `/ca.crt` for one-time device trust setup. No OpenSSL, no manual cert management.
+
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────┐
-│              Relay (:4848)              │
-│         Single entry point             │
-│     Auth when license key is set       │
+│         Relay (:4848) + Auto-TLS       │
+│   mDNS (nero.local) ─ HTTPS ─ Auth    │
 ├─────────────────────────────────────────┤
 │            Service (:4847)             │
 │                                         │
@@ -164,15 +182,16 @@ Spawn parallel agents for independent research or build tasks. Each runs in isol
 │  │(Playwrt) │ │ Engine  │ │ Thinking │ │
 │  └─────────┘ └─────────┘ └──────────┘ │
 │                                         │
-│  ┌──────────────────────────────────┐  │
-│  │  Knowledge Graph (Embeddings)    │  │
-│  └──────────────────────────────────┘  │
+│  ┌─────────┐ ┌──────────────────────┐  │
+│  │Interface │ │  Knowledge Graph     │  │
+│  │ Manager  │ │  (Embeddings)        │  │
+│  └─────────┘ └──────────────────────┘  │
 ├─────────────────────────────────────────┤
 │           PostgreSQL                    │
 └─────────────────────────────────────────┘
 ```
 
-The relay always runs on port `4848` as the single entry point. The internal service on `127.0.0.1:4847` is never exposed directly. Without a license key, the relay is an open passthrough. With one, it enforces auth for non-private IPs.
+The relay always runs on port `4848` as the single entry point with auto-generated TLS certificates and mDNS broadcasting (`nero.local`). The internal service on `127.0.0.1:4847` is never exposed directly. Without a license key, the relay is an open passthrough. With one, it enforces auth for non-private IPs.
 
 ## Deployment
 
@@ -298,7 +317,7 @@ PRODUCT_BUNDLE_IDENTIFIER = com.yourorg.nero
 CODE_SIGN_STYLE = Automatic
 ```
 
-Open `ios/Nero.xcodeproj` in Xcode, build and run. On first launch, go to Settings and enter your Nero server URL (e.g., `http://192.168.1.100:4848`).
+Open `ios/Nero.xcodeproj` in Xcode, build and run. On first launch, go to Settings and enter your Nero server URL (e.g., `https://nero.local:4848`).
 
 Requires iOS 17+ and Xcode 15+.
 

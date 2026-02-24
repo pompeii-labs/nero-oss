@@ -16,7 +16,7 @@ export class AudioPlayer {
         this.audioContext = new AudioContext({ sampleRate: 48000 });
 
         if (this.audioContext.state === 'suspended') {
-            await this.audioContext.resume();
+            this.audioContext.resume().catch(() => {});
         }
 
         try {
@@ -25,6 +25,21 @@ export class AudioPlayer {
         } catch {
             this.useWorklet = false;
         }
+    }
+
+    async tryResume(): Promise<boolean> {
+        if (!this.audioContext) return false;
+        if ((this.audioContext.state as string) === 'running') return true;
+        try {
+            await this.audioContext.resume();
+            return (this.audioContext.state as string) === 'running';
+        } catch {
+            return false;
+        }
+    }
+
+    get suspended(): boolean {
+        return this.audioContext?.state === 'suspended';
     }
 
     play(int16Array: Int16Array): void {

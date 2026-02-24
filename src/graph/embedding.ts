@@ -13,6 +13,10 @@ function getClient(): OpenAI {
         client = new OpenAI({
             baseURL: OPENROUTER_BASE_URL,
             apiKey,
+            defaultHeaders: {
+                'X-Title': 'Nero',
+                'HTTP-Referer': 'https://nero.pompeiilabs.com',
+            },
         });
     }
     return client;

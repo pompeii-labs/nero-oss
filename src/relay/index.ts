@@ -1,4 +1,5 @@
 import http, { IncomingMessage, ServerResponse } from 'http';
+import https from 'https';
 import crypto from 'crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { URL } from 'url';
@@ -17,6 +18,7 @@ interface RelayConfig {
     targetHost: string;
     targetPort: number;
     licenseKey?: string;
+    tls?: { key: string; cert: string; ca: string };
 }
 
 interface RateLimitEntry {
@@ -25,7 +27,7 @@ interface RateLimitEntry {
 }
 
 export class RelayServer {
-    private server: http.Server;
+    private server: http.Server | https.Server;
     private wss: WebSocketServer;
     private logger = new Logger('Relay');
     private config: RelayConfig;
@@ -44,7 +46,41 @@ export class RelayServer {
 
     constructor(config: RelayConfig) {
         this.config = config;
-        this.server = http.createServer(this.handleHttp.bind(this));
+        if (config.tls) {
+            this.server = https.createServer(
+                { key: config.tls.key, cert: config.tls.cert },
+                this.handleHttp.bind(this),
+            );
+            this.server.on('tlsClientError', (_err, tlsSocket) => {
+                const socket = (tlsSocket as any)._parent as Socket | undefined;
+                if (!socket || !socket.writable) return;
+                socket.once('data', (data) => {
+                    const line = data.toString().split('\r\n')[0] || '';
+                    const match = line.match(/^GET\s+(\S+)/);
+                    const path = match ? match[1] : '/';
+                    if (path === '/ca.crt') {
+                        const body = this.config.tls!.ca;
+                        socket.end(
+                            'HTTP/1.1 200 OK\r\n' +
+                                'Content-Type: application/x-x509-ca-cert\r\n' +
+                                'Content-Disposition: attachment; filename="nero-ca.crt"\r\n' +
+                                `Content-Length: ${Buffer.byteLength(body)}\r\n` +
+                                'Connection: close\r\n\r\n' +
+                                body,
+                        );
+                    } else {
+                        const host = 'nero.local';
+                        socket.end(
+                            'HTTP/1.1 301 Moved Permanently\r\n' +
+                                `Location: https://${host}:${this.port}${path}\r\n` +
+                                'Connection: close\r\n\r\n',
+                        );
+                    }
+                });
+            });
+        } else {
+            this.server = http.createServer(this.handleHttp.bind(this));
+        }
         this.server.keepAliveTimeout = 5_000;
         this.server.headersTimeout = 10_000;
         this.server.on('connection', (socket) => {
@@ -113,9 +149,10 @@ export class RelayServer {
                     reject(err);
                 }
             });
+            const proto = this.config.tls ? 'https' : 'http';
             this.server.listen(this.config.listenPort, this.config.listenHost, () => {
                 this.logger.info(
-                    `[Relay] Listening on http://${this.config.listenHost}:${this.port}`,
+                    `[Relay] Listening on ${proto}://${this.config.listenHost}:${this.port}`,
                 );
                 resolve();
             });
@@ -227,6 +264,15 @@ export class RelayServer {
         if (req.method === 'GET' && url.pathname === '/relay/health') {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ status: 'ok' }));
+            return;
+        }
+
+        if (req.method === 'GET' && url.pathname === '/ca.crt' && this.config.tls) {
+            res.writeHead(200, {
+                'Content-Type': 'application/x-x509-ca-cert',
+                'Content-Disposition': 'attachment; filename="nero-ca.crt"',
+            });
+            res.end(this.config.tls.ca);
             return;
         }
 

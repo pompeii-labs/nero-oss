@@ -21,6 +21,7 @@ import { handleIncomingCall } from '../voice/twilio.js';
 import { VoiceWebSocketManager } from '../voice/websocket.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { createActionsRouter } from './routes/actions.js';
+import { createInterfacesRouter } from './routes/interfaces.js';
 import { createLogsRouter } from './routes/logs.js';
 import { createGraphRouter } from './routes/graph.js';
 import { RelayServer } from '../relay/index.js';
@@ -28,6 +29,8 @@ import { ActionManager } from '../actions/index.js';
 import { AutonomyManager } from '../autonomy/index.js';
 import { initLogFile } from '../util/logger.js';
 import { getNeroHome } from '../config.js';
+import { ensureCerts } from '../tls/certs.js';
+import { startMdns, stopMdns } from '../mdns/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -126,6 +129,7 @@ export class NeroService {
         });
 
         this.wsManager = new VoiceWebSocketManager(this.httpServer, this.config, this.agent);
+        this.agent.voiceManager = this.wsManager;
         this.logger.info('[Voice] WebSocket enabled at /webhook/voice/stream');
 
         if (this.config.voice?.enabled) {
@@ -162,6 +166,7 @@ export class NeroService {
         this.app.use('/api', createChatRouter(this.agent));
         this.app.use('/api', createWebRouter(this.agent, this.port));
         this.app.use('/api', createActionsRouter(this.agent, this.actionManager));
+        this.app.use('/api', createInterfacesRouter(this.agent, this.agent.interfaceManager));
         this.app.use('/api', createLogsRouter());
         this.app.use('/api', createGraphRouter());
 
@@ -248,6 +253,7 @@ export class NeroService {
 
             this.actionManager.shutdown();
             this.autonomyManager.shutdown();
+            stopMdns();
 
             if (this.wsManager) {
                 await this.wsManager.shutdown();
@@ -295,6 +301,8 @@ export class NeroService {
 
         this.autonomyManager.setAgent(this.agent);
 
+        const tls = await ensureCerts();
+
         const relayPort = this.config.relayPort || 4848;
         this.relay = new RelayServer({
             listenHost: this.config.bindHost || '0.0.0.0',
@@ -302,11 +310,18 @@ export class NeroService {
             targetHost: '127.0.0.1',
             targetPort: this.port,
             licenseKey: this.config.licenseKey || undefined,
+            tls: tls || undefined,
         });
         await this.relay.start();
 
+        await startMdns();
+
         this.httpServer.listen(this.port, this.host, () => {
             this.logger.success(`Nero v${VERSION} running on http://${this.host}:${this.port}`);
+            if (tls) {
+                this.logger.info(`[TLS] https://nero.local:${relayPort}`);
+                this.logger.info(`[TLS] CA cert: http://nero.local:${relayPort}/ca.crt`);
+            }
 
             if (this.config.licenseKey) {
                 this.logger.info('[License] Key configured for webhook routing');
