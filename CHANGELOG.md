@@ -2,6 +2,18 @@
 
 All notable changes to Nero are documented here.
 
+## 1.32.1 (2026-02-24)
+
+### Fixes
+
+- Relay reverted to HTTP-only (TLS was breaking CLI and all HTTP clients)
+- Separate HTTPS server on port 443 for LAN access (`https://nero.local` with no port)
+- HTTP redirect server on port 80 serves CA cert at `nero.local/ca.crt` and redirects to HTTPS
+- LAN devices on private IPs are trusted over HTTPS for dashboard and voice access
+- Voice WebSocket support on HTTPS server for secure-context AudioWorklets on LAN devices
+- mDNS now works in Docker with `network_mode: host`
+- Voice migration departure animation no longer gets killed by simultaneous presence update
+
 ## 1.32.0 (2026-02-23)
 
 ### Features

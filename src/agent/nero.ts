@@ -13,8 +13,6 @@ import { readFile, writeFile, readdir, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { execSync, exec } from 'child_process';
 import { promisify } from 'util';
-
-const execAsync = promisify(exec);
 import { join, dirname, resolve, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
@@ -67,6 +65,7 @@ import {
     extractPdfText,
 } from '../files/index.js';
 
+const execAsync = promisify(exec);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 interface ChatResponse {
@@ -142,7 +141,7 @@ export class Nero extends MagmaAgent {
         created_at: Date;
     }> = [];
     private backgroundMode: boolean = false;
-    _currentAutonomySessionId: string | null = null;
+    currentAutonomySessionId: string | null = null;
     private _autonomyInputTokens: number = 0;
     private _autonomyOutputTokens: number = 0;
     private autonomyContext: { activeProjects: number; recentJournal: string[] } | null = null;
@@ -154,6 +153,14 @@ export class Nero extends MagmaAgent {
     voiceManager: import('../voice/websocket.js').VoiceWebSocketManager | null = null;
     private hooksManager: HooksManager;
     private turnToolCount: number = 0;
+    private skillsCache: Skill[] = [];
+    private loadedSkills: Map<string, { skill: Skill; args: string[] }> = new Map();
+    private contextLimit: number = 200000;
+    private currentMedium: 'cli' | 'voice' | 'sms' | 'slack' | 'api' | 'pompeii' = 'cli';
+    private currentCwd: string = process.env.HOST_HOME ? '/host/home' : process.cwd();
+    private _webVoiceActive = false;
+    private _voiceDevice: string = 'main';
+    private _activeDisplay: string = 'main';
 
     constructor(config: NeroConfig) {
         const baseUrl = config.llm.baseUrl || OPENROUTER_BASE_URL;
@@ -201,8 +208,59 @@ export class Nero extends MagmaAgent {
         }
     }
 
-    private skillsCache: Skill[] = [];
-    private loadedSkills: Map<string, { skill: Skill; args: string[] }> = new Map();
+    setMedium(medium: 'cli' | 'voice' | 'sms' | 'slack' | 'api' | 'pompeii'): void {
+        this.currentMedium = medium;
+    }
+
+    getMedium(): string {
+        return this.currentMedium;
+    }
+
+    setWebVoiceActive(active: boolean): void {
+        this._webVoiceActive = active;
+        if (!active) {
+            this._voiceDevice = 'main';
+            this._activeDisplay = 'main';
+            this.interfaceManager.emitPresence('main');
+        }
+    }
+
+    isWebVoiceActive(): boolean {
+        return this._webVoiceActive;
+    }
+
+    setVoiceDevice(device: string): void {
+        this._voiceDevice = device;
+    }
+
+    getVoiceDevice(): string {
+        return this._voiceDevice;
+    }
+
+    getActiveDisplay(): string {
+        return this._activeDisplay;
+    }
+
+    setActiveDisplay(display: string): void {
+        this._activeDisplay = display;
+        this.interfaceManager.emitPresence(display);
+    }
+
+    setCwd(cwd: string): void {
+        this.currentCwd = cwd;
+    }
+
+    getCwd(): string {
+        return this.currentCwd;
+    }
+
+    isProcessing(): boolean {
+        return this._isProcessing;
+    }
+
+    getGraphCache(): ActivatedNode[] {
+        return this.graphCache;
+    }
 
     async setup(): Promise<void> {
         const promptPath = join(__dirname, '../../prompts/main.txt');
@@ -526,8 +584,6 @@ export class Nero extends MagmaAgent {
 
         return total;
     }
-
-    private contextLimit: number = 200000;
 
     private async fetchContextLimit(modelId: string): Promise<void> {
         if (!isOpenRouter(this.config)) {
@@ -1331,7 +1387,7 @@ Keep your response brief -- what you did and any notable results.`;
     ): Promise<AutonomousSessionResult> {
         const savedMessages = this.getMessages();
         this.backgroundMode = true;
-        this._currentAutonomySessionId = sessionId;
+        this.currentAutonomySessionId = sessionId;
         this._autonomyInputTokens = 0;
         this._autonomyOutputTokens = 0;
         this.stream = false;
@@ -1454,7 +1510,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
         } finally {
             this.setMessages(savedMessages);
             this.backgroundMode = false;
-            this._currentAutonomySessionId = null;
+            this.currentAutonomySessionId = null;
         }
     }
 
@@ -1813,62 +1869,6 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
         return `Skill "${name}" unloaded. Its instructions have been removed from your active context.`;
     }
 
-    private currentMedium: 'cli' | 'voice' | 'sms' | 'slack' | 'api' | 'pompeii' = 'cli';
-    private currentCwd: string = process.env.HOST_HOME ? '/host/home' : process.cwd();
-    private _webVoiceActive = false;
-    private _voiceDevice: string = 'main';
-    private _activeDisplay: string = 'main';
-
-    setMedium(medium: 'cli' | 'voice' | 'sms' | 'slack' | 'api' | 'pompeii'): void {
-        this.currentMedium = medium;
-    }
-
-    getMedium(): string {
-        return this.currentMedium;
-    }
-
-    setWebVoiceActive(active: boolean): void {
-        this._webVoiceActive = active;
-        if (!active) {
-            this._voiceDevice = 'main';
-            this._activeDisplay = 'main';
-            this.interfaceManager.emitPresence('main');
-        }
-    }
-
-    isWebVoiceActive(): boolean {
-        return this._webVoiceActive;
-    }
-
-    setVoiceDevice(device: string): void {
-        this._voiceDevice = device;
-    }
-
-    getVoiceDevice(): string {
-        return this._voiceDevice;
-    }
-
-    getActiveDisplay(): string {
-        return this._activeDisplay;
-    }
-
-    setActiveDisplay(display: string): void {
-        this._activeDisplay = display;
-        this.interfaceManager.emitPresence(display);
-    }
-
-    setCwd(cwd: string): void {
-        this.currentCwd = cwd;
-    }
-
-    getCwd(): string {
-        return this.currentCwd;
-    }
-
-    isProcessing(): boolean {
-        return this._isProcessing;
-    }
-
     async callMcpTool(toolName: string, args: Record<string, unknown>): Promise<string> {
         return this.mcpClient.callTool(toolName, args);
     }
@@ -1879,7 +1879,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
         cache_read_tokens?: number;
         cache_write_tokens?: number;
     }): Promise<void> {
-        if (this._currentAutonomySessionId) {
+        if (this.currentAutonomySessionId) {
             this._autonomyInputTokens += usage.input_tokens ?? 0;
             this._autonomyOutputTokens += usage.output_tokens ?? 0;
         }
@@ -1997,10 +1997,6 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
         return this.memoriesCache;
     }
 
-    getGraphCache(): ActivatedNode[] {
-        return this.graphCache;
-    }
-
     private getCurrentActions(): Array<{ request: string; timestamp: string }> {
         return this.actionsCache;
     }
@@ -2103,7 +2099,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
         }
 
         if (this.backgroundMode) {
-            const isAutonomy = !!this._currentAutonomySessionId;
+            const isAutonomy = !!this.currentAutonomySessionId;
             const destructiveAllowed = isAutonomy
                 ? this.config.autonomy.destructive
                 : this.config.proactivity.destructive;
@@ -2764,7 +2760,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
     @tool({
         description:
             'Create a new autonomous project to track ongoing work. Only available during autonomous sessions.',
-        enabled: (agent) => !!(agent as Nero)._currentAutonomySessionId,
+        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
     })
     @toolparam({
         key: 'title',
@@ -2830,7 +2826,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
     @tool({
         description:
             'Update an autonomous project with progress, next steps, or status changes. Only available during autonomous sessions.',
-        enabled: (agent) => !!(agent as Nero)._currentAutonomySessionId,
+        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
     })
     @toolparam({
         key: 'project_id',
@@ -2911,7 +2907,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
     @tool({
         description:
             'Write an entry to your autonomy journal. Records what you did this session for continuity across sessions. Only available during autonomous sessions.',
-        enabled: (agent) => !!(agent as Nero)._currentAutonomySessionId,
+        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
     })
     @toolparam({
         key: 'entry',
@@ -2929,7 +2925,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
         const { entry, project_id } = call.fn_args;
 
         if (!isDbConnected()) return 'Cannot write journal: database not connected';
-        if (!this._currentAutonomySessionId) return 'Not in an autonomous session';
+        if (!this.currentAutonomySessionId) return 'Not in an autonomous session';
 
         const activity: ToolActivity = {
             id: call.id,
@@ -2941,7 +2937,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
 
         try {
             await AutonomyJournal.create({
-                session_id: this._currentAutonomySessionId,
+                session_id: this.currentAutonomySessionId,
                 project_id: project_id || null,
                 entry,
                 tokens_used: 0,
@@ -2963,7 +2959,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
     @tool({
         description:
             'List your autonomous projects, optionally filtered by status. Only available during autonomous sessions.',
-        enabled: (agent) => !!(agent as Nero)._currentAutonomySessionId,
+        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
     })
     @toolparam({
         key: 'status',

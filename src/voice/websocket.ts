@@ -17,12 +17,10 @@ import { NeroConfig } from '../config.js';
 import { HumeEmotionDetector } from './emotion.js';
 import { Logger } from '../util/logger.js';
 import { verifyWsToken } from '../util/wstoken.js';
+import { isLocalAddress, isPrivateAddress } from '../util/network.js';
 
 const logger = new Logger('Voice');
-
-function shouldEnableEmotion(config: NeroConfig): boolean {
-    return !!config.voice.emotionDetection && !!process.env.HUME_API_KEY;
-}
+const SUPPRESS_CONTENT_TAGS = new Set(['caller_emotion']);
 
 interface Connection {
     id: string;
@@ -30,6 +28,10 @@ interface Connection {
     flow?: MagmaFlow;
     active: boolean;
     type: 'twilio' | 'web';
+}
+
+function shouldEnableEmotion(config: NeroConfig): boolean {
+    return !!config.voice.emotionDetection && !!process.env.HUME_API_KEY;
 }
 
 function createSTT(config: NeroConfig): MagmaFlowSpeechToText {
@@ -78,7 +80,9 @@ function createTTS(config: NeroConfig): MagmaFlowTextToSpeech {
     return createTTSByProvider(config.voice.tts.provider, config);
 }
 
-const SUPPRESS_CONTENT_TAGS = new Set(['caller_emotion']);
+function stripTags(text: string): string {
+    return text.replace(/<[^>]*>/g, '');
+}
 
 class StreamTagStripper {
     private pending = '';
@@ -134,10 +138,6 @@ class StreamTagStripper {
     }
 }
 
-function stripTags(text: string): string {
-    return text.replace(/<[^>]*>/g, '');
-}
-
 export class VoiceWebSocketManager {
     private twilioWss: WebSocketServer;
     private webWss: WebSocketServer;
@@ -159,17 +159,27 @@ export class VoiceWebSocketManager {
 
         console.log(chalk.dim(`[voice] VoiceWebSocketManager initialized`));
 
+        this.attachServer(server);
+
+        this.twilioWss.on('connection', (ws, req) => this.handleTwilio(ws, req));
+        this.twilioWss.on('error', (err) => console.error(chalk.red(`[twilio-ws] ${err.message}`)));
+
+        this.webWss.on('connection', (ws, req) => this.handleWebVoice(ws, req));
+        this.webWss.on('error', (err) => console.error(chalk.red(`[web-ws] ${err.message}`)));
+
+        this.startHeartbeat();
+    }
+
+    attachServer(server: HttpServer): void {
         server.on('upgrade', (request, socket, head) => {
             const url = new URL(request.url!, `http://${request.headers.host}`);
             const pathname = url.pathname;
 
             console.log(chalk.dim(`[voice] WebSocket upgrade: ${pathname}`));
 
-            const isLocal = (() => {
-                const ip = request.socket.remoteAddress || '';
-                const normalized = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
-                return normalized === '127.0.0.1' || normalized === '::1';
-            })();
+            const ip = request.socket.remoteAddress || '';
+            const isSecure = !!(request.socket as any).encrypted;
+            const isLocal = isLocalAddress(ip) || (isSecure && isPrivateAddress(ip));
 
             if (pathname.startsWith('/webhook/voice/stream/token=')) {
                 const tokenMatch = pathname.match(/\/token=([^/]+)/);
@@ -209,14 +219,6 @@ export class VoiceWebSocketManager {
                 socket.destroy();
             }
         });
-
-        this.twilioWss.on('connection', (ws, req) => this.handleTwilio(ws, req));
-        this.twilioWss.on('error', (err) => console.error(chalk.red(`[twilio-ws] ${err.message}`)));
-
-        this.webWss.on('connection', (ws, req) => this.handleWebVoice(ws, req));
-        this.webWss.on('error', (err) => console.error(chalk.red(`[web-ws] ${err.message}`)));
-
-        this.startHeartbeat();
     }
 
     private startHeartbeat(): void {

@@ -9,21 +9,6 @@ import { join, dirname, extname } from 'path';
 import { homedir } from 'os';
 import { hostToContainer, containerToHost } from '../util/paths.js';
 
-export function resolveToolPath(inputPath: string, cwd: string): string {
-    const hostHome = process.env.HOST_HOME || '';
-    let resolved = inputPath;
-
-    if (resolved.startsWith('~')) {
-        resolved = hostHome ? resolved.replace('~', hostHome) : resolved.replace('~', homedir());
-    }
-
-    if (!resolved.startsWith('/')) {
-        resolved = join(cwd, resolved);
-    }
-
-    return hostToContainer(resolved);
-}
-
 export interface SubagentTask {
     id: string;
     task: string;
@@ -45,6 +30,21 @@ export interface SubagentConfig {
 }
 
 const MAX_TOOL_OUTPUT = 10000;
+
+export function resolveToolPath(inputPath: string, cwd: string): string {
+    const hostHome = process.env.HOST_HOME || '';
+    let resolved = inputPath;
+
+    if (resolved.startsWith('~')) {
+        resolved = hostHome ? resolved.replace('~', hostHome) : resolved.replace('~', homedir());
+    }
+
+    if (!resolved.startsWith('/')) {
+        resolved = join(cwd, resolved);
+    }
+
+    return hostToContainer(resolved);
+}
 
 function truncateResult(result: string): string {
     if (result.length > MAX_TOOL_OUTPUT) {

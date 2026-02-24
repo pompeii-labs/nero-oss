@@ -1,10 +1,12 @@
 import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
+import { isLocalAddress, isPrivateAddress } from '../../util/network.js';
 
 function isLocalRequest(req: Request): boolean {
     const ip = req.socket.remoteAddress || req.ip || '';
-    const normalized = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
-    return normalized === '127.0.0.1' || normalized === '::1';
+    if (isLocalAddress(ip)) return true;
+    if (req.secure && isPrivateAddress(ip)) return true;
+    return false;
 }
 
 function verifyKey(provided: string, expected: string): boolean {

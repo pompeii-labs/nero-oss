@@ -281,7 +281,6 @@ function migrateV0ToV1(config: Record<string, unknown>): void {
 }
 
 function migrateConfig(rawConfig: unknown): { config: Record<string, unknown>; migrated: boolean } {
-    console.log('Migrating config');
     if (!rawConfig || typeof rawConfig !== 'object' || Array.isArray(rawConfig)) {
         return { config: {}, migrated: false };
     }

@@ -207,7 +207,7 @@
             <div class="absolute bottom-1/3 right-1/4 w-64 h-64 bg-nero-cyan/3 rounded-full blur-3xl"></div>
         </div>
 
-        {#if neroIsHere}
+        {#if neroIsHere || voice.migrating === 'departing'}
             <div class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none {voice.migrating === 'departing' ? 'migrate-depart' : ''} {voice.migrating === 'arriving' ? 'migrate-arrive' : ''}">
                 <div class="pointer-events-auto w-[300px] h-[300px]">
                     <NeroSphere

@@ -127,7 +127,7 @@
 </svelte:head>
 
 <div class="display-canvas">
-    {#if neroIsHere}
+    {#if neroIsHere || voice.migrating === 'departing'}
         {#if voice.isConnected || voice.migrating === 'departing'}
             <div class="voice-overlay {voice.migrating === 'departing' ? 'migrate-depart' : ''} {voice.migrating === 'arriving' ? 'migrate-arrive' : ''}">
                 <div class="w-[250px] h-[250px]">

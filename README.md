@@ -43,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/pompeii-labs/nero-oss/main/install.
 nero setup
 ```
 
-That's it. Nero is running at `http://localhost:4848`. Every device on your LAN can reach it at `https://nero.local:4848` -- TLS certs are auto-generated on first run.
+That's it. Nero is running at `http://localhost:4848`. Every device on your LAN can reach it at `https://nero.local` -- TLS certs are auto-generated on first run.
 
 ## How You Interact With It
 
@@ -148,22 +148,25 @@ The agent decides what to build and when. Ask it for a Spotify controller and it
 
 ### Displays
 
-Turn any tablet, phone, or spare monitor into a dedicated Nero display. Open `https://nero.local:4848/display/kitchen` and that device becomes the "kitchen" display. Nero can push interfaces to specific displays and migrate voice between them.
+Turn any tablet, phone, or spare monitor into a dedicated Nero display. Open `https://nero.local/display/kitchen` and that device becomes the "kitchen" display. Nero can push interfaces to specific displays and migrate voice between them.
 
 Walk into a room and say "move to the kitchen" -- Nero transfers its voice session to the kitchen display and keeps talking.
 
 ### LAN Discovery & Auto-TLS
 
-Nero broadcasts `nero.local` via mDNS and auto-generates TLS certificates on first run. Any device on your LAN can reach it at `https://nero.local:4848` with full secure-context browser APIs (microphone, crypto, etc.).
+Nero broadcasts `nero.local` via mDNS and auto-generates TLS certificates on first run. A dedicated HTTPS server runs on port 443, so any device on your LAN can reach it at `https://nero.local` with full secure-context browser APIs (microphone, crypto, etc.).
 
-Certificates are stored in `~/.nero/certs/` and auto-renew before expiry. The CA cert is downloadable at `/ca.crt` for one-time device trust setup. No OpenSSL, no manual cert management.
+New devices need to trust the CA certificate once. On the device, open `nero.local/ca.crt` in a browser to download it, then install it in your device's certificate trust settings. After that, `https://nero.local` works without warnings.
+
+Certificates are stored in `~/.nero/certs/` and auto-renew before expiry. No OpenSSL, no manual cert management.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────┐
-│         Relay (:4848) + Auto-TLS       │
-│   mDNS (nero.local) ─ HTTPS ─ Auth    │
+│   Relay (:4848 HTTP) ─ Auth ─ Proxy    │
+│   HTTPS (:443) ─ Auto-TLS ─ LAN       │
+│   mDNS (nero.local)                    │
 ├─────────────────────────────────────────┤
 │            Service (:4847)             │
 │                                         │
@@ -191,7 +194,7 @@ Certificates are stored in `~/.nero/certs/` and auto-renew before expiry. The CA
 └─────────────────────────────────────────┘
 ```
 
-The relay always runs on port `4848` as the single entry point with auto-generated TLS certificates and mDNS broadcasting (`nero.local`). The internal service on `127.0.0.1:4847` is never exposed directly. Without a license key, the relay is an open passthrough. With one, it enforces auth for non-private IPs.
+The HTTP relay on port `4848` is the primary entry point for the CLI, API, and remote tunnels. A separate HTTPS server on port `443` provides TLS for LAN devices (so `https://nero.local` works without a port). Both proxy to the internal service on `127.0.0.1:4847`, which is never exposed directly. mDNS broadcasts `nero.local` for zero-config LAN discovery. Without a license key, the relay is an open passthrough. With one, it enforces auth for non-private IPs.
 
 ## Deployment
 
@@ -317,7 +320,7 @@ PRODUCT_BUNDLE_IDENTIFIER = com.yourorg.nero
 CODE_SIGN_STYLE = Automatic
 ```
 
-Open `ios/Nero.xcodeproj` in Xcode, build and run. On first launch, go to Settings and enter your Nero server URL (e.g., `https://nero.local:4848`).
+Open `ios/Nero.xcodeproj` in Xcode, build and run. On first launch, go to Settings and enter your Nero server URL (e.g., `https://nero.local`).
 
 Requires iOS 17+ and Xcode 15+.
 

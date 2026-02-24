@@ -18,11 +18,6 @@ function getLanIp(): string | null {
 }
 
 export async function startMdns(): Promise<void> {
-    if (process.env.HOST_HOME) {
-        logger.debug('Docker detected, skipping mDNS (use --net=host for mDNS in Docker)');
-        return;
-    }
-
     const ip = getLanIp();
     if (!ip) {
         logger.warn('No LAN IP found, skipping mDNS');

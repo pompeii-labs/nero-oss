@@ -36,8 +36,6 @@ interface PendingPermission {
     timeout: NodeJS.Timeout;
 }
 
-const pendingPermissions = new Map<string, PendingPermission>();
-
 async function registerWorkspace(cwdPath: string, detectedFrom: string): Promise<void> {
     if (!isDbConnected()) return;
 
@@ -48,6 +46,7 @@ async function registerWorkspace(cwdPath: string, detectedFrom: string): Promise
 export function createChatRouter(agent: Nero) {
     const router = Router();
     const logger = new Logger('Chat');
+    const pendingPermissions = new Map<string, PendingPermission>();
 
     router.post('/permission/:id', (req: Request, res: Response) => {
         const id = req.params.id as string;

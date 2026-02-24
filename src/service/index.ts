@@ -1,5 +1,6 @@
 import express, { Express, Request, Response, RequestHandler } from 'express';
 import { createServer, Server as HTTPServer } from 'http';
+import https from 'https';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -29,8 +30,9 @@ import { ActionManager } from '../actions/index.js';
 import { AutonomyManager } from '../autonomy/index.js';
 import { initLogFile } from '../util/logger.js';
 import { getNeroHome } from '../config.js';
-import { ensureCerts } from '../tls/certs.js';
+import { ensureCerts, TlsCerts } from '../tls/certs.js';
 import { startMdns, stopMdns } from '../mdns/index.js';
+import { isLocalAddress, isPrivateAddress } from '../util/network.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -43,10 +45,14 @@ export class NeroService {
     private wsManager: VoiceWebSocketManager | null = null;
     private licensePollInterval: NodeJS.Timeout | null = null;
     private relay: RelayServer | null = null;
+    private httpsServer: https.Server | null = null;
+    private httpRedirectServer: HTTPServer | null = null;
     private actionManager: ActionManager;
     private autonomyManager: AutonomyManager;
     private readonly port: number;
     private readonly host: string;
+    private webDistPath: string | null = null;
+    private tlsCerts: TlsCerts | null = null;
 
     constructor(port: number, config: NeroConfig) {
         this.port = port;
@@ -139,6 +145,16 @@ export class NeroService {
             this.logger.info('[Voice] Twilio webhook enabled at /webhook/voice');
         }
 
+        this.app.get('/ca.crt', (req: Request, res: Response) => {
+            if (!this.tlsCerts) {
+                res.status(404).json({ error: 'TLS not available' });
+                return;
+            }
+            res.set('Content-Type', 'application/x-x509-ca-cert');
+            res.set('Content-Disposition', 'attachment; filename="nero-ca.crt"');
+            res.send(this.tlsCerts.ca);
+        });
+
         this.app.get('/', (req: Request, res: Response, next) => {
             if (this.isLocalRequest(req)) {
                 return next();
@@ -194,12 +210,11 @@ export class NeroService {
         this.setupSpaFallback();
     }
 
-    private webDistPath: string | null = null;
-
     private isLocalRequest(req: Request): boolean {
         const ip = req.socket.remoteAddress || req.ip || '';
-        const normalized = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
-        return normalized === '127.0.0.1' || normalized === '::1';
+        if (isLocalAddress(ip)) return true;
+        if (req.secure && isPrivateAddress(ip)) return true;
+        return false;
     }
 
     private setupStaticServing(): void {
@@ -264,6 +279,16 @@ export class NeroService {
                 this.relay = null;
             }
 
+            if (this.httpsServer) {
+                this.httpsServer.close();
+                this.httpsServer = null;
+            }
+
+            if (this.httpRedirectServer) {
+                this.httpRedirectServer.close();
+                this.httpRedirectServer = null;
+            }
+
             await this.agent.cleanup();
 
             this.httpServer.close(() => {
@@ -301,7 +326,7 @@ export class NeroService {
 
         this.autonomyManager.setAgent(this.agent);
 
-        const tls = await ensureCerts();
+        this.tlsCerts = await ensureCerts();
 
         const relayPort = this.config.relayPort || 4848;
         this.relay = new RelayServer({
@@ -310,18 +335,17 @@ export class NeroService {
             targetHost: '127.0.0.1',
             targetPort: this.port,
             licenseKey: this.config.licenseKey || undefined,
-            tls: tls || undefined,
         });
         await this.relay.start();
+
+        if (this.tlsCerts) {
+            await this.startHttpsServer(this.tlsCerts);
+        }
 
         await startMdns();
 
         this.httpServer.listen(this.port, this.host, () => {
             this.logger.success(`Nero v${VERSION} running on http://${this.host}:${this.port}`);
-            if (tls) {
-                this.logger.info(`[TLS] https://nero.local:${relayPort}`);
-                this.logger.info(`[TLS] CA cert: http://nero.local:${relayPort}/ca.crt`);
-            }
 
             if (this.config.licenseKey) {
                 this.logger.info('[License] Key configured for webhook routing');
@@ -331,6 +355,81 @@ export class NeroService {
             }
 
             this.checkForUpdates();
+        });
+    }
+
+    private startHttpsServer(tls: TlsCerts): Promise<void> {
+        return new Promise((resolve) => {
+            const server = https.createServer({ key: tls.key, cert: tls.cert }, this.app);
+            this.httpsServer = server;
+
+            if (this.wsManager) {
+                this.wsManager.attachServer(server);
+            }
+
+            const bindHost = this.config.bindHost || '0.0.0.0';
+
+            const tryListen = (port: number, fallback?: number) => {
+                server.once('error', (err: NodeJS.ErrnoException) => {
+                    if (err.code === 'EADDRINUSE' || err.code === 'EACCES') {
+                        if (fallback) {
+                            this.logger.debug(`[TLS] Port ${port} unavailable, trying ${fallback}`);
+                            tryListen(fallback);
+                        } else {
+                            this.logger.warn(
+                                `[TLS] Could not bind to port ${port}, HTTPS disabled`,
+                            );
+                            this.httpsServer = null;
+                            resolve();
+                        }
+                    }
+                });
+                server.listen(port, bindHost, () => {
+                    const addr = server.address();
+                    const actualPort = addr && typeof addr === 'object' ? addr.port : port;
+                    if (actualPort === 443) {
+                        this.logger.info(`[TLS] https://nero.local`);
+                    } else {
+                        this.logger.info(`[TLS] https://nero.local:${actualPort}`);
+                    }
+                    this.startHttpRedirect(tls, bindHost, actualPort);
+                    resolve();
+                });
+            };
+
+            tryListen(443, 4849);
+        });
+    }
+
+    private startHttpRedirect(tls: TlsCerts, bindHost: string, httpsPort: number): void {
+        const httpsBase =
+            httpsPort === 443 ? 'https://nero.local' : `https://nero.local:${httpsPort}`;
+
+        const redirect = createServer((req, res) => {
+            if (req.method === 'GET' && req.url === '/ca.crt') {
+                res.writeHead(200, {
+                    'Content-Type': 'application/x-x509-ca-cert',
+                    'Content-Disposition': 'attachment; filename="nero-ca.crt"',
+                });
+                res.end(tls.ca);
+                return;
+            }
+            res.writeHead(301, { Location: `${httpsBase}${req.url || '/'}` });
+            res.end();
+        });
+
+        redirect.once('error', (err: NodeJS.ErrnoException) => {
+            if (err.code === 'EADDRINUSE' || err.code === 'EACCES') {
+                this.logger.debug(`[TLS] Port 80 unavailable, skipping HTTP redirect`);
+                this.logger.info(
+                    `[TLS] CA cert: http://nero.local:${this.config.relayPort || 4848}/ca.crt`,
+                );
+            }
+        });
+
+        redirect.listen(80, bindHost, () => {
+            this.httpRedirectServer = redirect;
+            this.logger.info(`[TLS] nero.local/ca.crt -> install CA cert`);
         });
     }
 
