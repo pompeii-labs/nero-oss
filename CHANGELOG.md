@@ -2,6 +2,21 @@
 
 All notable changes to Nero are documented here.
 
+## 1.32.0 (2026-02-23)
+
+### Features
+
+- Dynamic interface system: agents can create, update, and close rich UI panels on any connected display using component primitives (buttons, sliders, toggles, text inputs, selects, images, progress bars, lists, grids, flex layouts)
+- Display pages (`/display/:name`) for dedicated screens (tablets, monitors) that receive targeted interfaces via SSE
+- Interface actions: tool calls, shell commands, state updates, streaming output with kill support
+- Voice migration: `migrate_voice` tool moves active voice session between displays with departure/arrival animations
+- Presence system: Nero has a single active display location at all times, only that screen shows the sphere, all others show a "Draw Nero here" nudge button
+- Presence API (`GET/POST /api/presence`) for querying and changing where Nero is
+- iOS PresenceManager with SSE-based presence tracking, nudge support, and automatic voice migration
+- Auto-TLS: self-signed CA and leaf certificates generated on first run for HTTPS relay
+- mDNS responder: Nero advertises as `nero.local` on the LAN
+- Interface triggers: `onOpen` and `interval` triggers for automatic action execution
+
 ## 1.31.2 (2026-02-23)
 
 ### Fixes
