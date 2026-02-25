@@ -292,14 +292,8 @@ export class VoiceWebSocketManager {
 
                     this.agent.setMedium('voice');
 
-                    let toolMessageSent = false;
                     this.agent.setActivityCallback((activity) => {
                         logger.tool(activity);
-                        if (activity.status === 'running' && !toolMessageSent) {
-                            toolMessageSent = true;
-                            flow?.inputText('Hold on, let me check that.');
-                            flow?.inputText(null as unknown as string);
-                        }
                     });
 
                     let messageText = output.text;
@@ -484,16 +478,10 @@ export class VoiceWebSocketManager {
 
                     this.agent.setMedium('voice');
 
-                    let toolMessageSent = false;
                     this.agent.setActivityCallback((activity) => {
                         logger.tool(activity);
                         if (ws.readyState === WebSocket.OPEN) {
                             ws.send(JSON.stringify({ type: 'activity', data: activity }));
-                        }
-                        if (activity.status === 'running' && !toolMessageSent) {
-                            toolMessageSent = true;
-                            flow?.inputText('Hold on, let me check that.');
-                            flow?.inputText(null as unknown as string);
                         }
                     });
 

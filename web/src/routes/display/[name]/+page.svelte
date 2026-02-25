@@ -127,74 +127,72 @@
 </svelte:head>
 
 <div class="display-canvas">
-    {#if neroIsHere || voice.migrating === 'departing'}
-        {#if voice.isConnected || voice.migrating === 'departing'}
-            <div class="voice-overlay {voice.migrating === 'departing' ? 'migrate-depart' : ''} {voice.migrating === 'arriving' ? 'migrate-arrive' : ''}">
-                <div class="w-[250px] h-[250px]">
-                    <NeroSphere
-                        status={voice.status}
-                        rmsLevel={voice.rmsLevel}
-                        isTalking={voice.isTalking}
-                        isProcessing={voice.isProcessing}
-                        isMuted={voice.isMuted}
-                        outputRms={voice.outputRms}
-                        onclick={() => {}}
-                    />
-                </div>
-                {#if voice.transcript}
-                    <p class="text-sm text-muted-foreground/60 mt-4 max-w-md text-center">{voice.transcript}</p>
-                {/if}
-                {#if voice.audioSuspended}
+    {#if voice.isConnected || voice.migrating === 'departing'}
+        <div class="voice-overlay {voice.migrating === 'departing' ? 'migrate-depart' : ''} {voice.migrating === 'arriving' ? 'migrate-arrive' : ''}">
+            <div class="w-[250px] h-[250px]">
+                <NeroSphere
+                    status={voice.status}
+                    rmsLevel={voice.rmsLevel}
+                    isTalking={voice.isTalking}
+                    isProcessing={voice.isProcessing}
+                    isMuted={voice.isMuted}
+                    outputRms={voice.outputRms}
+                    onclick={() => {}}
+                />
+            </div>
+            {#if voice.transcript}
+                <p class="text-sm text-muted-foreground/60 mt-4 max-w-md text-center">{voice.transcript}</p>
+            {/if}
+            {#if voice.audioSuspended}
+                <button
+                    type="button"
+                    onclick={voice.resumeAudio}
+                    class="audio-enable-btn mt-6"
+                >
+                    <Volume2 class="h-4 w-4" />
+                    <span>Tap to enable audio</span>
+                </button>
+            {:else}
+                <div class="flex items-center gap-3 mt-6">
                     <button
                         type="button"
-                        onclick={voice.resumeAudio}
-                        class="audio-enable-btn mt-6"
+                        onclick={voice.toggleMute}
+                        class="flex h-11 w-11 items-center justify-center rounded-full transition-all {voice.isMuted ? 'bg-red-500/20 border border-red-500/40 text-red-400' : 'bg-card/50 border border-border/50 text-primary hover:border-primary/40'}"
                     >
-                        <Volume2 class="h-4 w-4" />
-                        <span>Tap to enable audio</span>
+                        {#if voice.isMuted}
+                            <MicOff class="h-5 w-5" />
+                        {:else}
+                            <Mic class="h-5 w-5" />
+                        {/if}
                     </button>
-                {:else}
-                    <div class="flex items-center gap-3 mt-6">
-                        <button
-                            type="button"
-                            onclick={voice.toggleMute}
-                            class="flex h-11 w-11 items-center justify-center rounded-full transition-all {voice.isMuted ? 'bg-red-500/20 border border-red-500/40 text-red-400' : 'bg-card/50 border border-border/50 text-primary hover:border-primary/40'}"
-                        >
-                            {#if voice.isMuted}
-                                <MicOff class="h-5 w-5" />
-                            {:else}
-                                <Mic class="h-5 w-5" />
-                            {/if}
-                        </button>
-                        <button
-                            type="button"
-                            onclick={voice.disconnect}
-                            class="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/20 border border-red-500/40 text-red-400 transition-all hover:bg-red-500/30"
-                        >
-                            <PhoneOff class="h-5 w-5" />
-                        </button>
-                    </div>
-                {/if}
-            </div>
-        {:else if panels.size === 0}
-            <div class="empty-state">
-                <div class="empty-icon">
-                    <Monitor class="h-10 w-10 text-primary/40" />
+                    <button
+                        type="button"
+                        onclick={voice.disconnect}
+                        class="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/20 border border-red-500/40 text-red-400 transition-all hover:bg-red-500/30"
+                    >
+                        <PhoneOff class="h-5 w-5" />
+                    </button>
                 </div>
-                <h2 class="text-lg font-medium text-foreground/70 mt-4">{displayName}</h2>
-                <p class="text-sm text-muted-foreground/50 mt-1">Nero is here. Waiting for interfaces...</p>
-                <div class="flex items-center gap-2 mt-4 text-xs text-muted-foreground/30">
-                    <div class="w-1.5 h-1.5 rounded-full bg-green-500/60 animate-pulse"></div>
-                    <span>Connected as display</span>
-                </div>
+            {/if}
+        </div>
+    {:else if panels.size > 0}
+        <div class="panels-grid">
+            {#each [...panels.values()] as schema (schema.id)}
+                <DisplayPanel {schema} onClose={closePanel} />
+            {/each}
+        </div>
+    {:else if neroIsHere}
+        <div class="empty-state">
+            <div class="empty-icon">
+                <Monitor class="h-10 w-10 text-primary/40" />
             </div>
-        {:else}
-            <div class="panels-grid">
-                {#each [...panels.values()] as schema (schema.id)}
-                    <DisplayPanel {schema} onClose={closePanel} />
-                {/each}
+            <h2 class="text-lg font-medium text-foreground/70 mt-4">{displayName}</h2>
+            <p class="text-sm text-muted-foreground/50 mt-1">Nero is here. Waiting for interfaces...</p>
+            <div class="flex items-center gap-2 mt-4 text-xs text-muted-foreground/30">
+                <div class="w-1.5 h-1.5 rounded-full bg-green-500/60 animate-pulse"></div>
+                <span>Connected as display</span>
             </div>
-        {/if}
+        </div>
     {:else}
         <div class="empty-state">
             <div class="empty-icon">

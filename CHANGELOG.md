@@ -2,6 +2,14 @@
 
 All notable changes to Nero are documented here.
 
+## 1.32.3 (2026-02-24)
+
+### Fixes
+
+- Display pages now render interfaces targeted to them regardless of Nero's active presence location
+- Removed hardcoded "Hold on, let me check that" filler phrase during voice tool calls; model now naturally decides what to say (or not say) before tool execution
+- Added diagnostic logging for empty tool call arguments from LLM providers
+
 ## 1.32.2 (2026-02-24)
 
 ### Fixes

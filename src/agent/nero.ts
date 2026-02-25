@@ -4073,6 +4073,14 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
             'JSON array of triggers that fire automatically. Types: {type:"onOpen",action} fires once when interface opens, {type:"interval",action,intervalMs} fires immediately then repeats (min 10s). Actions are same as button actions (tool, command, stream, etc).',
     })
     async createInterface(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        if (!call.fn_args || Object.keys(call.fn_args).length === 0) {
+            console.error(
+                '[createInterface] EMPTY fn_args! fn_name:',
+                call.fn_name,
+                'fn_args_buffer:',
+                call.fn_args_buffer?.slice(0, 200),
+            );
+        }
         const { title, width, height, accentColor, components, state, triggers, targetDevice } =
             call.fn_args;
 
