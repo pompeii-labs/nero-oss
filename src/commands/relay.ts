@@ -125,8 +125,6 @@ async function registerTunnelUrlWithBackend(tunnelUrl: string): Promise<void> {
     } catch (error) {
         console.error(chalk.red(`Auto-register failed: ${(error as Error).message}`));
     }
-
-    await updatePompeiiWebhookUrl(tunnelUrl);
 }
 
 async function runTunnelStart(
@@ -274,6 +272,7 @@ async function runTunnelStart(
         console.log(chalk.dim(`  Running in background (PID: ${proc.pid})`));
         console.log(chalk.dim(`  Run \`${context.stopHint}\` to stop.\n`));
         await registerTunnelUrlWithBackend(url);
+        await updatePompeiiWebhookUrl(url);
         if (context.onDaemonStarted) {
             await context.onDaemonStarted(state);
         }
@@ -534,6 +533,7 @@ export function registerRelayCommands(program: Command) {
 
                 try {
                     await registerTunnelUrlWithBackend(state.url);
+                    await updatePompeiiWebhookUrl(state.url);
                 } catch {}
             };
 

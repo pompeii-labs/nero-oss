@@ -237,7 +237,8 @@ export class RelayServer {
 
         if (this.config.licenseKey) {
             const ip = this.getClientIp(req);
-            const needsAuth = !this.isPrivateIp(ip);
+            const isWebhook = url.pathname.startsWith('/webhook/');
+            const needsAuth = !this.isPrivateIp(ip) && !isWebhook;
 
             if (needsAuth) {
                 if (this.isRateLimited(ip)) {

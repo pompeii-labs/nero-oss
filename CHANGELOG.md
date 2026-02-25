@@ -2,6 +2,13 @@
 
 All notable changes to Nero are documented here.
 
+## 1.32.6 (2026-02-25)
+
+### Fixes
+
+- Relay now exempts `/webhook/*` paths from license key auth (webhooks use their own signature verification)
+- Pompeii webhook URL now refreshes independently in the relay watcher, no longer gated by license key
+
 ## 1.32.5 (2026-02-25)
 
 ### Fixes
