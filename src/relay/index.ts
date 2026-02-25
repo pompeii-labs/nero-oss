@@ -281,6 +281,9 @@ export class RelayServer {
             },
             (upstreamRes) => {
                 res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
+                if (upstreamRes.headers['content-type']?.includes('text/event-stream')) {
+                    res.flushHeaders();
+                }
                 upstreamRes.pipe(res);
             },
         );

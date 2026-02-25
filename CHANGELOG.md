@@ -2,6 +2,12 @@
 
 All notable changes to Nero are documented here.
 
+## 1.32.7 (2026-02-25)
+
+### Fixes
+
+- Relay now flushes SSE response headers immediately to prevent cloudflared tunnel timeouts
+
 ## 1.32.6 (2026-02-25)
 
 ### Fixes
