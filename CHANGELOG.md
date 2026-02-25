@@ -2,6 +2,12 @@
 
 All notable changes to Nero are documented here.
 
+## 1.32.4 (2026-02-25)
+
+### Fixes
+
+- Bump @pompeii-labs/magma to 1.8.3: fixes streaming tool call arguments from OpenAI-compatible providers (e.g. OpenRouter) where the first chunk omits `function.arguments`, causing all tool args to be empty
+
 ## 1.32.3 (2026-02-24)
 
 ### Fixes

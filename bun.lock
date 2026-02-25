@@ -9,7 +9,7 @@
         "@modelcontextprotocol/sdk": "^1.25.1",
         "@openrouter/sdk": "^0.2.9",
         "@pompeii-labs/audio": "^0.3.1",
-        "@pompeii-labs/magma": "^1.8.2",
+        "@pompeii-labs/magma": "1.8.3",
         "@toon-format/toon": "^2.1.0",
         "chalk": "^5.4.1",
         "cli-spinners": "^3.0.0",
@@ -288,7 +288,7 @@
 
     "@pompeii-labs/audio": ["@pompeii-labs/audio@0.3.1", "", { "dependencies": { "@deepgram/sdk": "4.2.0", "hume": "0.15.13", "openai": "4.86.2" }, "peerDependencies": { "ws": "^8.0.0" } }, "sha512-JT52bEdQ9jYjsAn+QcbC6dHzwf47rz4jnshSs4iajprkxnNr65DEOPsMg+A6ZQvX/2aDlHa3euij1Yq/UeB2KA=="],
 
-    "@pompeii-labs/magma": ["@pompeii-labs/magma@1.8.2", "", { "dependencies": { "@anthropic-ai/sdk": "~0.39.0", "@google/generative-ai": "~0.24.0", "@types/express": "~5.0.1", "dotenv": "^16.4.5", "groq-sdk": "~0.15.0", "node-cron": "^3.0.3", "openai": "~4.86.2", "ws": "~8.18.0" } }, "sha512-86EiPYFSpuwxTy0hbh9L/xZXKsbFR0waus0QBbJjq9E4CdQivEQfveAD99SOhMixMjl+Dubepr3UhYYd5jVdBA=="],
+    "@pompeii-labs/magma": ["@pompeii-labs/magma@1.8.3", "", { "dependencies": { "@anthropic-ai/sdk": "~0.39.0", "@google/generative-ai": "~0.24.0", "@types/express": "~5.0.1", "dotenv": "^16.4.5", "groq-sdk": "~0.15.0", "node-cron": "^3.0.3", "openai": "~4.86.2", "ws": "~8.18.0" } }, "sha512-MBwLTuh1E5v+ugWCVRSo3Y/nOG0hdL3Q1/eiAd8i6nC8b1uYGV/V/oELHCukYr7QYJpvDB0nE4aXT21igtIprA=="],
 
     "@toon-format/toon": ["@toon-format/toon@2.1.0", "", {}, "sha512-JwWptdF5eOA0HaQxbKAzkpQtR4wSWTEfDlEy/y3/4okmOAX1qwnpLZMmtEWr+ncAhTTY1raCKH0kteHhSXnQqg=="],
 
