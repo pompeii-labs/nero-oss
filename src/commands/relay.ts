@@ -214,7 +214,7 @@ async function runTunnelStart(
         const proc = spawn(
             tool === 'cloudflared' ? 'cloudflared' : 'ngrok',
             tool === 'cloudflared'
-                ? ['tunnel', '--url', `http://localhost:${port}`]
+                ? ['tunnel', '--url', `http://127.0.0.1:${port}`]
                 : ['http', port],
             {
                 stdio: ['ignore', logFd, logFd],

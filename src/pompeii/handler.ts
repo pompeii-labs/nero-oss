@@ -58,7 +58,6 @@ export async function handlePompeii(req: Request, res: Response, agent: Nero): P
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
     const heartbeat = setInterval(() => {

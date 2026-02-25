@@ -280,8 +280,11 @@ export class RelayServer {
                 headers: forwardHeaders,
             },
             (upstreamRes) => {
-                res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
-                if (upstreamRes.headers['content-type']?.includes('text/event-stream')) {
+                const headers = { ...upstreamRes.headers };
+                delete headers['transfer-encoding'];
+                delete headers['connection'];
+                res.writeHead(upstreamRes.statusCode || 502, headers);
+                if (headers['content-type']?.includes('text/event-stream')) {
                     res.flushHeaders();
                 }
                 upstreamRes.pipe(res);

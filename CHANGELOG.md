@@ -2,6 +2,15 @@
 
 All notable changes to Nero are documented here.
 
+## 1.32.8 (2026-02-25)
+
+### Fixes
+
+- Fix relay proxy forwarding duplicate `Transfer-Encoding: chunked` header, causing cloudflared tunnel 502s on SSE responses
+- Strip hop-by-hop headers (`Transfer-Encoding`, `Connection`) in relay proxy
+- Remove `Connection: keep-alive` from Pompeii webhook SSE response
+- Use `127.0.0.1` instead of `localhost` for cloudflared tunnel origin to avoid IPv6 resolution issues
+
 ## 1.32.7 (2026-02-25)
 
 ### Fixes
