@@ -247,6 +247,8 @@ Add to `~/.nero/.env`:
 | `ELEVENLABS_API_KEY` | No | Voice TTS (ElevenLabs) |
 | `HUME_API_KEY` | No | Voice TTS (Hume) and emotion detection |
 | `NERO_LICENSE_KEY` | No | Voice/SMS webhook routing |
+| `POMPEII_API_KEY` | No | Pompeii workspace integration (chat tools + webhook) |
+| `POMPEII_WEBHOOK_SECRET` | No | HMAC signature verification for Pompeii webhooks |
 
 ### Voice, SMS & Slack
 

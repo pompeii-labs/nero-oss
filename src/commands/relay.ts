@@ -4,7 +4,7 @@ import fs from 'fs';
 import { join } from 'path';
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises';
 import { spawn, execSync } from 'child_process';
-import { loadConfig, getNeroHome, type NeroConfig } from '../config.js';
+import { loadConfig, getNeroHome } from '../config.js';
 
 const TUNNEL_STATE_FILE = join(getNeroHome(), '.nero', 'tunnel.json');
 const RELAY_WATCH_STATE_FILE = join(getNeroHome(), '.nero', 'relay-watch.json');
@@ -74,10 +74,10 @@ async function clearWatchState(): Promise<void> {
     } catch {}
 }
 
-async function updatePompeiiWebhookUrl(tunnelUrl: string, config: NeroConfig): Promise<void> {
-    const agentKey = config.pompeii?.agentKey || process.env.POMPEII_AGENT_KEY;
-    const pompeiiUrl = config.pompeii?.url || process.env.POMPEII_URL;
-    if (!agentKey || !pompeiiUrl) return;
+async function updatePompeiiWebhookUrl(tunnelUrl: string): Promise<void> {
+    const agentKey = process.env.POMPEII_API_KEY;
+    const pompeiiUrl = process.env.POMPEII_API_URL || 'https://api.pompeii.ai';
+    if (!agentKey) return;
 
     try {
         const response = await fetch(`${pompeiiUrl}/v1/bot`, {
@@ -126,7 +126,7 @@ async function registerTunnelUrlWithBackend(tunnelUrl: string): Promise<void> {
         console.error(chalk.red(`Auto-register failed: ${(error as Error).message}`));
     }
 
-    await updatePompeiiWebhookUrl(tunnelUrl, config);
+    await updatePompeiiWebhookUrl(tunnelUrl);
 }
 
 async function runTunnelStart(

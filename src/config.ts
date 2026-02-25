@@ -134,11 +134,6 @@ export interface NeroConfig {
         headless?: boolean;
         timeout?: number;
     };
-    pompeii?: {
-        webhookSecret?: string;
-        agentKey?: string;
-        url?: string;
-    };
 }
 
 const defaultSessionSettings: SessionSettings = {
@@ -388,7 +383,6 @@ function normalizeUserConfig(userConfig: Partial<NeroConfig>, tunnelUrl?: string
         },
         hooks: userConfig.hooks,
         browser: userConfig.browser,
-        pompeii: userConfig.pompeii,
     };
 }
 

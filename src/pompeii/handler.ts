@@ -1,7 +1,6 @@
 import type { Request, Response } from 'express';
 import crypto from 'crypto';
 import { Nero, type ToolActivity } from '../agent/nero.js';
-import { NeroConfig } from '../config.js';
 import { Logger } from '../util/logger.js';
 
 const logger = new Logger('Pompeii');
@@ -39,13 +38,8 @@ function sendEvent(res: Response, event: Record<string, unknown>): void {
     } catch {}
 }
 
-export async function handlePompeii(
-    req: Request,
-    res: Response,
-    agent: Nero,
-    config: NeroConfig,
-): Promise<void> {
-    const webhookSecret = config.pompeii?.webhookSecret;
+export async function handlePompeii(req: Request, res: Response, agent: Nero): Promise<void> {
+    const webhookSecret = process.env.POMPEII_WEBHOOK_SECRET;
     if (webhookSecret) {
         if (!verifySignature(req, webhookSecret)) {
             logger.warn('Invalid webhook signature');

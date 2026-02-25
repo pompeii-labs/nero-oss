@@ -171,10 +171,12 @@ export class NeroService {
             });
         });
 
-        this.app.post('/webhook/pompeii', async (req, res) => {
-            await handlePompeii(req, res, this.agent, this.config);
-        });
-        this.logger.info('[Pompeii] Webhook enabled at /webhook/pompeii');
+        if (process.env.POMPEII_API_KEY) {
+            this.app.post('/webhook/pompeii', async (req, res) => {
+                await handlePompeii(req, res, this.agent);
+            });
+            this.logger.info('[Pompeii] Webhook enabled at /webhook/pompeii');
+        }
 
         this.app.use(authMiddleware);
 

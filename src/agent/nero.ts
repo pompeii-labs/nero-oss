@@ -1097,7 +1097,7 @@ You are responding inside a Pompeii workspace where users @mention or DM you.
 - Use standard markdown formatting (bold, italic, code blocks, lists)
 - Be conversational and helpful
 - You may be given conversation context showing recent messages from other participants
-- If the POMPEII_API_KEY environment variable is set, you have tools to send messages and browse conversations proactively`,
+- You have tools to send messages and browse conversations proactively`,
             });
         }
 
