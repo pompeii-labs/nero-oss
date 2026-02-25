@@ -3937,7 +3937,7 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
             const body: Record<string, unknown> = { content };
             if (conversation_id) body.conversation_id = conversation_id;
 
-            const response = await fetch(`${baseUrl}/v1/agent/messages`, {
+            const response = await fetch(`${baseUrl}/v1/bot/messages`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -3997,7 +3997,7 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
             if (conversation_id) params.set('conversation_id', conversation_id);
             if (limit) params.set('limit', String(limit));
 
-            const url = `${baseUrl}/v1/agent/messages${params.toString() ? '?' + params.toString() : ''}`;
+            const url = `${baseUrl}/v1/bot/messages${params.toString() ? '?' + params.toString() : ''}`;
             const response = await fetch(url, {
                 headers: { 'X-Agent-Key': process.env.POMPEII_API_KEY! },
             });
@@ -4400,7 +4400,7 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
 
         try {
             const baseUrl = process.env.POMPEII_API_URL || 'https://api.pompeii.ai';
-            const response = await fetch(`${baseUrl}/v1/agent/conversations`, {
+            const response = await fetch(`${baseUrl}/v1/bot/conversations`, {
                 headers: { 'X-Agent-Key': process.env.POMPEII_API_KEY! },
             });
 

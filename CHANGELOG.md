@@ -2,6 +2,12 @@
 
 All notable changes to Nero are documented here.
 
+## 1.32.5 (2026-02-25)
+
+### Fixes
+
+- Fixed Pompeii API routes (`/v1/agent/` -> `/v1/bot/`) to match updated backend endpoints
+
 ## 1.32.4 (2026-02-25)
 
 ### Fixes
