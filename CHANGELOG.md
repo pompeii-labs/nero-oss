@@ -2,6 +2,14 @@
 
 All notable changes to Nero are documented here.
 
+## 1.32.2 (2026-02-24)
+
+### Fixes
+
+- Pompeii integration now uses env vars only (`POMPEII_API_KEY`, `POMPEII_WEBHOOK_SECRET`) instead of config file
+- Pompeii webhook route only mounts when `POMPEII_API_KEY` is set
+- Removed `pompeii` section from config schema
+
 ## 1.32.1 (2026-02-24)
 
 ### Fixes
