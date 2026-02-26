@@ -1094,10 +1094,12 @@ You are responding via Slack DM. Use Slack-friendly formatting:
                 role: 'system',
                 content: `## Pompeii Mode Instructions
 You are responding inside a Pompeii workspace where users @mention or DM you.
+- Your reply to the current message is delivered automatically through the response stream. Just respond normally.
+- NEVER use the Pompeii Send Message tool to reply to the current conversation. Your text response IS the reply.
+- The Send Message tool is ONLY for proactively sending a separate message to a different conversation or the main thread.
 - Use standard markdown formatting (bold, italic, code blocks, lists)
 - Be conversational and helpful
-- You may be given conversation context showing recent messages from other participants
-- You have tools to send messages and browse conversations proactively`,
+- You may be given conversation context showing recent messages from other participants`,
             });
         }
 
@@ -3906,7 +3908,7 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
 
     @tool({
         description:
-            'Send a message to the Pompeii workspace. Can target the main thread or a specific conversation.',
+            'Send a proactive message to the Pompeii workspace main thread or a specific conversation. Do NOT use this to reply to the current conversation - your text response is automatically delivered as the reply.',
         enabled: () => !!process.env.POMPEII_API_KEY,
     })
     @toolparam({

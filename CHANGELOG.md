@@ -2,6 +2,13 @@
 
 All notable changes to Nero are documented here.
 
+## 1.32.9 (2026-02-25)
+
+### Fixes
+
+- Prevent Nero from using Pompeii Send Message tool to reply to DMs/mentions (was broadcasting private conversations to the main thread)
+- Clarify in system prompt and tool description that replies are delivered through the response stream, not via the Send Message tool
+
 ## 1.32.8 (2026-02-25)
 
 ### Fixes
