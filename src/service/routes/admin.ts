@@ -57,7 +57,7 @@ function triggerIntegratedRestart(): void {
     if (hostHome) {
         const image = getConfiguredImage();
         const helperName = `nero-restart-helper-${Date.now()}`;
-        const logPath = `/host/home/.nero/restart.log`;
+        const logPath = `${hostHome}/.nero/restart.log`;
 
         const child = spawn(
             'docker',
@@ -71,10 +71,16 @@ function triggerIntegratedRestart(): void {
                 '/var/run/docker.sock:/var/run/docker.sock',
                 '-v',
                 `${hostHome}:/host/home`,
+                '-v',
+                `${hostHome}:${hostHome}`,
                 '-e',
-                'HOST_HOME=/host/home',
+                `HOST_HOME=${hostHome}`,
                 '-e',
-                'HOME=/host/home',
+                `HOME=${hostHome}`,
+                '-e',
+                'DOCKER_HOST=unix:///var/run/docker.sock',
+                '-e',
+                'DOCKER_CONTEXT=default',
                 image,
                 'sh',
                 '-lc',
