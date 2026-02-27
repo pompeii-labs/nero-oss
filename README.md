@@ -17,11 +17,15 @@
 
 ---
 
-The closest thing to Jarvis you can self-host.
+Nero isn't built to be a lightweight rust-based agent runtime. It's meant to be **everything you need** out of the box to have a personal AI -
+* [`autonomy` mode](#autonomy-mode), where nero has his own projects and priorities. when you come back to talk to him, he'll always have something new to say
+* Nero's memory goes beyond a `MEMORIES.md` file. His "brain" is a node/edge graph representing every tool used, project developed, topic discussed. A true google earth view of your relationship with Nero
+* Spawn custom interfaces across multiple [displays / devices](#displays)
+* Native Claude Code inspired MCP support
+* Locally hosted web UI with chat, voice, MCP setup, logs, etc 
 
-Nero is an AI that lives on your server. Call it, text it, Slack it, or open the terminal -- every interaction shares the same context, the same memory, the same thread. It knows what you talked about on a voice call when you message it later from the web dashboard. It works on its own projects while you sleep. It thinks in the background while you're away and tells you what it found when you get back.
+*(mac mini supported but not included)*
 
-Other AI agents are chatbots with plugins. Nero is one thing -- voice, terminal, web, SMS, and autonomy built together from the ground up.
 
 <p align="center">
   <img src="assets/voice.png" alt="Nero Voice" width="800" />
@@ -39,11 +43,11 @@ Other AI agents are chatbots with plugins. Nero is one thing -- voice, terminal,
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pompeii-labs/nero-oss/main/install.sh | bash
-
-nero setup
 ```
 
-That's it. Nero is running at `http://localhost:4848`. Every device on your LAN can reach it at `https://nero.local` -- TLS certs are auto-generated on first run.
+That's it. The installer downloads the CLI and launches interactive setup automatically. Nero is running at `http://localhost:4848`. Every device on your LAN can reach it at `https://nero.local` -- TLS certs are auto-generated on first run.
+
+To reconfigure at any time, run `nero setup`.
 
 ## How You Interact With It
 

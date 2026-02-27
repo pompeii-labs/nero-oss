@@ -2,6 +2,13 @@
 set -e
 
 REPO="pompeii-labs/nero-oss"
+MODIFY_PATH=true
+
+for arg in "$@"; do
+    case "$arg" in
+        --no-modify-path) MODIFY_PATH=false ;;
+    esac
+done
 
 echo "Installing Nero CLI..."
 
@@ -27,19 +34,37 @@ curl -fsSL "https://github.com/$REPO/releases/download/$LATEST/$BINARY" -o "$INS
 chmod +x "$INSTALL_DIR/nero"
 
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-    echo ""
-    echo "Add to your shell profile:"
-    echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
-    echo ""
-    echo "Then restart your shell or run:"
-    echo "  source ~/.bashrc  # or ~/.zshrc"
+    export PATH="$INSTALL_DIR:$PATH"
+
+    if [[ "$MODIFY_PATH" == true ]]; then
+        SHELL_NAME=$(basename "$SHELL")
+        case "$SHELL_NAME" in
+            zsh)  PROFILE="$HOME/.zshrc" ;;
+            bash)
+                if [[ -f "$HOME/.bash_profile" ]]; then
+                    PROFILE="$HOME/.bash_profile"
+                else
+                    PROFILE="$HOME/.bashrc"
+                fi
+                ;;
+            *)    PROFILE="" ;;
+        esac
+
+        LINE='export PATH="$HOME/.local/bin:$PATH"'
+        if [[ -n "$PROFILE" ]] && ! grep -qF '.local/bin' "$PROFILE" 2>/dev/null; then
+            echo "" >> "$PROFILE"
+            echo "$LINE" >> "$PROFILE"
+            echo "Added $INSTALL_DIR to PATH in $PROFILE"
+        fi
+    else
+        echo "Skipping shell profile modification (--no-modify-path)"
+        echo "Add to your shell profile manually:"
+        echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
 fi
 
 echo ""
 echo "Nero $LATEST installed!"
 echo ""
-echo "Next steps:"
-echo "  1. Create ~/.nero/.env with your API keys:"
-echo "     OPENROUTER_API_KEY=..."
-echo ""
-echo "  2. Run: nero setup"
+
+exec "$INSTALL_DIR/nero" setup
