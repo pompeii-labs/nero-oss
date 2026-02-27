@@ -8,15 +8,6 @@ import { getConfigDir } from '../../config.js';
 
 const logger = new Logger('Admin');
 
-const ENV_KEYS = [
-    'OPENROUTER_API_KEY',
-    'DATABASE_URL',
-    'NERO_LICENSE_KEY',
-    'ELEVENLABS_API_KEY',
-    'DEEPGRAM_API_KEY',
-    'TAVILY_API_KEY',
-];
-
 function getEnvPath(): string {
     return join(getConfigDir(), '.env');
 }
@@ -57,7 +48,7 @@ function triggerIntegratedRestart(): void {
     if (hostHome) {
         const image = getConfiguredImage();
         const helperName = `nero-restart-helper-${Date.now()}`;
-        const logPath = `/host/home/.nero/restart.log`;
+        const logPath = `${hostHome}/.nero/restart.log`;
 
         const child = spawn(
             'docker',
@@ -71,10 +62,16 @@ function triggerIntegratedRestart(): void {
                 '/var/run/docker.sock:/var/run/docker.sock',
                 '-v',
                 `${hostHome}:/host/home`,
+                '-v',
+                `${hostHome}:${hostHome}`,
                 '-e',
-                'HOST_HOME=/host/home',
+                `HOST_HOME=${hostHome}`,
                 '-e',
-                'HOME=/host/home',
+                `HOME=${hostHome}`,
+                '-e',
+                'DOCKER_HOST=unix:///var/run/docker.sock',
+                '-e',
+                'DOCKER_CONTEXT=default',
                 image,
                 'sh',
                 '-lc',
@@ -127,14 +124,9 @@ function parseEnvFile(content: string): Record<string, string> {
 function serializeEnvFile(env: Record<string, string>): string {
     const lines: string[] = [];
 
-    for (const key of ENV_KEYS) {
-        if (env[key] !== undefined && env[key] !== '') {
-            lines.push(`${key}=${env[key]}`);
-        }
-    }
-
-    for (const [key, value] of Object.entries(env)) {
-        if (!ENV_KEYS.includes(key) && value !== undefined && value !== '') {
+    for (const key of Object.keys(env).sort()) {
+        const value = env[key];
+        if (value !== undefined && value !== '') {
             lines.push(`${key}=${value}`);
         }
     }
@@ -164,16 +156,15 @@ export function createAdminRouter() {
             }
 
             if (process.env.NERO_MODE === 'contained') {
-                for (const key of ENV_KEYS) {
-                    if (process.env[key]) {
-                        envVars[key] = process.env[key] as string;
+                for (const [key, value] of Object.entries(process.env)) {
+                    if (value) {
+                        envVars[key] = value;
                     }
                 }
             }
 
             const result: Record<string, { value: string; isSet: boolean }> = {};
-            for (const key of ENV_KEYS) {
-                const value = envVars[key] || '';
+            for (const [key, value] of Object.entries(envVars)) {
                 result[key] = {
                     value: value ? '••••••••' : '',
                     isSet: !!value,
@@ -213,8 +204,6 @@ export function createAdminRouter() {
             }
 
             for (const [key, value] of Object.entries(newEnv)) {
-                if (!ENV_KEYS.includes(key)) continue;
-
                 if (value === '' || value === null || value === undefined) {
                     delete existingEnv[key];
                 } else if (value !== '••••••••') {
