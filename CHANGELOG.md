@@ -2,6 +2,17 @@
 
 All notable changes to Nero are documented here.
 
+## 1.32.10 (2026-02-27)
+
+### Fixes
+
+- Install script now auto-adds `~/.local/bin` to PATH and appends to shell profile, so `nero` works immediately after install
+- Install script auto-runs `nero setup` after download (no manual step needed)
+- Add `--no-modify-path` flag to install script for users who manage PATH manually
+- Fix Docker socket mount path on macOS
+- Fix env key filtering
+- Fix `nero restart` on macOS
+
 ## 1.32.9 (2026-02-25)
 
 ### Fixes
