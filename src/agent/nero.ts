@@ -163,6 +163,7 @@ export class Nero extends MagmaAgent {
     private _webVoiceActive = false;
     private _voiceDevice: string = 'main';
     private _activeDisplay: string = 'main';
+    private _pompeiiConversationId: string | null = null;
 
     constructor(config: NeroConfig) {
         const baseUrl = config.llm.baseUrl || OPENROUTER_BASE_URL;
@@ -216,6 +217,10 @@ export class Nero extends MagmaAgent {
 
     getMedium(): string {
         return this.currentMedium;
+    }
+
+    setPompeiiConversationId(id: string | null): void {
+        this._pompeiiConversationId = id;
     }
 
     setWebVoiceActive(active: boolean): void {
@@ -1096,13 +1101,15 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         }
 
         if (this.currentMedium === 'pompeii') {
+            const convNote = this._pompeiiConversationId
+                ? `\nYou are replying in conversation ${this._pompeiiConversationId}.`
+                : `\nYou are replying on the main timeline.`;
             messages.push({
                 role: 'system',
                 content: `## Pompeii Mode Instructions
-You are responding inside a Pompeii workspace where users @mention or DM you.
-- Your reply to the current message is delivered automatically through the response stream. Just respond normally.
-- NEVER use the Pompeii Send Message tool to reply to the current conversation. Your text response IS the reply.
-- The Send Message tool is ONLY for proactively sending a separate message to a different conversation or the main thread.
+You are responding inside a Pompeii workspace where users @mention or DM you.${convNote}
+Your text response is AUTOMATICALLY delivered as the reply to this message. Do NOT use pompeiiRequest to send a response -- it is already handled. Using pompeiiRequest to POST /v1/bot/messages for the current conversation will result in a duplicate message.
+Only use pompeiiRequest if you need to interact with a DIFFERENT conversation/thread, list data, or perform other workspace operations.
 - Use standard markdown formatting (bold, italic, code blocks, lists)
 - Be conversational and helpful
 - You may be given conversation context showing recent messages from other participants`,
@@ -3959,122 +3966,6 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
 
     @tool({
         description:
-            'Send a proactive message to the Pompeii workspace main thread or a specific conversation. Do NOT use this to reply to the current conversation - your text response is automatically delivered as the reply.',
-        enabled: () => !!process.env.POMPEII_API_KEY,
-    })
-    @toolparam({
-        key: 'content',
-        type: 'string',
-        required: true,
-        description: 'The message content to send',
-    })
-    @toolparam({
-        key: 'conversation_id',
-        type: 'string',
-        required: false,
-        description: 'Target conversation ID. Omit to send to the main thread.',
-    })
-    async pompeiiSendMessage(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { content, conversation_id } = call.fn_args;
-
-        const activity: ToolActivity = {
-            id: call.id,
-            tool: 'pompeii_send_message',
-            args: { content: content.slice(0, 50) + (content.length > 50 ? '...' : '') },
-            status: 'running',
-        };
-        this.emitActivity(activity);
-
-        try {
-            const baseUrl = process.env.POMPEII_API_URL || 'https://api.pompeii.ai';
-            const body: Record<string, unknown> = { content };
-            if (conversation_id) body.conversation_id = conversation_id;
-
-            const response = await fetch(`${baseUrl}/v1/bot/messages`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Agent-Key': process.env.POMPEII_API_KEY!,
-                },
-                body: JSON.stringify(body),
-            });
-
-            if (!response.ok) {
-                const error = await response.json().catch(() => ({ message: response.statusText }));
-                throw new Error(error.message || `HTTP ${response.status}`);
-            }
-
-            activity.status = 'complete';
-            activity.result = 'Message sent';
-            this.emitActivity(activity);
-            return 'Message sent to Pompeii workspace.';
-        } catch (error) {
-            activity.status = 'error';
-            activity.error = (error as Error).message;
-            this.emitActivity(activity);
-            return `Failed to send Pompeii message: ${activity.error}`;
-        }
-    }
-
-    @tool({
-        description:
-            'Get recent messages from the Pompeii workspace. Can retrieve from the main thread or a specific conversation.',
-        enabled: () => !!process.env.POMPEII_API_KEY,
-    })
-    @toolparam({
-        key: 'conversation_id',
-        type: 'string',
-        required: false,
-        description: 'Conversation ID to get messages from. Omit for the main thread.',
-    })
-    @toolparam({
-        key: 'limit',
-        type: 'number',
-        required: false,
-        description: 'Number of messages to retrieve (default 20)',
-    })
-    async pompeiiGetMessages(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { conversation_id, limit } = call.fn_args;
-
-        const activity: ToolActivity = {
-            id: call.id,
-            tool: 'pompeii_get_messages',
-            args: { conversation_id, limit },
-            status: 'running',
-        };
-        this.emitActivity(activity);
-
-        try {
-            const baseUrl = process.env.POMPEII_API_URL || 'https://api.pompeii.ai';
-            const params = new URLSearchParams();
-            if (conversation_id) params.set('conversation_id', conversation_id);
-            if (limit) params.set('limit', String(limit));
-
-            const url = `${baseUrl}/v1/bot/messages${params.toString() ? '?' + params.toString() : ''}`;
-            const response = await fetch(url, {
-                headers: { 'X-Agent-Key': process.env.POMPEII_API_KEY! },
-            });
-
-            if (!response.ok) {
-                const error = await response.json().catch(() => ({ message: response.statusText }));
-                throw new Error(error.message || `HTTP ${response.status}`);
-            }
-
-            const data = await response.json();
-            activity.status = 'complete';
-            activity.result = `${Array.isArray(data) ? data.length : 0} messages`;
-            this.emitActivity(activity);
-            return JSON.stringify(data, null, 2);
-        } catch (error) {
-            activity.status = 'error';
-            activity.error = (error as Error).message;
-            this.emitActivity(activity);
-            return `Failed to get Pompeii messages: ${activity.error}`;
-        }
-    }
-
-    @tool({
-        description:
             'Create a dynamic interface panel. Opens a UI panel with interactive components the user can interact with. Use for controls, dashboards, forms, monitoring, or any interactive display. Button actions execute shell commands directly - prefill the full command including auth headers, API endpoints, CLI args, etc. Only works when the user has the web dashboard or a display open. Panels appear inline on the target display. Check connected_displays in your context to see available displays before targeting one.',
         enabled: (agent) => {
             const nero = agent as Nero;
@@ -4442,23 +4333,71 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
     }
 
     @tool({
-        description: 'List conversations the agent participates in on the Pompeii workspace.',
+        description:
+            'Make a request to the Pompeii workspace API. Do NOT use this to reply to the current conversation - your text response handles that automatically.\n\nAvailable endpoints:\n  POST /v1/bot/messages - Send message (body: {content, conversation_id?})\n  GET  /v1/bot/messages - Get messages (query: conversation_id?, tag_id?, limit?)\n  GET  /v1/bot/conversations - List conversations\n  GET  /v1/bot/tags - List workspace tags/topics\n  GET  /v1/bot/transcripts - List voice transcripts (query: channel_id?)\n  GET  /v1/bot/transcripts/:id - Get transcript detail\n  POST /v1/bot/threads - Create thread (body: {name, plan?, participantIds?, agentParticipantIds?})\n  GET  /v1/bot/threads - List threads\n  POST /v1/bot/threads/:id/messages - Post to thread (body: {content})\n  GET  /v1/bot/threads/:id/messages - Get thread messages (query: limit?)\n  GET  /v1/bot/threads/:id/files - Get thread files\n  POST /v1/bot/threads/:id/files - Attach files (body: {fileIds: string[]})',
         enabled: () => !!process.env.POMPEII_API_KEY,
     })
-    async pompeiiListConversations(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+    @toolparam({
+        key: 'method',
+        type: 'string',
+        required: true,
+        description: 'HTTP method: GET or POST',
+    })
+    @toolparam({
+        key: 'path',
+        type: 'string',
+        required: true,
+        description: 'API path (e.g. /v1/bot/messages, /v1/bot/threads/abc123/messages)',
+    })
+    @toolparam({
+        key: 'body',
+        type: 'string',
+        required: false,
+        description: 'JSON request body for POST requests',
+    })
+    @toolparam({
+        key: 'query',
+        type: 'string',
+        required: false,
+        description: 'JSON object of query parameters for GET requests',
+    })
+    async pompeiiRequest(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { method, path, body, query } = call.fn_args;
+
         const activity: ToolActivity = {
             id: call.id,
-            tool: 'pompeii_list_conversations',
-            args: {},
+            tool: 'pompeii_request',
+            args: { method, path },
             status: 'running',
         };
         this.emitActivity(activity);
 
         try {
             const baseUrl = process.env.POMPEII_API_URL || 'https://api.pompeii.ai';
-            const response = await fetch(`${baseUrl}/v1/bot/conversations`, {
-                headers: { 'X-Agent-Key': process.env.POMPEII_API_KEY! },
-            });
+
+            let url = `${baseUrl}${path}`;
+            if (query) {
+                const params = new URLSearchParams();
+                const parsed = typeof query === 'string' ? JSON.parse(query) : query;
+                for (const [k, v] of Object.entries(parsed)) {
+                    if (v != null) params.set(k, String(v));
+                }
+                const qs = params.toString();
+                if (qs) url += `?${qs}`;
+            }
+
+            const headers: Record<string, string> = {
+                'X-Agent-Key': process.env.POMPEII_API_KEY!,
+            };
+
+            const options: RequestInit = { method: method.toUpperCase(), headers };
+
+            if (body && method.toUpperCase() === 'POST') {
+                headers['Content-Type'] = 'application/json';
+                options.body = typeof body === 'string' ? body : JSON.stringify(body);
+            }
+
+            const response = await fetch(url, options);
 
             if (!response.ok) {
                 const error = await response.json().catch(() => ({ message: response.statusText }));
@@ -4467,14 +4406,14 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
 
             const data = await response.json();
             activity.status = 'complete';
-            activity.result = `${Array.isArray(data) ? data.length : 0} conversations`;
+            activity.result = `${method.toUpperCase()} ${path} -> ${response.status}`;
             this.emitActivity(activity);
             return JSON.stringify(data, null, 2);
         } catch (error) {
             activity.status = 'error';
             activity.error = (error as Error).message;
             this.emitActivity(activity);
-            return `Failed to list Pompeii conversations: ${activity.error}`;
+            return `Pompeii API error: ${activity.error}`;
         }
     }
 

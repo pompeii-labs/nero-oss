@@ -55,6 +55,7 @@ export async function handlePompeii(req: Request, res: Response, agent: Nero): P
     logger.info(`From ${userName}: ${content.slice(0, 50)}${content.length > 50 ? '...' : ''}`);
 
     agent.setMedium('pompeii');
+    agent.setPompeiiConversationId(body.conversation_id);
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -116,5 +117,6 @@ export async function handlePompeii(req: Request, res: Response, agent: Nero): P
     } finally {
         clearInterval(heartbeat);
         agent.setActivityCallback(undefined);
+        agent.setPompeiiConversationId(null);
     }
 }
