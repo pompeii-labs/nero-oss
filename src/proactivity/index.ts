@@ -10,6 +10,7 @@ import {
 } from '../models/index.js';
 import type { NeroConfig } from '../config.js';
 import type { Nero } from '../agent/nero.js';
+import type { AmbientManager } from '../ambient/index.js';
 
 const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
 const RETENTION_DAYS = 7;
@@ -17,6 +18,7 @@ const RETENTION_DAYS = 7;
 export class ProactivityManager {
     private config: NeroConfig;
     private agent: Nero | null = null;
+    ambientManager: AmbientManager | null = null;
     private idleTimer: NodeJS.Timeout | null = null;
     private backgroundInterval: NodeJS.Timeout | null = null;
     private isRunning: boolean = false;

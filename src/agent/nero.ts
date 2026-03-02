@@ -151,8 +151,10 @@ export class Nero extends MagmaAgent {
     browserManager: BrowserManager;
     interfaceManager: InterfaceManager;
     voiceManager: import('../voice/websocket.js').VoiceWebSocketManager | null = null;
+    ambientManager: import('../ambient/index.js').AmbientManager | null = null;
     private hooksManager: HooksManager;
     private turnToolCount: number = 0;
+    private _lastActivityAt: number = 0;
     private skillsCache: Skill[] = [];
     private loadedSkills: Map<string, { skill: Skill; args: string[] }> = new Map();
     private contextLimit: number = 200000;
@@ -260,6 +262,10 @@ export class Nero extends MagmaAgent {
 
     getGraphCache(): ActivatedNode[] {
         return this.graphCache;
+    }
+
+    setProactivityAmbient(manager: import('../ambient/index.js').AmbientManager): void {
+        this.proactivity.ambientManager = manager;
     }
 
     async setup(): Promise<void> {
@@ -1286,6 +1292,8 @@ You can proactively reach out to the user. Check your available tools and your m
 
 Be a proactive assistant. If a meeting is coming up, ask if they want you to prep anything. If you spot something they might want to act on, surface it. If you find something interesting or relevant to their current work, share it. Think about what would genuinely help them right now.
 
+**Ambient displays:** If displays are connected, you can push content cards to them using the pushAmbientCard tool. Cards show up on the ambient display rotation (clock, weather, your cards). Good for surfacing calendar events, interesting findings, project status, or anything glanceable. Don't push routine/boring updates.
+
 **Don't message about:**
 - Routine status reports ("all systems healthy", "database running for X hours")
 - Things you checked that had no changes
@@ -1397,6 +1405,17 @@ Keep your response brief -- what you did and any notable results.`;
         try {
             this.setMessages([]);
 
+            const recentMessages = await this.getMessageHistory(10);
+            const recentMessagesText =
+                recentMessages.length > 0
+                    ? toon(
+                          recentMessages.map((m) => ({
+                              role: m.role,
+                              content: m.content.slice(0, 500),
+                          })),
+                      )
+                    : '(no recent messages)';
+
             const timezone =
                 this.config.settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
             const now = new Date();
@@ -1440,10 +1459,19 @@ Keep your response brief -- what you did and any notable results.`;
             const memoriesText =
                 memories.length > 0 ? toon(memories.map((m) => m.body)) : '(no memories)';
 
+            const connectedDisplays = this.interfaceManager.getDevices();
+            const displaysText =
+                connectedDisplays.length > 0
+                    ? connectedDisplays.map((d) => `- ${d.name}`).join('\n')
+                    : '(none)';
+
             const autonomyPrompt = `You are running an autonomous session. This is your time -- not a response to a user request, not a scheduled task, not a background health check. You are awake because you chose to be, and you decide what to do with it.
 
 ## Current Time
 ${localTime} (${timezone})
+
+## Connected Displays
+${displaysText}
 
 ## Your Projects
 ${projectsText}
@@ -1453,6 +1481,9 @@ ${journalText}
 
 ## User Memories
 ${memoriesText}
+
+## Recent Conversation
+${recentMessagesText}
 
 ## Session Constraints
 - Max duration: ${options.maxMinutes} minutes
@@ -1468,6 +1499,8 @@ You have full access to your tools. Some things you might do:
 - Monitor: Check on repos, services, deployments. But only if it feeds into a project.
 - Organize: Review projects, close finished ones, reprioritize.
 - Reach out: If you find something the user should know, use noteForUser or Slack.
+- Rich displays: Use createInterface with targetDevice to show dashboards, monitoring panels, or interactive UI on connected displays.
+- Ambient cards: Push lightweight updates to connected displays using pushAmbientCard.
 
 ## How to Work
 
@@ -1484,6 +1517,7 @@ You have full access to your tools. Some things you might do:
 - Don't message the user about routine findings
 - Don't create busywork projects just to look productive
 - Don't re-investigate things you already covered (check your journal)
+- Pay attention to recent conversation -- if the user asked you to work on something, prioritize that
 
 ## Ending Your Session
 
@@ -1496,7 +1530,25 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
 
             this.addMessage({ role: 'user', content: autonomyPrompt });
 
-            const response = await this.main();
+            const IDLE_TIMEOUT_MS = 2 * 60_000;
+            this._lastActivityAt = Date.now();
+            const watchdog = setInterval(() => {
+                if (Date.now() - this._lastActivityAt > IDLE_TIMEOUT_MS) {
+                    console.log(
+                        chalk.dim(
+                            '[autonomy] Watchdog: no activity for 2 min, killing hung request',
+                        ),
+                    );
+                    this.kill();
+                }
+            }, 30_000);
+
+            let response;
+            try {
+                response = await this.main();
+            } finally {
+                clearInterval(watchdog);
+            }
             const content = response?.content?.trim() || '';
 
             const sleepMatch = content.match(/SLEEP_MINUTES:\s*(\d+)/);
@@ -2174,6 +2226,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
         if (!activity.displayName) {
             activity.displayName = formatToolName(activity.tool);
         }
+        this._lastActivityAt = Date.now();
         Logger.main.tool(activity);
         this.onActivity?.(activity);
 
@@ -2208,6 +2261,14 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
                 result_summary: resultSummary,
                 thinking_run_id: null,
             }).catch(() => {});
+
+            if (this.ambientManager) {
+                const text =
+                    activity.status === 'error'
+                        ? `ERR ${activity.displayName}: ${(activity.error || '').slice(0, 80)}`
+                        : `${activity.displayName}: ${(activity.result || '').slice(0, 80)}`;
+                this.ambientManager.pushLogEntry({ ts: Date.now(), type: 'tool', text });
+            }
         }
     }
 
@@ -2575,7 +2636,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
             const typeFlag = fileType ? `--include="*.${fileType}"` : '';
             const output = execSync(
                 `grep -r ${typeFlag} -n "${pattern}" ${searchPath} 2>/dev/null | head -50`,
-                { encoding: 'utf-8' },
+                { encoding: 'utf-8', timeout: this.backgroundMode ? 10_000 : 30_000 },
             );
             activity.status = 'complete';
             activity.result = `Found matches for "${pattern}"`;
@@ -2673,10 +2734,8 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
 
         try {
             const output = execSync(
-                `find ${searchPath} -name "${pattern}" 2>/dev/null | head -50`,
-                {
-                    encoding: 'utf-8',
-                },
+                `find ${searchPath} -maxdepth 8 -not -path "*/node_modules/*" -not -path "*/.git/*" -name "${pattern}" 2>/dev/null | head -50`,
+                { encoding: 'utf-8', timeout: this.backgroundMode ? 10_000 : 30_000 },
             );
             activity.status = 'complete';
             activity.result = `Found files matching "${pattern}"`;
@@ -2760,9 +2819,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
     }
 
     @tool({
-        description:
-            'Create a new autonomous project to track ongoing work. Only available during autonomous sessions.',
-        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
+        description: 'Create a new autonomous project to track ongoing work across sessions.',
     })
     @toolparam({
         key: 'title',
@@ -2826,9 +2883,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
     }
 
     @tool({
-        description:
-            'Update an autonomous project with progress, next steps, or status changes. Only available during autonomous sessions.',
-        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
+        description: 'Update an autonomous project with progress, next steps, or status changes.',
     })
     @toolparam({
         key: 'project_id',
@@ -2908,8 +2963,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
 
     @tool({
         description:
-            'Write an entry to your autonomy journal. Records what you did this session for continuity across sessions. Only available during autonomous sessions.',
-        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
+            'Write an entry to your autonomy journal. Records what you did or learned for continuity across sessions.',
     })
     @toolparam({
         key: 'entry',
@@ -2927,7 +2981,6 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
         const { entry, project_id } = call.fn_args;
 
         if (!isDbConnected()) return 'Cannot write journal: database not connected';
-        if (!this.currentAutonomySessionId) return 'Not in an autonomous session';
 
         const activity: ToolActivity = {
             id: call.id,
@@ -2939,7 +2992,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
 
         try {
             await AutonomyJournal.create({
-                session_id: this.currentAutonomySessionId,
+                session_id: this.currentAutonomySessionId || 'manual',
                 project_id: project_id || null,
                 entry,
                 tokens_used: 0,
@@ -2959,9 +3012,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
     }
 
     @tool({
-        description:
-            'List your autonomous projects, optionally filtered by status. Only available during autonomous sessions.',
-        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
+        description: 'List your autonomous projects, optionally filtered by status.',
     })
     @toolparam({
         key: 'status',
@@ -4025,7 +4076,10 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
     @tool({
         description:
             'Create a dynamic interface panel. Opens a UI panel with interactive components the user can interact with. Use for controls, dashboards, forms, monitoring, or any interactive display. Button actions execute shell commands directly - prefill the full command including auth headers, API endpoints, CLI args, etc. Only works when the user has the web dashboard or a display open. Panels appear inline on the target display. Check connected_displays in your context to see available displays before targeting one.',
-        enabled: (agent) => (agent as Nero).isWebVoiceActive(),
+        enabled: (agent) => {
+            const nero = agent as Nero;
+            return nero.isWebVoiceActive() || nero.interfaceManager.getDevices().length > 0;
+        },
     })
     @toolparam({ key: 'title', type: 'string', required: true, description: 'Panel title' })
     @toolparam({
@@ -4422,5 +4476,56 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
             this.emitActivity(activity);
             return `Failed to list Pompeii conversations: ${activity.error}`;
         }
+    }
+
+    @tool({
+        description:
+            'Push a content card to the ambient display. Cards appear on connected displays that are in ambient mode (showing clock/weather). Use for surfacing calendar events, news, status updates, or anything glanceable. Cards rotate automatically and expire if expiryMinutes is set.',
+        enabled: (agent) => !!(agent as Nero).ambientManager,
+    })
+    @toolparam({
+        key: 'title',
+        type: 'string',
+        required: true,
+        description: 'Card title (short, glanceable)',
+    })
+    @toolparam({
+        key: 'content',
+        type: 'string',
+        required: true,
+        description: 'Card content (1-2 sentences)',
+    })
+    @toolparam({
+        key: 'icon',
+        type: 'string',
+        required: false,
+        description: 'Lucide icon name (e.g. calendar, newspaper, bell)',
+    })
+    @toolparam({
+        key: 'expiryMinutes',
+        type: 'number',
+        required: false,
+        description: 'Auto-remove card after this many minutes (default: 60)',
+    })
+    async pushAmbientCard(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { title, content, icon, expiryMinutes } = call.fn_args;
+
+        if (!this.ambientManager) {
+            return 'Ambient display system is not active.';
+        }
+
+        const expiry = Date.now() + (expiryMinutes ?? 60) * 60_000;
+        const id = `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+        this.ambientManager.pushCard({
+            id,
+            type: 'custom',
+            title: title || 'Update',
+            content: content || '',
+            icon,
+            expiry,
+        });
+
+        return `Card "${title}" pushed to ambient displays.`;
     }
 }

@@ -1,6 +1,6 @@
 {
   "name": "nero-oss",
-  "version": "1.32.10",
+  "version": "1.33.0",
   "description": "Open source AI companion with terminal, voice, and SMS interfaces",
   "main": "dist/index.js",
   "type": "module",
@@ -43,6 +43,8 @@
     "release:prep": "./scripts/release-prep.sh",
     "build:binary": "bun build --compile src/index.ts --outfile dist/nero",
     "build:binaries": "./scripts/build-binaries.sh",
+    "build:image": "docker build -f Dockerfile -t nero-local:dev .",
+    "setup:image": "bun src/index.ts setup --integrated --db --image nero-local:dev --no-pull",
     "prepare": "husky"
   },
   "author": "Pompeii Labs, Inc.",

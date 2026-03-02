@@ -3,6 +3,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { getServerUrl, get, post } from '$lib/actions/helpers';
     import DisplayPanel from '$lib/components/interface/display-panel.svelte';
+    import AmbientDisplay from '$lib/components/ambient/ambient-display.svelte';
     import { voice } from '$lib/stores/voice.svelte';
     import NeroSphere from '$lib/components/nero-sphere.svelte';
     import Monitor from '@lucide/svelte/icons/monitor';
@@ -16,6 +17,7 @@
     const displayName = $derived($page.params.name ?? '');
 
     let panels = $state<Map<string, any>>(new Map());
+    let ambientPanel = $state<{ id: string } | null>(null);
     let eventSource: EventSource | null = null;
     let deviceId = $state('');
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -39,7 +41,11 @@
         if (!result.success) return;
         for (const iface of result.data) {
             if (!iface.targetDevice || iface.targetDevice === displayName) {
-                panels = new Map([...panels, [iface.id, iface]]);
+                if (iface.ambient) {
+                    ambientPanel = { id: iface.id };
+                } else {
+                    panels = new Map([...panels, [iface.id, iface]]);
+                }
             }
         }
     }
@@ -56,13 +62,29 @@
                 const parsed = JSON.parse(event.data);
 
                 if (parsed.type === 'opened' && parsed.iface) {
-                    panels = new Map([...panels, [parsed.iface.id, parsed.iface]]);
+                    if (parsed.iface.ambient) {
+                        ambientPanel = { id: parsed.iface.id };
+                    } else {
+                        panels = new Map([...panels, [parsed.iface.id, parsed.iface]]);
+                    }
                 }
 
                 if (parsed.type === 'closed' && parsed.id) {
-                    const next = new Map(panels);
-                    next.delete(parsed.id);
-                    panels = next;
+                    if (ambientPanel?.id === parsed.id) {
+                        ambientPanel = null;
+                    } else {
+                        const next = new Map(panels);
+                        next.delete(parsed.id);
+                        panels = next;
+                    }
+                }
+
+                if (parsed.type === 'ambient_suppress') {
+                    ambientPanel = null;
+                }
+
+                if (parsed.type === 'ambient_restore' && parsed.iface) {
+                    ambientPanel = { id: parsed.iface.id };
                 }
 
                 if (parsed.type === 'presence' && parsed.display) {
@@ -113,10 +135,16 @@
 
     async function nudgeHere() {
         const res = await post<{ display: string }>('/api/presence', { display: displayName });
-        if (res.success) neroDisplay = res.data.display;
+        if (res.success) {
+            neroDisplay = res.data.display;
+            if (voice.status === 'idle') {
+                voice.connectAsTarget();
+            }
+        }
     }
 
     const neroIsHere = $derived(neroDisplay === displayName);
+    const hasRealPanels = $derived(panels.size > 0);
 </script>
 
 <svelte:head>
@@ -175,12 +203,14 @@
                 </div>
             {/if}
         </div>
-    {:else if panels.size > 0}
+    {:else if hasRealPanels}
         <div class="panels-grid">
             {#each [...panels.values()] as schema (schema.id)}
                 <DisplayPanel {schema} onClose={closePanel} />
             {/each}
         </div>
+    {:else if ambientPanel}
+        <AmbientDisplay interfaceId={ambientPanel.id} {displayName} {neroIsHere} onNudge={nudgeHere} />
     {:else if neroIsHere}
         <div class="empty-state">
             <div class="empty-icon">

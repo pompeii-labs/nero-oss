@@ -28,6 +28,7 @@ import { createGraphRouter } from './routes/graph.js';
 import { RelayServer } from '../relay/index.js';
 import { ActionManager } from '../actions/index.js';
 import { AutonomyManager } from '../autonomy/index.js';
+import { AmbientManager } from '../ambient/index.js';
 import { initLogFile } from '../util/logger.js';
 import { getNeroHome } from '../config.js';
 import { ensureCerts, TlsCerts } from '../tls/certs.js';
@@ -49,6 +50,7 @@ export class NeroService {
     private httpRedirectServer: HTTPServer | null = null;
     private actionManager: ActionManager;
     private autonomyManager: AutonomyManager;
+    private ambientManager: AmbientManager;
     private readonly port: number;
     private readonly host: string;
     private webDistPath: string | null = null;
@@ -64,6 +66,11 @@ export class NeroService {
         this.agent = new Nero(config);
         this.actionManager = new ActionManager();
         this.autonomyManager = new AutonomyManager(config);
+        this.ambientManager = new AmbientManager(
+            this.agent.interfaceManager,
+            config.ambient,
+            config.settings.timezone,
+        );
 
         this.setupMiddleware();
         this.setupRoutes();
@@ -270,6 +277,7 @@ export class NeroService {
 
             this.actionManager.shutdown();
             this.autonomyManager.shutdown();
+            this.ambientManager.shutdown();
             stopMdns();
 
             if (this.wsManager) {
@@ -327,6 +335,11 @@ export class NeroService {
         this.actionManager.start();
 
         this.autonomyManager.setAgent(this.agent);
+        this.autonomyManager.setAmbientManager(this.ambientManager);
+
+        this.agent.ambientManager = this.ambientManager;
+        this.agent.setProactivityAmbient(this.ambientManager);
+        this.ambientManager.start();
 
         this.tlsCerts = await ensureCerts();
 
