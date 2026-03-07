@@ -12,3 +12,4 @@ export { AutonomyProject, type AutonomyProjectData } from './autonomy-project.js
 export { AutonomyJournal, type AutonomyJournalData } from './autonomy-journal.js';
 export { GraphNode, type GraphNodeData } from './graph-node.js';
 export { GraphEdge, type GraphEdgeData } from './graph-edge.js';
+export { Pattern, type PatternData, Prediction, type PredictionData } from './pattern.js';

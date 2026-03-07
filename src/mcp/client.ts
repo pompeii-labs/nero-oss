@@ -9,6 +9,7 @@ import { updateMcpServerOAuth } from '../config.js';
 import { hostToContainer } from '../util/paths.js';
 import { isTokenExpired, refreshAccessToken, discoverOAuthMetadata } from './oauth.js';
 import { VERSION } from '../util/version.js';
+import { storeToolOutput } from '../tool-learning/index.js';
 
 interface McpTool {
     name: string;
@@ -247,7 +248,7 @@ export class McpClient {
         return this.serverConfigs[name];
     }
 
-    async callTool(toolName: string, args: Record<string, unknown>): Promise<string> {
+    async callTool(toolName: string, args: Record<string, unknown>, cwd?: string): Promise<string> {
         let serverName: string | null = null;
         let actualToolName = toolName;
 
@@ -260,6 +261,10 @@ export class McpClient {
 
             const tool = server.tools.find((t) => t.name === actualToolName);
             if (tool) {
+                const startTime = Date.now();
+                let output: string;
+                let exitCode: number | undefined;
+
                 try {
                     const result = await server.client.callTool({
                         name: actualToolName,
@@ -267,18 +272,40 @@ export class McpClient {
                     });
 
                     if (result.content && Array.isArray(result.content)) {
-                        return result.content
+                        output = result.content
                             .map((c) => {
                                 if (c.type === 'text') return c.text;
                                 return JSON.stringify(c);
                             })
                             .join('\n');
+                    } else {
+                        output = JSON.stringify(result);
                     }
 
-                    return JSON.stringify(result);
+                    exitCode = 0;
+
+                    // Store output for learning (async, don't block)
+                    storeToolOutput(toolName, args, output, {
+                        cwd: cwd || process.cwd(),
+                        executionTimeMs: Date.now() - startTime,
+                        exitCode: 0,
+                    }).catch(() => {});
+
+                    return output;
                 } catch (error) {
                     const err = error as Error;
-                    return `Error calling ${toolName}: ${err.message}`;
+                    output = `Error calling ${toolName}: ${err.message}`;
+                    exitCode = 1;
+
+                    // Store error for learning (async, don't block)
+                    storeToolOutput(toolName, args, output, {
+                        cwd: cwd || process.cwd(),
+                        executionTimeMs: Date.now() - startTime,
+                        exitCode: 1,
+                        errorMessage: err.message,
+                    }).catch(() => {});
+
+                    return output;
                 }
             }
         }

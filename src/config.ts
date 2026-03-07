@@ -55,6 +55,7 @@ export interface ProactivityConfig {
     destructive: boolean;
     protectedBranches: string[];
     intervalMinutes: number;
+    confidenceThreshold?: number;
 }
 
 export interface AutonomyConfig {

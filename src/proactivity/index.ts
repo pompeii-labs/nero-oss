@@ -10,6 +10,7 @@ import {
 } from '../models/index.js';
 import type { NeroConfig } from '../config.js';
 import type { Nero } from '../agent/nero.js';
+import { PatternEngine } from '../patterns/index.js';
 
 const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
 const RETENTION_DAYS = 7;
@@ -20,6 +21,7 @@ export class ProactivityManager {
     private idleTimer: NodeJS.Timeout | null = null;
     private backgroundInterval: NodeJS.Timeout | null = null;
     private isRunning: boolean = false;
+    private patternEngine: PatternEngine | null = null;
 
     constructor(config: NeroConfig) {
         this.config = config;
@@ -27,6 +29,7 @@ export class ProactivityManager {
 
     setAgent(agent: Nero): void {
         this.agent = agent;
+        this.patternEngine = new PatternEngine(this.config);
         if (this.config.proactivity.enabled && !this.config.autonomy?.enabled) {
             console.log(chalk.dim('[proactivity] Starting idle timer on service start'));
             this.resetIdleTimer();
@@ -113,6 +116,14 @@ export class ProactivityManager {
 
             await this.cleanupOldThoughts();
             await BackgroundLog.deleteOlderThan(RETENTION_DAYS);
+
+            // Run pattern engine to detect new patterns and generate suggestions
+            if (this.patternEngine) {
+                const patternResult = await this.patternEngine.run();
+                if (patternResult && this.config.proactivity.notify) {
+                    await this.sendNotification(patternResult);
+                }
+            }
 
             try {
                 await GraphNode.decayAll();

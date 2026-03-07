@@ -18,6 +18,8 @@ import { registerModelsCommand } from './commands/models.js';
 import { registerAutonomyCommands } from './commands/autonomy.js';
 import { registerLogsCommand } from './commands/logs.js';
 import { registerEnvCommands } from './commands/env.js';
+import { registerPatternsCommand } from './commands/patterns.js';
+import { registerToolLearningCommand } from './commands/tool-learning.js';
 
 dotenv.config();
 
@@ -40,6 +42,8 @@ registerModelsCommand(program);
 registerAutonomyCommands(program);
 registerLogsCommand(program);
 registerEnvCommands(program);
+registerPatternsCommand(program);
+registerToolLearningCommand(program);
 
 async function main() {
     try {

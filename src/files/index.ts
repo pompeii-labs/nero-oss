@@ -9,6 +9,7 @@ export interface FileRef {
     originalName: string;
     mimeType: string;
     size: number;
+    name?: string;
 }
 
 const UPLOADS_DIR = () => join(getConfigDir(), 'uploads');
