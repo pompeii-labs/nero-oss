@@ -1,4 +1,5 @@
 import type { TaskResult } from './task.js';
+import type { SubagentTask } from '../agent/subagent.js';
 
 export type SpecialistType =
     | 'planner'
@@ -202,21 +203,164 @@ export function createSpecialist(config: SpecialistConfig): Specialist {
 }
 
 /**
- * Generic specialist implementation that uses the base functionality
+ * Generic specialist implementation that uses the subagent system
  */
 class GenericSpecialist extends Specialist {
     async execute(context: Record<string, unknown>): Promise<unknown> {
-        // This is a placeholder implementation
-        // In the real implementation, this would:
-        // 1. Use the dispatch tool to spawn a subagent
-        // 2. Pass the appropriate system prompt
-        // 3. Return the structured result
+        const { getConfig } = await import('../config.js');
+        const config = getConfig();
 
-        return {
-            type: this.config.type,
-            context,
-            message: `Specialist ${this.config.type} would execute here`,
-            note: 'This is a foundation implementation. Full subagent dispatch integration coming next.',
+        // Build the task description from context
+        const taskDescription = this.buildTaskDescription(context);
+
+        // Determine mode based on specialist type
+        const mode: 'research' | 'build' =
+            this.config.type === 'implementer' || this.config.type === 'tester'
+                ? 'build'
+                : 'research';
+
+        // Create subagent task
+        const subagentTask: SubagentTask = {
+            id: this.config.id,
+            task: taskDescription,
+            mode,
+            model: config.llm.model,
         };
+
+        // Create OpenAI client for subagent
+        const OpenAI = (await import('openai')).default;
+        const client = new OpenAI({
+            baseURL: config.llm.baseUrl,
+            apiKey: process.env.OPENROUTER_API_KEY || '',
+            timeout: 120_000,
+            defaultHeaders: {
+                'X-Title': `Nero-${this.config.type}`,
+                'HTTP-Referer': 'https://nero.pompeiilabs.com',
+            },
+        });
+
+        // Run the subagent
+        const { runSubagent } = await import('../agent/subagent.js');
+        const result = await runSubagent({
+            task: subagentTask,
+            model: config.llm.model,
+            client,
+            cwd: process.cwd(),
+        });
+
+        // Try to parse structured result from the subagent
+        try {
+            // Look for JSON blocks in the result
+            const jsonMatch = result.match(/```json\n?([\s\S]*?)\n?```/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[1]);
+            }
+
+            // Try to parse the whole thing as JSON
+            const parsed = JSON.parse(result);
+            return parsed;
+        } catch {
+            // Return as plain text wrapped in a structure
+            return {
+                type: this.config.type,
+                raw_output: result,
+                timestamp: new Date().toISOString(),
+            };
+        }
+    }
+
+    private buildTaskDescription(context: Record<string, unknown>): string {
+        const goal = context.goal as string;
+        const taskDesc = context.taskDescription as string;
+
+        const prompts: Record<SpecialistType, string> = {
+            planner: `You are a Planner specialist. Your task is to create a detailed plan for the following goal.
+
+Goal: ${goal}
+
+Break this down into actionable steps. Output your plan as a JSON object with this structure:
+{
+  "steps": [
+    {"order": 1, "description": "specific task", "dependencies": [], "estimatedMinutes": 30, "specialistType": "researcher|architect|implementer|reviewer|tester"}
+  ],
+  "summary": "brief description of the approach"
+}
+
+Be specific about dependencies - list the order numbers of steps that must complete before this one can start.`,
+
+            researcher: `You are a Researcher specialist. Your task is to investigate the following topic.
+
+Goal: ${goal}
+Task: ${taskDesc}
+
+Research thoroughly and provide your findings as a JSON object:
+{
+  "findings": ["key finding 1", "key finding 2"],
+  "sources": ["source 1", "source 2"],
+  "confidence": "high|medium|low",
+  "recommendations": ["recommendation 1"]
+}`,
+
+            architect: `You are an Architect specialist. Your task is to design a system or solution.
+
+Goal: ${goal}
+Task: ${taskDesc}
+
+Design the solution and output as JSON:
+{
+  "design": {
+    "components": ["component 1", "component 2"],
+    "interfaces": ["interface 1"],
+    "dataModels": ["model description"],
+    "diagram": "text description or mermaid"
+  },
+  "rationale": "why this design was chosen"
+}`,
+
+            implementer: `You are an Implementer specialist. Your task is to write code.
+
+Goal: ${goal}
+Task: ${taskDesc}
+
+Implement the solution. Output as JSON:
+{
+  "files": [
+    {"path": "relative/path.ts", "content": "full file content"}
+  ],
+  "tests": ["test description 1"],
+  "notes": "important implementation details"
+}`,
+
+            reviewer: `You are a Reviewer specialist. Your task is to review code or design.
+
+Goal: ${goal}
+Task: ${taskDesc}
+
+Review thoroughly and output as JSON:
+{
+  "issues": [
+    {"severity": "critical|warning|suggestion", "message": "...", "location": "file:line"}
+  ],
+  "quality": "excellent|good|needs_work",
+  "approvable": true|false,
+  "feedback": "overall assessment"
+}`,
+
+            tester: `You are a Tester specialist. Your task is to write and plan tests.
+
+Goal: ${goal}
+Task: ${taskDesc}
+
+Design tests and output as JSON:
+{
+  "testCases": [
+    {"name": "...", "input": {...}, "expected": {...}, "type": "unit|integration|e2e"}
+  ],
+  "coverage": {"description": "what areas are covered"},
+  "results": {"status": "planned"}
+}`,
+        };
+
+        return prompts[this.config.type] || `Task: ${taskDesc}\n\nGoal context: ${goal}`;
     }
 }
