@@ -20,6 +20,7 @@ import { registerLogsCommand } from './commands/logs.js';
 import { registerEnvCommands } from './commands/env.js';
 import { registerPatternsCommand } from './commands/patterns.js';
 import { registerToolLearningCommand } from './commands/tool-learning.js';
+import { registerOrchestrationCommands } from './commands/orchestrate.js';
 
 dotenv.config();
 
@@ -44,6 +45,7 @@ registerLogsCommand(program);
 registerEnvCommands(program);
 registerPatternsCommand(program);
 registerToolLearningCommand(program);
+registerOrchestrationCommands(program);
 
 async function main() {
     try {
