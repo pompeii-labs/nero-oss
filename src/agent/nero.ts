@@ -1108,8 +1108,8 @@ You are responding via Slack DM. Use Slack-friendly formatting:
                 role: 'system',
                 content: `## Pompeii Mode Instructions
 You are responding inside a Pompeii workspace where users @mention or DM you.${convNote}
-Your text response is AUTOMATICALLY delivered as the reply to this message. Do NOT use pompeiiRequest to send a response -- it is already handled. Using pompeiiRequest to POST /v1/bot/messages for the current conversation will result in a duplicate message.
-Only use pompeiiRequest if you need to interact with a DIFFERENT conversation/thread, list data, or perform other workspace operations.
+Your text response is AUTOMATICALLY delivered as the reply to this message. Do NOT use pompeiiRequest to send a response -- it is already handled. Using pompeiiRequest to POST /v1/agent/messages for the current conversation will result in a duplicate message.
+Only use pompeiiRequest if you need to interact with a DIFFERENT conversation/task, list data, or perform other workspace operations.
 - Use standard markdown formatting (bold, italic, code blocks, lists)
 - Be conversational and helpful
 - You may be given conversation context showing recent messages from other participants`,
@@ -4334,26 +4334,26 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
 
     @tool({
         description:
-            'Make a request to the Pompeii workspace API. Do NOT use this to reply to the current conversation - your text response handles that automatically.\n\nAvailable endpoints:\n  POST /v1/bot/messages - Send message (body: {content, conversation_id?})\n  GET  /v1/bot/messages - Get messages (query: conversation_id?, tag_id?, limit?)\n  GET  /v1/bot/conversations - List conversations\n  GET  /v1/bot/tags - List workspace tags/topics\n  GET  /v1/bot/transcripts - List voice transcripts (query: channel_id?)\n  GET  /v1/bot/transcripts/:id - Get transcript detail\n  POST /v1/bot/threads - Create thread (body: {name, plan?, participantIds?, agentParticipantIds?})\n  GET  /v1/bot/threads - List threads\n  POST /v1/bot/threads/:id/messages - Post to thread (body: {content})\n  GET  /v1/bot/threads/:id/messages - Get thread messages (query: limit?)\n  GET  /v1/bot/threads/:id/files - Get thread files\n  POST /v1/bot/threads/:id/files - Attach files (body: {fileIds: string[]})',
+            'Make a request to the Pompeii workspace API. Do NOT use this to reply to the current conversation - your text response handles that automatically.\n\nAvailable endpoints:\n  GET  /v1/agent/workspace - Get workspace info (id, name, slug)\n  GET  /v1/agent/members - List workspace members (id, name, email, role)\n  GET  /v1/agent/agents - List workspace agents (id, name, handle)\n  POST /v1/agent/messages - Send message (body: {content, conversation_id?})\n  GET  /v1/agent/messages - Get messages (query: conversation_id?, tag_id?, limit?)\n  GET  /v1/agent/conversations - List conversations\n  GET  /v1/agent/tags - List workspace tags/topics\n  GET  /v1/agent/transcripts - List voice transcripts (query: channel_id?)\n  GET  /v1/agent/transcripts/:id - Get transcript detail\n  POST /v1/agent/tasks - Create task (body: {name, description?, participantIds?})\n  GET  /v1/agent/tasks - List tasks\n  PATCH /v1/agent/tasks/:id - Update task (body: {name?, description?, status?})\n  POST /v1/agent/tasks/:id/messages - Post to task (body: {content})\n  GET  /v1/agent/tasks/:id/messages - Get task messages (query: limit?)\n  GET  /v1/agent/tasks/:id/files - Get task files\n  POST /v1/agent/tasks/:id/files - Attach files (body: {fileIds: string[]})\n  GET  /v1/agent/triggers - List triggers\n  POST /v1/agent/triggers - Create trigger (body: {name, trigger_source, trigger_event, trigger_filters?, action_type, action_params, natural_language})\n  PATCH /v1/agent/triggers/:id - Update trigger (body: {name?, status?, trigger_filters?, action_params?})\n  DELETE /v1/agent/triggers/:id - Delete trigger',
         enabled: () => !!process.env.POMPEII_API_KEY,
     })
     @toolparam({
         key: 'method',
         type: 'string',
         required: true,
-        description: 'HTTP method: GET or POST',
+        description: 'HTTP method: GET, POST, PATCH, or DELETE',
     })
     @toolparam({
         key: 'path',
         type: 'string',
         required: true,
-        description: 'API path (e.g. /v1/bot/messages, /v1/bot/threads/abc123/messages)',
+        description: 'API path (e.g. /v1/agent/messages, /v1/agent/tasks/abc123/messages)',
     })
     @toolparam({
         key: 'body',
         type: 'string',
         required: false,
-        description: 'JSON request body for POST requests',
+        description: 'JSON request body for POST and PATCH requests',
     })
     @toolparam({
         key: 'query',
@@ -4392,7 +4392,7 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
 
             const options: RequestInit = { method: method.toUpperCase(), headers };
 
-            if (body && method.toUpperCase() === 'POST') {
+            if (body && ['POST', 'PATCH'].includes(method.toUpperCase())) {
                 headers['Content-Type'] = 'application/json';
                 options.body = typeof body === 'string' ? body : JSON.stringify(body);
             }
@@ -4404,7 +4404,8 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
                 throw new Error(error.message || `HTTP ${response.status}`);
             }
 
-            const data = await response.json();
+            const text = await response.text();
+            const data = text ? JSON.parse(text) : {};
             activity.status = 'complete';
             activity.result = `${method.toUpperCase()} ${path} -> ${response.status}`;
             this.emitActivity(activity);
