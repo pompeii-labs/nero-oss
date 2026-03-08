@@ -375,6 +375,162 @@ export function registerGoalsCommands(program: Command) {
             await goal.complete();
             console.log(chalk.green(`🎉 Goal "${goal.title}" completed!`));
         });
+
+    // Complete a specific task
+    goals
+        .command('task:complete <taskId>')
+        .alias('tc')
+        .description('Mark a task as completed')
+        .action(async (taskId) => {
+            await initDb();
+            const id = parseInt(taskId, 10);
+            if (isNaN(id)) {
+                console.log(chalk.red('Invalid task ID'));
+                return;
+            }
+
+            const task = await Task.getById(id);
+            if (!task) {
+                console.log(chalk.red('Task not found'));
+                return;
+            }
+
+            if (task.status === 'completed') {
+                console.log(chalk.yellow(`Task "${task.title}" is already completed`));
+                return;
+            }
+
+            await task.complete();
+            console.log(chalk.green(`✓ Task "${task.title}" completed!`));
+            console.log(chalk.dim(`  Milestone progress updated`));
+        });
+
+    // Start working on a task
+    goals
+        .command('task:start <taskId>')
+        .alias('ts')
+        .description('Mark a task as in progress')
+        .action(async (taskId) => {
+            await initDb();
+            const id = parseInt(taskId, 10);
+            if (isNaN(id)) {
+                console.log(chalk.red('Invalid task ID'));
+                return;
+            }
+
+            const task = await Task.getById(id);
+            if (!task) {
+                console.log(chalk.red('Task not found'));
+                return;
+            }
+
+            if (task.status === 'in_progress') {
+                console.log(chalk.yellow(`Task "${task.title}" is already in progress`));
+                return;
+            }
+
+            if (task.status === 'completed') {
+                console.log(chalk.yellow(`Task "${task.title}" is already completed`));
+                return;
+            }
+
+            await task.start();
+            console.log(chalk.yellow(`▶ Started working on "${task.title}"`));
+        });
+
+    // List tasks for a goal
+    goals
+        .command('tasks <goalId>')
+        .alias('t')
+        .description('List all tasks for a goal')
+        .option(
+            '-s, --status <status>',
+            'Filter by status (pending, in_progress, completed, blocked)',
+        )
+        .action(async (goalId, options) => {
+            await initDb();
+            const id = parseInt(goalId, 10);
+            if (isNaN(id)) {
+                console.log(chalk.red('Invalid goal ID'));
+                return;
+            }
+
+            const goal = await Goal.getById(id);
+            if (!goal) {
+                console.log(chalk.red('Goal not found'));
+                return;
+            }
+
+            const tasks = await Task.getByGoal(id);
+
+            let filteredTasks = tasks;
+            if (options.status) {
+                filteredTasks = tasks.filter((t) => t.status === options.status);
+            }
+
+            if (filteredTasks.length === 0) {
+                console.log(
+                    chalk.dim(
+                        `\nNo tasks found for "${goal.title}"${options.status ? ` with status "${options.status}"` : ''}\n`,
+                    ),
+                );
+                return;
+            }
+
+            console.log(chalk.bold(`\nTasks for "${goal.title}":\n`));
+
+            // Group by milestone
+            const tasksByMilestone = new Map<number, Task[]>();
+            const milestones = await Milestone.getByGoal(id);
+
+            for (const m of milestones) {
+                tasksByMilestone.set(m.id, []);
+            }
+
+            for (const t of filteredTasks) {
+                const list = tasksByMilestone.get(t.milestone_id) || [];
+                list.push(t);
+                tasksByMilestone.set(t.milestone_id, list);
+            }
+
+            for (const m of milestones) {
+                const mTasks = tasksByMilestone.get(m.id) || [];
+                if (mTasks.length === 0) continue;
+
+                const mStatus =
+                    m.status === 'completed'
+                        ? chalk.green('✓')
+                        : m.status === 'in_progress'
+                          ? chalk.yellow('▶')
+                          : chalk.dim('○');
+                console.log(`${mStatus} ${chalk.bold(m.title)} ${chalk.dim(`#${m.id}`)}`);
+
+                for (const t of mTasks) {
+                    const tStatus =
+                        t.status === 'completed'
+                            ? chalk.green('✓')
+                            : t.status === 'in_progress'
+                              ? chalk.yellow('▶')
+                              : t.status === 'blocked'
+                                ? chalk.red('✗')
+                                : chalk.dim('○');
+                    const priority =
+                        t.priority === 'urgent'
+                            ? chalk.red('!')
+                            : t.priority === 'high'
+                              ? chalk.yellow('‼')
+                              : ' ';
+                    const auto = t.autonomy_eligible ? chalk.dim(' [auto]') : '';
+                    console.log(
+                        `  ${tStatus} ${t.title} ${chalk.dim(`#${t.id}`)}${priority}${auto}`,
+                    );
+                    if (t.description) {
+                        console.log(chalk.dim(`      ${t.description}`));
+                    }
+                }
+                console.log();
+            }
+        });
 }
 
 function renderProgressBar(percent: number, width: number): string {
