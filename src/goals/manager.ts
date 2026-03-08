@@ -138,7 +138,7 @@ export async function getProgressReport(goalId: number): Promise<ProgressReport 
     const pendingTasks = tasks.filter((t) => t.status === 'pending').length;
 
     const totalHoursEstimated = tasks.reduce((sum, t) => sum + (t.estimated_hours || 0), 0);
-    const totalHoursActual = tasks.reduce((sum, t) => sum + t.actual_hours, 0);
+    const totalHoursActual = tasks.reduce((sum, t) => sum + (t.actual_hours || 0), 0);
 
     // Find current milestone
     const currentMilestone = milestones.find((m) => m.status === 'in_progress');

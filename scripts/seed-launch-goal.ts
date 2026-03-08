@@ -1,7 +1,12 @@
 import { Goal, Milestone, Task } from '../src/models/index.js';
 import { createGoal } from '../src/goals/manager.js';
+import { initDb, closeDb, migrateDb } from '../src/db/index.js';
 
 async function seedLaunchGoal() {
+    // Initialize database and run migrations first
+    await initDb();
+    await migrateDb();
+
     console.log('Creating Nero OSS Launch goal...\n');
 
     const plan = {
@@ -148,12 +153,16 @@ async function seedLaunchGoal() {
             );
         } else {
             console.error('❌ Failed to create goal');
+            await closeDb();
             process.exit(1);
         }
     } catch (error) {
         console.error('Error:', error);
+        await closeDb();
         process.exit(1);
     }
+
+    await closeDb();
 }
 
 seedLaunchGoal();

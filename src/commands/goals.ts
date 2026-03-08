@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { Goal, Milestone, Task } from '../models/index.js';
+import { initDb } from '../db/index.js';
 import {
     createGoal,
     getProgressReport,
@@ -23,6 +24,7 @@ export function registerGoalsCommands(program: Command) {
         .option('-t, --tag <tag>', 'Filter by tag')
         .description('List goals and their progress')
         .action(async (options) => {
+            await initDb();
             const overview = await getActiveGoalsOverview();
 
             if (overview.length === 0) {
@@ -77,6 +79,7 @@ export function registerGoalsCommands(program: Command) {
         .command('show <id>')
         .description('Show detailed progress for a goal')
         .action(async (id) => {
+            await initDb();
             const goalId = parseInt(id, 10);
             if (isNaN(goalId)) {
                 console.log(chalk.red('Invalid goal ID'));
@@ -194,6 +197,7 @@ export function registerGoalsCommands(program: Command) {
         .command('advance <goalId>')
         .description('Mark current milestone complete and advance to next')
         .action(async (goalId) => {
+            await initDb();
             const id = parseInt(goalId, 10);
             if (isNaN(id)) {
                 console.log(chalk.red('Invalid goal ID'));
@@ -214,6 +218,7 @@ export function registerGoalsCommands(program: Command) {
         .alias('auto')
         .description('Show tasks Nero can work on autonomously')
         .action(async () => {
+            await initDb();
             const tasks = await getAutonomyTasks();
 
             if (tasks.length === 0) {
@@ -246,6 +251,7 @@ export function registerGoalsCommands(program: Command) {
         .command('check')
         .description('Check and update all dependency status')
         .action(async () => {
+            await initDb();
             console.log(chalk.dim('Checking dependencies...'));
             const result = await checkAllDependencies();
             console.log(chalk.green(`✓ ${result.unblockedMilestones} milestones unblocked`));
@@ -260,6 +266,7 @@ export function registerGoalsCommands(program: Command) {
         .command('attention')
         .description('Show goals that need attention (overdue, blocked, stuck)')
         .action(async () => {
+            await initDb();
             const attention = await getGoalsNeedingAttention();
 
             if (attention.length === 0) {
@@ -292,6 +299,7 @@ export function registerGoalsCommands(program: Command) {
         .option('-d, --days <number>', 'Archive goals older than N days', '30')
         .description('Archive completed goals older than specified days')
         .action(async (options) => {
+            await initDb();
             const days = parseInt(options.days, 10);
             if (isNaN(days) || days < 1) {
                 console.log(chalk.red('Invalid days value'));
@@ -307,6 +315,7 @@ export function registerGoalsCommands(program: Command) {
         .command('pause <id>')
         .description('Pause a goal')
         .action(async (id) => {
+            await initDb();
             const goalId = parseInt(id, 10);
             if (isNaN(goalId)) {
                 console.log(chalk.red('Invalid goal ID'));
@@ -328,6 +337,7 @@ export function registerGoalsCommands(program: Command) {
         .command('resume <id>')
         .description('Resume a paused goal')
         .action(async (id) => {
+            await initDb();
             const goalId = parseInt(id, 10);
             if (isNaN(goalId)) {
                 console.log(chalk.red('Invalid goal ID'));
@@ -349,6 +359,7 @@ export function registerGoalsCommands(program: Command) {
         .command('complete <id>')
         .description('Mark a goal as completed')
         .action(async (id) => {
+            await initDb();
             const goalId = parseInt(id, 10);
             if (isNaN(goalId)) {
                 console.log(chalk.red('Invalid goal ID'));

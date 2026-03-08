@@ -68,7 +68,16 @@ export class Task extends Model<TaskData> implements TaskData {
             [goalId],
         );
 
-        return rows.map((row) => new Task(row));
+        return rows.map((row) => {
+            // Parse numeric fields from PostgreSQL
+            if (row.estimated_hours !== null && row.estimated_hours !== undefined) {
+                row.estimated_hours = parseFloat(row.estimated_hours);
+            }
+            if (row.actual_hours !== null && row.actual_hours !== undefined) {
+                row.actual_hours = parseFloat(row.actual_hours);
+            }
+            return new Task(row);
+        });
     }
 
     static async getAutonomyEligible(): Promise<Task[]> {
@@ -93,7 +102,16 @@ export class Task extends Model<TaskData> implements TaskData {
              LIMIT 10`,
         );
 
-        return rows.map((row) => new Task(row));
+        return rows.map((row) => {
+            // Parse numeric fields from PostgreSQL
+            if (row.estimated_hours !== null && row.estimated_hours !== undefined) {
+                row.estimated_hours = parseFloat(row.estimated_hours);
+            }
+            if (row.actual_hours !== null && row.actual_hours !== undefined) {
+                row.actual_hours = parseFloat(row.actual_hours);
+            }
+            return new Task(row);
+        });
     }
 
     static async getBlocked(): Promise<Task[]> {
@@ -108,7 +126,16 @@ export class Task extends Model<TaskData> implements TaskData {
              ORDER BY g.priority ASC, t.created_at ASC`,
         );
 
-        return rows.map((row) => new Task(row));
+        return rows.map((row) => {
+            // Parse numeric fields from PostgreSQL
+            if (row.estimated_hours !== null && row.estimated_hours !== undefined) {
+                row.estimated_hours = parseFloat(row.estimated_hours);
+            }
+            if (row.actual_hours !== null && row.actual_hours !== undefined) {
+                row.actual_hours = parseFloat(row.actual_hours);
+            }
+            return new Task(row);
+        });
     }
 
     async start(): Promise<void> {
