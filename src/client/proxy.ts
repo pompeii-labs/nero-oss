@@ -107,17 +107,17 @@ export class NeroProxy {
     }
 
     clearHistory(): void {
-        // TODO: Call service endpoint to clear history
+        // Not yet implemented for service mode - requires service endpoint
         this.logger.warn('clearHistory not yet implemented for service mode');
     }
 
     setModel(model: string, baseUrl?: string): void {
-        // TODO: Call service endpoint to set model
+        // Not yet implemented for service mode - requires service endpoint
         this.logger.warn('setModel not yet implemented for service mode');
     }
 
     async getMemories(): Promise<Array<{ body: string; created_at: string }>> {
-        // TODO: Call service endpoint
+        // Not yet implemented for service mode - requires service endpoint
         return [];
     }
 
@@ -126,7 +126,7 @@ export class NeroProxy {
     }
 
     getMcpToolNames(): string[] {
-        // TODO: Get from context endpoint
+        // Returns cached values from context - live fetch not yet implemented for service mode
         return this.cachedMcpTools;
     }
 
@@ -138,7 +138,7 @@ export class NeroProxy {
     async getMessageHistory(
         limit = 20,
     ): Promise<Array<{ role: string; content: string; created_at: string }>> {
-        // TODO: Call service endpoint
+        // Not yet implemented for service mode - requires service endpoint
         return [];
     }
 
