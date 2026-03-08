@@ -49,6 +49,10 @@ That's it. The installer downloads the CLI and launches interactive setup automa
 
 To reconfigure at any time, run `nero setup`.
 
+### Examples
+
+Browse the [examples/](examples/) directory for ready-to-use configurations, skills, and integrations. The [examples/skills](examples/skills/) directory includes professional-grade skills for code review, debugging, API design, security auditing, and more.
+
 ## How You Interact With It
 
 Nero isn't tied to one interface. Every medium shares the same conversation, memory, and context.
@@ -125,6 +129,8 @@ Extend Nero with reusable prompts that follow the [Agent Skills](https://skills.
 nero skills add user/repo
 nero skills create my-skill
 ```
+
+See the [examples/skills](examples/skills/) directory for ready-to-use skill examples including code review, debugging, API design, security audits, and more.
 
 ### Hooks
 
