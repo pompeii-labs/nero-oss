@@ -972,6 +972,158 @@ export const commands: SlashCommand[] = [
             }
         },
     },
+    {
+        name: 'goals',
+        aliases: ['goal', 'g'],
+        description: 'Manage long-term goals (list|create|show|progress|advance|tasks)',
+        execute: async (args, ctx) => {
+            const { Goal, Milestone, Task } = await import('../models/index.js');
+            const {
+                createGoal,
+                getProgressReport,
+                advanceMilestone,
+                getActiveGoalsOverview,
+                getGoalsNeedingAttention,
+            } = await import('../goals/manager.js');
+
+            const subcommand = args[0] || 'list';
+
+            if (subcommand === 'list') {
+                const goals = await getActiveGoalsOverview();
+                if (goals.length === 0) {
+                    return { message: chalk.dim('No active goals. Create one with /goals create') };
+                }
+
+                let output = `\n${chalk.bold('Active Goals:')}\n\n`;
+                for (const g of goals) {
+                    const progress = g.progress;
+                    const bar = '█'.repeat(progress / 5) + '░'.repeat(20 - progress / 5);
+                    const status = progress === 100 ? chalk.green('Done') : `${progress}%`;
+                    const deadline = g.daysUntilDeadline
+                        ? g.daysUntilDeadline < 0
+                            ? chalk.red(` ${Math.abs(g.daysUntilDeadline)}d overdue`)
+                            : chalk.dim(` ${g.daysUntilDeadline}d left`)
+                        : '';
+
+                    output += `  ${chalk.cyan(`#${g.goal.id}`)} ${g.goal.title}${deadline}\n`;
+                    output += `    [${chalk.cyan(bar)}] ${status}\n`;
+                    if (g.currentMilestone) {
+                        output += `    Current: ${chalk.dim(g.currentMilestone)}\n`;
+                    }
+                    output += `    Tasks: ${g.tasksDone}/${g.totalTasks}\n`;
+                }
+                return { message: output };
+            }
+
+            if (subcommand === 'attention') {
+                const attention = await getGoalsNeedingAttention();
+                if (attention.length === 0) {
+                    return { message: chalk.green('All goals on track!') };
+                }
+
+                let output = `\n${chalk.bold('Goals Needing Attention:')}\n\n`;
+                for (const item of attention) {
+                    output += `  ${chalk.yellow(`#${item.goal.id}`)} ${item.goal.title}\n`;
+                    for (const issue of item.issues) {
+                        const icon =
+                            issue.type === 'overdue'
+                                ? '🔴'
+                                : issue.type === 'blocked'
+                                  ? '⏸️'
+                                  : '⚠️';
+                        output += `    ${icon} ${issue.details}\n`;
+                    }
+                }
+                return { message: output };
+            }
+
+            if (subcommand === 'show' && args[1]) {
+                const goalId = parseInt(args[1], 10);
+                if (isNaN(goalId)) return { error: 'Invalid goal ID' };
+
+                const report = await getProgressReport(goalId);
+                if (!report) return { error: 'Goal not found' };
+
+                let output = `\n${chalk.bold(report.goal.title)}\n`;
+                output += `  ${chalk.dim(report.goal.description)}\n\n`;
+                output += `  Progress: ${chalk.cyan(report.summary.overallProgress + '%')}\n`;
+                output += `  Tasks: ${report.summary.completedTasks}/${report.summary.totalTasks} done\n`;
+                output += `  Status: ${chalk.cyan(report.goal.status)}\n`;
+
+                if (report.milestones.length > 0) {
+                    output += `\n${chalk.bold('Milestones:')}\n`;
+                    for (const m of report.milestones) {
+                        const icon =
+                            m.status === 'completed'
+                                ? '✅'
+                                : m.status === 'in_progress'
+                                  ? '▶️'
+                                  : m.status === 'blocked'
+                                    ? '⏸️'
+                                    : '⏳';
+                        output += `  ${icon} ${m.title} ${chalk.dim(`(${m.status})`)}\n`;
+                    }
+                }
+
+                if (report.nextActionableTask) {
+                    output += `\n${chalk.bold('Next Task:')}\n`;
+                    output += `  ${chalk.cyan(report.nextActionableTask.title)}\n`;
+                    output += `  ${chalk.dim(report.nextActionableTask.description)}\n`;
+                }
+
+                return { message: output };
+            }
+
+            if (subcommand === 'advance' && args[1]) {
+                const goalId = parseInt(args[1], 10);
+                if (isNaN(goalId)) return { error: 'Invalid goal ID' };
+
+                const result = await advanceMilestone(goalId);
+                return {
+                    message: result.success
+                        ? chalk.green(result.message)
+                        : chalk.yellow(result.message),
+                };
+            }
+
+            if (subcommand === 'tasks') {
+                const { getAutonomyTasks } = await import('../goals/manager.js');
+                const tasks = await getAutonomyTasks();
+
+                if (tasks.length === 0) {
+                    return { message: chalk.dim('No autonomy-eligible tasks available.') };
+                }
+
+                let output = `\n${chalk.bold('Available Tasks:')}\n\n`;
+                for (const t of tasks.slice(0, 10)) {
+                    const priorityColor =
+                        t.priority === 'urgent'
+                            ? chalk.red
+                            : t.priority === 'high'
+                              ? chalk.yellow
+                              : chalk.dim;
+                    output += `  ${priorityColor(`[${t.priority.toUpperCase()}]`)} ${t.title}\n`;
+                    output += `    ${chalk.dim(t.description.slice(0, 80))}\n`;
+                }
+                return { message: output };
+            }
+
+            if (subcommand === 'create') {
+                return {
+                    message:
+                        chalk.dim('Create a goal interactively or use:\n') +
+                        chalk.dim('  /goals create "Title" "Description" priority:1-5\n') +
+                        chalk.dim(
+                            '\nFor complex goals with milestones, ask me to create one for you.',
+                        ),
+                };
+            }
+
+            return {
+                message: chalk.dim('Usage: /goals list|show <id>|advance <id>|tasks|attention'),
+            };
+        },
+    },
 ];
 
 async function handleMcpAuth(serverName: string, ctx: CommandContext): Promise<CommandResult> {

@@ -13,3 +13,6 @@ export { AutonomyJournal, type AutonomyJournalData } from './autonomy-journal.js
 export { GraphNode, type GraphNodeData } from './graph-node.js';
 export { GraphEdge, type GraphEdgeData } from './graph-edge.js';
 export { Pattern, type PatternData, Prediction, type PredictionData } from './pattern.js';
+export { Goal, type GoalData, type GoalStatus } from './goal.js';
+export { Milestone, type MilestoneData, type MilestoneStatus } from './milestone.js';
+export { Task, type TaskData, type TaskStatus, type TaskPriority } from './task.js';

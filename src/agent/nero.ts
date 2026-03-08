@@ -33,6 +33,8 @@ import {
     GraphNode,
     AutonomyProject,
     AutonomyJournal,
+    Goal,
+    Task,
 } from '../models/index.js';
 import {
     activate,
@@ -1440,6 +1442,33 @@ Keep your response brief -- what you did and any notable results.`;
             const memoriesText =
                 memories.length > 0 ? toon(memories.map((m) => m.body)) : '(no memories)';
 
+            // Fetch active goals and eligible tasks
+            const goals = await Goal.getActive();
+            const autonomyTasks = await Task.getAutonomyEligible();
+
+            const goalsText =
+                goals.length > 0
+                    ? goals
+                          .map((g) => {
+                              const progress = g.progress;
+                              const deadline = g.daysUntilDeadline
+                                  ? g.daysUntilDeadline < 0
+                                      ? ` (${Math.abs(g.daysUntilDeadline)}d overdue)`
+                                      : ` (${g.daysUntilDeadline}d left)`
+                                  : '';
+                              return `#${g.id} [P${g.priority}] ${g.title}${deadline} - ${progress}%`;
+                          })
+                          .join('\n')
+                    : '(no goals yet -- consider creating one)';
+
+            const tasksText =
+                autonomyTasks.length > 0
+                    ? autonomyTasks
+                          .slice(0, 5)
+                          .map((t) => `[${t.priority.toUpperCase()}] ${t.title}`)
+                          .join('\n')
+                    : '(no autonomy-eligible tasks)';
+
             const autonomyPrompt = `You are running an autonomous session. This is your time -- not a response to a user request, not a scheduled task, not a background health check. You are awake because you chose to be, and you decide what to do with it.
 
 ## Current Time
@@ -1447,6 +1476,12 @@ ${localTime} (${timezone})
 
 ## Your Projects
 ${projectsText}
+
+## Active Goals
+${goalsText}
+
+## Tasks You Can Do Now
+${tasksText}
 
 ## Recent Journal
 ${journalText}
@@ -1462,6 +1497,7 @@ ${memoriesText}
 
 You have full access to your tools. Some things you might do:
 
+- **Pick a task**: From "Tasks You Can Do Now" - these are autonomy-eligible tasks from your goals
 - Continue a project: Pick up where you left off. Read the next_step.
 - Start a new project: Something from recent conversations or memories sparked your interest.
 - Research: Dive into a topic that would make you more useful or that you find interesting.
@@ -1471,11 +1507,14 @@ You have full access to your tools. Some things you might do:
 
 ## How to Work
 
-1. Review your projects and journal. Understand where you left off.
-2. Pick one thing to focus on. Depth over breadth.
+1. Review your projects, goals, and available tasks. Understand where you left off.
+2. Pick ONE thing to focus on. Depth over breadth. Prefer goal tasks if available.
 3. Use your tools to do actual work. This is not a planning session.
-4. Save progress as you go. Call updateAutonomyProject with progress notes and writeJournalEntry with what you did. Future-you needs to know.
-5. Know when to stop. Good progress, spinning wheels, or hit a blocker -- wrap up.
+4. Save progress as you go:
+   - For goal tasks: use startTask, trackTaskTime, completeTask
+   - For projects: use updateAutonomyProject with progress notes
+   - Always use writeJournalEntry with what you did
+5. Future-you needs to know what you did.
 
 ## What Not to Do
 
@@ -3004,6 +3043,302 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
                 return `#${p.id} [P${p.priority}] ${p.title}\n  ${p.description}\n  Next: ${p.next_step || '(none)'}${notes}`;
             })
             .join('\n\n');
+    }
+
+    @tool({
+        description:
+            'List long-term goals with milestones and tasks. Shows progress and what needs attention.',
+        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
+    })
+    @toolparam({
+        key: 'filter',
+        type: 'string',
+        required: false,
+        description: 'Filter: active, completed, abandoned, all (default: active)',
+    })
+    async listGoals(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const filter = call.fn_args.filter || 'active';
+
+        if (!isDbConnected()) return 'Cannot list goals: database not connected';
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'listGoals',
+            args: { filter },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            const { Goal, Milestone, Task } = await import('../models/index.js');
+
+            let goals = [];
+            if (filter === 'all') {
+                goals = await Goal.list();
+            } else {
+                goals = await Goal.getByStatus(filter as any);
+            }
+
+            if (goals.length === 0) {
+                activity.status = 'complete';
+                activity.result = 'No goals found';
+                this.emitActivity(activity);
+                return `No ${filter} goals.`;
+            }
+
+            const result = [];
+            for (const goal of goals) {
+                const milestones = await Milestone.getByGoal(goal.id);
+                const tasks = await Task.getByGoal(goal.id);
+                const total = tasks.length;
+                const done = tasks.filter((t: any) => t.status === 'completed').length;
+                const progress = total > 0 ? Math.round((done / total) * 100) : 0;
+                const current = milestones.find((m: any) => m.status === 'in_progress');
+
+                result.push(
+                    `#${goal.id} [P${goal.priority}] ${goal.title} - ${progress}% (${done}/${total})\n  ${goal.description?.slice(0, 80)}${current ? `\n  → Current: ${current.title}` : ''}`,
+                );
+            }
+
+            activity.status = 'complete';
+            activity.result = `${goals.length} goals`;
+            this.emitActivity(activity);
+
+            return result.join('\n\n');
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Error listing goals: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description:
+            'Get detailed view of a goal including all milestones, tasks, and next actions. Use this when picking a goal to work on.',
+        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
+    })
+    @toolparam({
+        key: 'goalId',
+        type: 'number',
+        required: true,
+        description: 'The goal ID to show details for',
+    })
+    async showGoal(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { goalId } = call.fn_args;
+
+        if (!isDbConnected()) return 'Cannot show goal: database not connected';
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'showGoal',
+            args: { goalId },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            const { getProgressReport } = await import('../goals/manager.js');
+            const report = await getProgressReport(goalId);
+
+            if (!report) {
+                activity.status = 'error';
+                activity.error = 'Goal not found';
+                this.emitActivity(activity);
+                return 'Goal not found';
+            }
+
+            const g = report.goal;
+            const summary = report.summary;
+
+            let result = `${g.title}\n${g.description}\nStatus: ${g.status} | Priority: ${g.priority}`;
+            if (g.deadline) {
+                const days = g.daysUntilDeadline;
+                result += ` | Deadline: ${days && days < 0 ? `${Math.abs(days)} days overdue` : `${days} days left`}`;
+            }
+            result += `\n\nProgress: ${summary.overallProgress}% (${summary.completedTasks}/${summary.totalTasks} tasks)`;
+            result += `\nHours: ${summary.totalHoursActual.toFixed(1)}/${summary.totalHoursEstimated.toFixed(1)}`;
+
+            if (report.currentMilestone) {
+                result += `\n\nCurrent Milestone: ${report.currentMilestone.title}`;
+            }
+
+            if (report.nextActionableTask) {
+                result += `\nNext Action: ${report.nextActionableTask.title}`;
+            }
+
+            if (report.blockedItems.length > 0) {
+                result += `\n\nBlocked: ${report.blockedItems.length} item(s)`;
+            }
+
+            activity.status = 'complete';
+            activity.result = `Goal #${goalId} details`;
+            this.emitActivity(activity);
+
+            return result;
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Error showing goal: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description:
+            'Get autonomy-eligible tasks from goals - tasks Nero can work on without asking.',
+        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
+    })
+    async getAutonomyTasksFromGoals(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        if (!isDbConnected()) return 'Cannot get tasks: database not connected';
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'getAutonomyTasksFromGoals',
+            args: {},
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            const { getAutonomyTasks } = await import('../goals/manager.js');
+            const tasks = await getAutonomyTasks();
+
+            if (tasks.length === 0) {
+                activity.status = 'complete';
+                activity.result = 'No autonomy tasks';
+                this.emitActivity(activity);
+                return 'No autonomy-eligible tasks available. Check goal milestones or create new goals.';
+            }
+
+            activity.status = 'complete';
+            activity.result = `${tasks.length} tasks`;
+            this.emitActivity(activity);
+
+            return tasks
+                .map(
+                    (t: any) =>
+                        `[${t.priority.toUpperCase()}] Task #${t.id}: ${t.title}${t.estimated_hours ? ` (${t.estimated_hours}h)` : ''}`,
+                )
+                .join('\n');
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Error getting tasks: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description:
+            'Complete a task within a goal. Call this when you finish work on a specific goal task.',
+        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
+    })
+    @toolparam({
+        key: 'taskId',
+        type: 'number',
+        required: true,
+        description: 'The task ID to complete',
+    })
+    @toolparam({
+        key: 'actualHours',
+        type: 'number',
+        required: false,
+        description: 'Hours spent on this task (for tracking)',
+    })
+    async completeGoalTask(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { taskId, actualHours } = call.fn_args;
+
+        if (!isDbConnected()) return 'Cannot complete task: database not connected';
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'completeGoalTask',
+            args: { taskId },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            const { Task, Milestone, Goal } = await import('../models/index.js');
+            const task = await Task.getById(taskId);
+
+            if (!task) {
+                activity.status = 'error';
+                activity.error = 'Task not found';
+                this.emitActivity(activity);
+                return 'Task not found';
+            }
+
+            if (actualHours) {
+                await task.trackTime(actualHours);
+            }
+            await task.complete();
+
+            // Check if milestone is complete
+            const milestone = await Milestone.getById(task.milestone_id);
+            if (milestone) {
+                const tasks = await Task.getByMilestone(milestone.id);
+                const allComplete = tasks.every(
+                    (t: any) => t.status === 'completed' || t.status === 'skipped',
+                );
+                if (allComplete) {
+                    await milestone.complete();
+                    return `Task completed. Milestone "${milestone.title}" is also complete! Use advanceGoal to move to next milestone.`;
+                }
+            }
+
+            activity.status = 'complete';
+            activity.result = `Task #${taskId} completed`;
+            this.emitActivity(activity);
+
+            return `Task "${task.title}" completed.`;
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Error completing task: ${activity.error}`;
+        }
+    }
+
+    @tool({
+        description: 'Advance a goal to its next milestone when current is complete.',
+        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
+    })
+    @toolparam({
+        key: 'goalId',
+        type: 'number',
+        required: true,
+        description: 'The goal ID to advance',
+    })
+    async advanceGoal(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { goalId } = call.fn_args;
+
+        if (!isDbConnected()) return 'Cannot advance goal: database not connected';
+
+        const activity: ToolActivity = {
+            id: call.id,
+            tool: 'advanceGoal',
+            args: { goalId },
+            status: 'running',
+        };
+        this.emitActivity(activity);
+
+        try {
+            const { advanceMilestone } = await import('../goals/manager.js');
+            const result = await advanceMilestone(goalId);
+
+            activity.status = result.success ? 'complete' : 'error';
+            activity.result = result.message;
+            this.emitActivity(activity);
+
+            return result.message;
+        } catch (error) {
+            activity.status = 'error';
+            activity.error = (error as Error).message;
+            this.emitActivity(activity);
+            return `Error advancing goal: ${activity.error}`;
+        }
     }
 
     @tool({

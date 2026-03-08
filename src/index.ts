@@ -21,6 +21,7 @@ import { registerEnvCommands } from './commands/env.js';
 import { registerPatternsCommand } from './commands/patterns.js';
 import { registerToolLearningCommand } from './commands/tool-learning.js';
 import { registerOrchestrationCommands } from './commands/orchestrate.js';
+import { registerGoalsCommands } from './commands/goals.js';
 
 dotenv.config();
 
@@ -46,6 +47,7 @@ registerEnvCommands(program);
 registerPatternsCommand(program);
 registerToolLearningCommand(program);
 registerOrchestrationCommands(program);
+registerGoalsCommands(program);
 
 async function main() {
     try {
