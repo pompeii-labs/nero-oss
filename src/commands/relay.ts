@@ -80,7 +80,7 @@ async function updatePompeiiWebhookUrl(tunnelUrl: string): Promise<void> {
     if (!agentKey) return;
 
     try {
-        const response = await fetch(`${pompeiiUrl}/v1/bot`, {
+        const response = await fetch(`${pompeiiUrl}/v1/agent`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
