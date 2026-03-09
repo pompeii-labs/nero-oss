@@ -53,6 +53,7 @@
     "@anthropic-ai/sdk": "^0.52.0",
     "@modelcontextprotocol/sdk": "^1.25.1",
     "@openrouter/sdk": "^0.2.9",
+    "@pompeii-ai/sdk": "^0.1.0",
     "@pompeii-labs/audio": "^0.3.1",
     "@pompeii-labs/magma": "1.8.3",
     "@toon-format/toon": "^2.1.0",

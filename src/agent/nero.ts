@@ -1108,8 +1108,8 @@ You are responding via Slack DM. Use Slack-friendly formatting:
                 role: 'system',
                 content: `## Pompeii Mode Instructions
 You are responding inside a Pompeii workspace where users @mention or DM you.${convNote}
-Your text response is AUTOMATICALLY delivered as the reply to this message. Do NOT use pompeiiRequest to send a response -- it is already handled. Using pompeiiRequest to POST /v1/bot/messages for the current conversation will result in a duplicate message.
-Only use pompeiiRequest if you need to interact with a DIFFERENT conversation/thread, list data, or perform other workspace operations.
+Your text response is AUTOMATICALLY delivered as the reply to this message. Do NOT use pompeiiRequest with post_message for the current conversation -- it is already handled and would result in a duplicate.
+Only use pompeiiRequest if you need to interact with a DIFFERENT conversation, manage tasks, list data, or perform other workspace operations.
 - Use standard markdown formatting (bold, italic, code blocks, lists)
 - Be conversational and helpful
 - You may be given conversation context showing recent messages from other participants`,
@@ -4334,81 +4334,99 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
 
     @tool({
         description:
-            'Make a request to the Pompeii workspace API. Do NOT use this to reply to the current conversation - your text response handles that automatically.\n\nAvailable endpoints:\n  POST /v1/bot/messages - Send message (body: {content, conversation_id?})\n  GET  /v1/bot/messages - Get messages (query: conversation_id?, tag_id?, limit?)\n  GET  /v1/bot/conversations - List conversations\n  GET  /v1/bot/tags - List workspace tags/topics\n  GET  /v1/bot/transcripts - List voice transcripts (query: channel_id?)\n  GET  /v1/bot/transcripts/:id - Get transcript detail\n  POST /v1/bot/threads - Create thread (body: {name, plan?, participantIds?, agentParticipantIds?})\n  GET  /v1/bot/threads - List threads\n  POST /v1/bot/threads/:id/messages - Post to thread (body: {content})\n  GET  /v1/bot/threads/:id/messages - Get thread messages (query: limit?)\n  GET  /v1/bot/threads/:id/files - Get thread files\n  POST /v1/bot/threads/:id/files - Attach files (body: {fileIds: string[]})',
+            'Interact with the Pompeii workspace. Do NOT use this to reply to the current conversation - your text response handles that automatically.\n\nAvailable actions:\n  get_messages - Get recent messages (params: conversation_id?, limit?)\n  post_message - Send message to a different conversation (params: content, conversation_id?)\n  get_conversations - List conversations\n  get_members - List workspace members\n  get_transcripts - List voice transcripts (params: channel_id?)\n  create_task - Create a task (params: name, description?, participantIds?, agentParticipantIds?)\n  get_tasks - List tasks the agent participates in\n  get_task - Get a specific task (params: task_id)\n  update_task - Update a task (params: task_id, name?, description?, status?, metadata?)\n  post_task_message - Post to a task timeline (params: task_id, content)\n  get_task_messages - Get task timeline messages (params: task_id, limit?)\n  get_task_files - Get files attached to a task (params: task_id)\n  get_triggers - List workspace triggers\n  create_trigger - Create a trigger (params: name, natural_language, trigger_source, trigger_event, trigger_filters?)',
         enabled: () => !!process.env.POMPEII_API_KEY,
     })
     @toolparam({
-        key: 'method',
+        key: 'action',
         type: 'string',
         required: true,
-        description: 'HTTP method: GET or POST',
+        description: 'The action to perform (e.g. get_messages, create_task, post_task_message)',
     })
     @toolparam({
-        key: 'path',
-        type: 'string',
-        required: true,
-        description: 'API path (e.g. /v1/bot/messages, /v1/bot/threads/abc123/messages)',
-    })
-    @toolparam({
-        key: 'body',
+        key: 'params',
         type: 'string',
         required: false,
-        description: 'JSON request body for POST requests',
-    })
-    @toolparam({
-        key: 'query',
-        type: 'string',
-        required: false,
-        description: 'JSON object of query parameters for GET requests',
+        description: 'JSON object of parameters for the action',
     })
     async pompeiiRequest(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { method, path, body, query } = call.fn_args;
+        const { action, params: rawParams } = call.fn_args;
+        const params = rawParams
+            ? typeof rawParams === 'string'
+                ? JSON.parse(rawParams)
+                : rawParams
+            : {};
 
         const activity: ToolActivity = {
             id: call.id,
-            tool: 'pompeii_request',
-            args: { method, path },
+            tool: 'pompeii',
+            displayName: action.replace(/_/g, ' '),
+            args: { action, ...params },
             status: 'running',
         };
         this.emitActivity(activity);
 
         try {
-            const baseUrl = process.env.POMPEII_API_URL || 'https://api.pompeii.ai';
+            const { PompeiiClient } = await import('@pompeii-ai/sdk');
+            const client = new PompeiiClient(process.env.POMPEII_API_KEY!, {
+                baseUrl: process.env.POMPEII_API_URL || undefined,
+            });
 
-            let url = `${baseUrl}${path}`;
-            if (query) {
-                const params = new URLSearchParams();
-                const parsed = typeof query === 'string' ? JSON.parse(query) : query;
-                for (const [k, v] of Object.entries(parsed)) {
-                    if (v != null) params.set(k, String(v));
+            let result: unknown;
+
+            switch (action) {
+                case 'get_messages':
+                    result = await client.getMessages(params);
+                    break;
+                case 'post_message':
+                    result = await client.postMessage(params);
+                    break;
+                case 'get_conversations':
+                    result = await client.getConversations();
+                    break;
+                case 'get_members':
+                    result = await client.getMembers();
+                    break;
+                case 'get_transcripts':
+                    result = await client.getTranscripts(params.channel_id);
+                    break;
+                case 'create_task':
+                    result = await client.createTask(params);
+                    break;
+                case 'get_tasks':
+                    result = await client.getTasks();
+                    break;
+                case 'get_task':
+                    result = await client.getTask(params.task_id);
+                    break;
+                case 'update_task': {
+                    const { task_id: updateId, ...updates } = params;
+                    result = await client.updateTask(updateId, updates);
+                    break;
                 }
-                const qs = params.toString();
-                if (qs) url += `?${qs}`;
+                case 'post_task_message':
+                    result = await client.postTaskMessage(params.task_id, params.content);
+                    break;
+                case 'get_task_messages':
+                    result = await client.getTaskMessages(params.task_id, params.limit);
+                    break;
+                case 'get_task_files':
+                    result = await client.getTaskFiles(params.task_id);
+                    break;
+                case 'get_triggers':
+                    result = await client.getTriggers();
+                    break;
+                case 'create_trigger':
+                    result = await client.createTrigger(params);
+                    break;
+                default:
+                    throw new Error(`Unknown action: ${action}`);
             }
 
-            const headers: Record<string, string> = {
-                'X-Agent-Key': process.env.POMPEII_API_KEY!,
-            };
-
-            const options: RequestInit = { method: method.toUpperCase(), headers };
-
-            if (body && method.toUpperCase() === 'POST') {
-                headers['Content-Type'] = 'application/json';
-                options.body = typeof body === 'string' ? body : JSON.stringify(body);
-            }
-
-            const response = await fetch(url, options);
-
-            if (!response.ok) {
-                const error = await response.json().catch(() => ({ message: response.statusText }));
-                throw new Error(error.message || `HTTP ${response.status}`);
-            }
-
-            const data = await response.json();
             activity.status = 'complete';
-            activity.result = `${method.toUpperCase()} ${path} -> ${response.status}`;
+            activity.result = action;
             this.emitActivity(activity);
-            return JSON.stringify(data, null, 2);
+            return JSON.stringify(result, null, 2);
         } catch (error) {
             activity.status = 'error';
             activity.error = (error as Error).message;
