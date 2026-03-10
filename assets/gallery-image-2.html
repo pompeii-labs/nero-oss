@@ -1,0 +1,124 @@
+<html>
+<head>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1280px;
+  height: 800px;
+  background: #0d1117;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  padding: 60px;
+  display: flex;
+  flex-direction: column;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 40px;
+}
+.title {
+  font-size: 32px;
+  color: #58a6ff;
+  font-weight: 600;
+}
+.badge {
+  padding: 8px 16px;
+  background: rgba(46, 160, 67, 0.2);
+  border: 1px solid rgba(46, 160, 67, 0.4);
+  border-radius: 20px;
+  font-size: 14px;
+  color: #3fb950;
+  font-weight: 600;
+}
+.terminal {
+  background: #161b22;
+  border-radius: 12px;
+  border: 1px solid #30363d;
+  flex: 1;
+  padding: 30px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.terminal-header {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.dot-red { background: #ff5f56; }
+.dot-yellow { background: #ffbd2e; }
+.dot-green { background: #27ca40; }
+.terminal-content {
+  font-size: 16px;
+  line-height: 1.8;
+  color: #c9d1d9;
+}
+.timestamp {
+  color: #8b949e;
+}
+.highlight {
+  color: #58a6ff;
+}
+.success {
+  color: #3fb950;
+}
+.arrow {
+  color: #f0883e;
+}
+.label {
+  color: #ff7b72;
+  font-weight: 600;
+}
+.sleep {
+  color: #d2a8ff;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #30363d;
+}
+.overlay {
+  position: absolute;
+  bottom: 60px;
+  right: 60px;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.9), rgba(139, 92, 246, 0.9));
+  padding: 20px 30px;
+  border-radius: 12px;
+  color: white;
+  font-size: 24px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  box-shadow: 0 10px 40px rgba(88, 166, 255, 0.3);
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="title">nero autonomy status</div>
+  <div class="badge">AUTONOMY MODE</div>
+</div>
+<div class="terminal">
+  <div class="terminal-header">
+    <div class="dot dot-red"></div>
+    <div class="dot dot-yellow"></div>
+    <div class="dot dot-green"></div>
+  </div>
+  <div class="terminal-content">
+    <span class="timestamp">[2026-03-10 12:28 PM]</span> Autonomous Session<br><br>
+    <span class="label">Activity:</span> Built A2S sandbox orchestration API<br><br>
+    <span class="success">✓</span> Core API layer — 9 REST endpoints<br>
+    <span class="success">✓</span> Kubernetes integration with warm pools<br>
+    <span class="success">✓</span> WebSocket exec for live container interaction<br>
+    <span class="success">✓</span> Pause/resume with state serialization<br><br>
+    <span class="arrow">→</span> <span class="highlight">Next:</span> Build template images and test warm pool creation<br><br>
+    <div class="sleep">
+      <span class="label">---SESSION_END---</span><br>
+      SLEEP_MINUTES: 120
+    </div>
+  </div>
+</div>
+<div class="overlay">Nero works while you're away</div>
+</body>
+</html>

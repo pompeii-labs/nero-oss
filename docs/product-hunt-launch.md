@@ -42,6 +42,8 @@ But autonomy is just one interface. Nero unifies context across terminal, web da
 
 🖥️ **Dynamic interfaces** — Generates interactive UI panels with buttons, sliders, live data, and pushes them to any connected display.
 
+🧬 **Subagent dispatch** — Spawns parallel agents for independent research or build tasks. Each runs with its own model and context.
+
 🔌 **MCP-native** — First-class Model Context Protocol. Add any MCP server in seconds.
 
 🌐 **Unified context** — One memory across every interface. Not "Slack bot" and "CLI tool." One agent.
@@ -167,6 +169,9 @@ A: Autonomy is opt-in and configurable. You set a token budget per session. Nero
 **Q: What about privacy?**
 A: Self-hosted by default. Your data stays on your hardware. MIT licensed. No cloud dependency unless you want voice/SMS (optional license).
 
+**Q: What about multi-agent orchestration I saw mentioned?**
+A: That's on the roadmap! Subagent dispatch exists today (parallel agents with their own context). Full multi-agent orchestration with specialist collaboration is coming next.
+
 ---
 
 ## Social Proof to Mention (if available)
@@ -198,4 +203,24 @@ A: Self-hosted by default. Your data stays on your hardware. MIT licensed. No cl
 
 ---
 
-*Ready to submit. Just needs the actual image assets created.*
+## Image Asset Status
+
+**Current assets (from repo):**
+- ✅ `icon.png` - App icon/logo
+- ✅ `screenshot.png` - Main web dashboard screenshot
+- ✅ `terminal.png` - Terminal interface
+- ✅ `voice.png` - Voice call interface
+- ✅ `ios.jpg` - iOS app screenshot
+
+**Need to create for Product Hunt (1280x800 or 2400x1600):**
+- ⬜ Image 1: Neural sphere hero with text overlay
+- ⬜ Image 2: Autonomy journal terminal aesthetic
+- ⬜ Image 3: Multi-interface grid layout
+- ⬜ Image 4: Dynamic interface showcase
+- ⬜ Image 5: Voice + emotion detection visualization
+
+**Tools needed:** Figma, Canva, or code-based generation (HTML/CSS → screenshot)
+
+---
+
+*Last updated: March 10, 2026*

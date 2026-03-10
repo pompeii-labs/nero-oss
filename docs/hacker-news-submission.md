@@ -14,8 +14,8 @@ Most AI tools are reactive assistants. Nero has **agency**:
 - **Knowledge graph memory**: Not chat history—a persistent graph of people, projects, concepts, and their relationships. Semantic search activates connected memories
 - **Emotion detection**: During voice calls, analyzes vocal prosody in real-time (48 dimensions via Hume) and adapts responses to your emotional state
 - **Dynamic interfaces**: Generates interactive UI panels and pushes them to any connected display (tablet, monitor, phone). Buttons, sliders, progress bars, live data
-- **Multi-agent orchestration**: Spawns specialist subagents (Planner, Researcher, Implementer) that work in parallel on complex projects
-- **Predictive actions**: Learns your patterns—checks deployment status after you push, alerts on issues before you ask
+- **Subagent dispatch**: Spawns parallel agents for independent research or build tasks, each with their own model and context
+- **Background thinking**: Watches your environment when you're idle—git status, logs, services—and surfaces what it finds when you return
 
 ## Tech that matters
 
@@ -50,6 +50,13 @@ The autonomy piece was the hardest. It's not a cron job. It's an agent that deci
 
 MIT licensed. Self-host for free. Optional license for voice/SMS webhooks.
 
+## Roadmap
+
+Features in development:
+- Multi-agent orchestration (specialist agents collaborating on complex tasks)
+- Predictive action engine (learning patterns to suggest actions before being asked)
+- Long-term goal management (multi-week planning with milestones and dependencies)
+
 ---
 
 **Links:**
@@ -57,4 +64,4 @@ MIT licensed. Self-host for free. Optional license for voice/SMS webhooks.
 - Docs: https://github.com/pompeii-labs/nero-oss/tree/main/docs
 - iOS app: Included in repo
 
-Would love feedback, especially from people building agentic systems. The autonomy and orchestration pieces are still evolving—curious what patterns others have found.
+Would love feedback, especially from people building agentic systems. The autonomy and memory systems are still evolving—curious what patterns others have found.

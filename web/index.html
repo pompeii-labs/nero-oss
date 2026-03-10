@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nero — AI Agent with Agency</title>
+    <meta name="description" content="Nero is an open-source AI agent that works autonomously while you're away. Self-hosted, MIT licensed, one command to run.">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="Nero — AI Agent with Agency">
+    <meta property="og:description" content="The first AI agent with its own projects, memory, and priorities.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://nero.sh">
+    <meta property="og:image" content="https://nero.sh/og-image.png">
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Nero — AI Agent with Agency">
+    <meta name="twitter:description" content="The first AI agent with its own projects, memory, and priorities.">
+    <meta name="twitter:image" content="https://nero.sh/og-image.png">
+    
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+    
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --surface: #12121a;
+            --surface-light: #1a1a26;
+            --text: #e8e8f0;
+            --text-muted: #8888a0;
+            --accent: #00d4ff;
+            --accent-dim: #0088aa;
+            --border: #2a2a3a;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+        
+        /* Header */
+        header {
+            padding: 24px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text);
+            text-decoration: none;
+        }
+        
+        .logo-icon {
+            font-size: 32px;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+        
+        .nav-links a:hover {
+            color: var(--text);
+        }
+        
+        .nav-links .github {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        
+        /* Hero */
+        .hero {
+            padding: 120px 0 80px;
+            text-align: center;
+        }
+        
+        .hero-icon {
+            font-size: 80px;
+            margin-bottom: 24px;
+            animation: pulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .hero h1 {
+            font-size: 64px;
+            font-weight: 800;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+        
+        .hero h1 span {
+            background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .hero-tagline {
+            font-size: 24px;
+            color: var(--text-muted);
+            margin-bottom: 48px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .install-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px 32px;
+            display: inline-flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .install-box code {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 16px;
+            color: var(--accent);
+        }
+        
+        .copy-btn {
+            background: var(--surface-light);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        
+        .copy-btn:hover {
+            background: var(--border);
+        }
+        
+        .copy-btn.copied {
+            background: #22c55e;
+            border-color: #22c55e;
+            color: white;
+        }
+        
+        .hero-note {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        
+        .hero-note a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        
+        /* Features */
+        .features {
+            padding: 80px 0;
+        }
+        
+        .section-header {
+            text-align: center;
+            margin-bottom: 64px;
+        }
+        
+        .section-header h2 {
+            font-size: 36px;
+            margin-bottom: 12px;
+        }
+        
+        .section-header p {
+            color: var(--text-muted);
+            font-size: 18px;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+        }
+        
+        .feature-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent-dim);
+        }
+        
+        .feature-icon {
+            font-size: 40px;
+            margin-bottom: 16px;
+        }
+        
+        .feature-card h3 {
+            font-size: 20px;
+            margin-bottom: 12px;
+        }
+        
+        .feature-card p {
+            color: var(--text-muted);
+            font-size: 15px;
+            line-height: 1.6;
+        }
+        
+        /* Interfaces */
+        .interfaces {
+            padding: 80px 0;
+            background: var(--surface);
+        }
+        
+        .interface-list {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 48px;
+        }
+        
+        .interface-item {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            padding: 12px 24px;
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+        
+        /* CTA */
+        .cta {
+            padding: 120px 0;
+            text-align: center;
+        }
+        
+        .cta h2 {
+            font-size: 48px;
+            margin-bottom: 24px;
+        }
+        
+        .cta p {
+            color: var(--text-muted);
+            font-size: 20px;
+            margin-bottom: 48px;
+        }
+        
+        .cta-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg);
+        }
+        
+        .btn-primary:hover {
+            background: #00e5ff;
+        }
+        
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--surface-light);
+        }
+        
+        /* Footer */
+        footer {
+            padding: 48px 0;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        
+        footer a {
+            color: var(--text-muted);
+            text-decoration: none;
+            margin: 0 16px;
+        }
+        
+        footer a:hover {
+            color: var(--text);
+        }
+        
+        /* Mobile */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 40px;
+            }
+            
+            .hero-tagline {
+                font-size: 18px;
+            }
+            
+            .nav-links {
+                display: none;
+            }
+            
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .cta h2 {
+                font-size: 32px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <a href="#" class="logo">
+                <span class="logo-icon">⚡</span>
+                <span>Nero</span>
+            </a>
+            <div class="nav-links">
+                <a href="https://github.com/pompeii-labs/nero-oss" class="github">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+                    </svg>
+                    GitHub
+                </a>
+            </div>
+        </nav>
+    </header>
+    
+    <section class="hero">
+        <div class="container">
+            <div class="hero-icon">⚡</div>
+            <h1>Meet <span>Nero</span></h1>
+            <p class="hero-tagline">The first AI agent with <em>agency</em>. Works while you're away. Remembers everything. Meets you anywhere.</p>
+            
+            <div class="install-box">
+                <code>curl -fsSL nero.sh/install | bash</code>
+                <button class="copy-btn" onclick="copyInstall()">Copy</button>
+            </div>
+            
+            <p class="hero-note">
+                Self-hosted • MIT licensed • <a href="https://github.com/pompeii-labs/nero-oss">View on GitHub</a>
+            </p>
+        </div>
+    </section>
+    
+    <section class="features">
+        <div class="container">
+            <div class="section-header">
+                <h2>What makes Nero different</h2>
+                <p>Not a chatbot. A colleague.</p>
+            </div>
+            
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🤖</div>
+                    <h3>Autonomy Mode</h3>
+                    <p>Nero works on its own projects while you're away. It decides what to work on, does the work, and writes journal entries. When you come back, it has progress to show.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">🧠</div>
+                    <h3>Knowledge Graph Memory</h3>
+                    <p>Not a chat log. A persistent graph of people, projects, concepts, and relationships. When you mention something, connected memories activate automatically.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">🌐</div>
+                    <h3>Unified Context</h3>
+                    <p>One agent across terminal, web, voice, SMS, Slack, iOS, and custom displays. Start a task on your laptop, finish on a voice call—it remembers everything.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">🎙️</div>
+                    <h3>Emotion-Aware Voice</h3>
+                    <p>Real phone calls with real-time emotion detection. It knows how you're feeling and adapts its responses accordingly.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">🖥️</div>
+                    <h3>Dynamic Interfaces</h3>
+                    <p>Nero generates interactive UI panels on demand—buttons, sliders, live data—and pushes them to any connected display.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">🔌</div>
+                    <h3>MCP-Native</h3>
+                    <p>First-class Model Context Protocol support. Add any MCP server in seconds—filesystem, GitHub, databases, APIs.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <section class="interfaces">
+        <div class="container">
+            <div class="section-header">
+                <h2>Every interface, one agent</h2>
+                <p>Your conversation follows you everywhere</p>
+            </div>
+            
+            <div class="interface-list">
+                <span class="interface-item">💻 Terminal</span>
+                <span class="interface-item">🌐 Web Dashboard</span>
+                <span class="interface-item">📱 iOS App</span>
+                <span class="interface-item">📞 Voice Calls</span>
+                <span class="interface-item">💬 SMS</span>
+                <span class="interface-item">💼 Slack</span>
+                <span class="interface-item">🖥️ Displays</span>
+                <span class="interface-item">🔌 API</span>
+            </div>
+        </div>
+    </section>
+    
+    <section class="cta">
+        <div class="container">
+            <h2>Ready to meet your agent?</h2>
+            <p>One command. Self-hosted. Your data stays yours.</p>
+            
+            <div class="cta-buttons">
+                <a href="https://github.com/pompeii-labs/nero-oss" class="btn btn-primary">
+                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+                    </svg>
+                    View on GitHub
+                </a>
+                <a href="https://github.com/pompeii-labs/nero-oss#readme" class="btn btn-secondary">Read the Docs</a>
+            </div>
+        </div>
+    </section>
+    
+    <footer>
+        <div class="container">
+            <p>
+                <a href="https://github.com/pompeii-labs/nero-oss">GitHub</a>
+                <a href="https://github.com/pompeii-labs/nero-oss/blob/main/LICENSE">License</a>
+                <a href="https://github.com/pompeii-labs/nero-oss/issues">Issues</a>
+            </p>
+            <p style="margin-top: 16px;">Built by <a href="https://pompeiilabs.com">Pompeii Labs</a></p>
+        </div>
+    </footer>
+    
+    <script>
+        function copyInstall() {
+            const code = 'curl -fsSL nero.sh/install | bash';
+            navigator.clipboard.writeText(code);
+            
+            const btn = document.querySelector('.copy-btn');
+            btn.textContent = 'Copied!';
+            btn.classList.add('copied');
+            
+            setTimeout(() => {
+                btn.textContent = 'Copy';
+                btn.classList.remove('copied');
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

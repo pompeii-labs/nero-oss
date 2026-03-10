@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1280px;
+  height: 800px;
+  background: linear-gradient(135deg, #0a0a0f 0%, #16162a 50%, #0f172a 100%);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.container {
+  display: flex;
+  gap: 40px;
+  align-items: center;
+}
+.interface-panel {
+  width: 500px;
+  background: rgba(26, 26, 38, 0.6);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.5);
+}
+.panel-title {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* System Monitor */
+.metric {
+  margin-bottom: 20px;
+}
+.metric-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+}
+.metric-bar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.metric-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+.cpu { background: linear-gradient(90deg, #00d4ff, #0088aa); width: 45%; }
+.mem { background: linear-gradient(90deg, #a855f7, #6b21a8); width: 62%; }
+.disk { background: linear-gradient(90deg, #22c55e, #16a34a); width: 28%; }
+
+/* Spotify Controller */
+.now-playing {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.album-art {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, #1db954, #169c45);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+}
+.track-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+.track-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: white;
+}
+.artist {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.btn {
+  flex: 1;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: white;
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+}
+.btn.primary {
+  background: rgba(29, 185, 84, 0.2);
+  border-color: rgba(29, 185, 84, 0.4);
+}
+.slider-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.slider-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  width: 50px;
+}
+.slider {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  position: relative;
+}
+.slider-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 70%;
+  background: linear-gradient(90deg, #00d4ff, #a855f7);
+  border-radius: 3px;
+}
+
+.text-content {
+  max-width: 400px;
+}
+.badge {
+  display: inline-block;
+  padding: 8px 16px;
+  background: rgba(0, 212, 255, 0.15);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 20px;
+  font-size: 13px;
+  color: #00d4ff;
+  margin-bottom: 24px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+h1 {
+  font-size: 48px;
+  font-weight: 800;
+  color: white;
+  margin-bottom: 16px;
+  line-height: 1.1;
+}
+h1 span {
+  background: linear-gradient(135deg, #00d4ff, #a855f7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+p {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.6;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="interface-panel">
+    <div class="panel-title">🖥️ System Monitor</div>
+    
+    <div class="metric">
+      <div class="metric-header">
+        <span>CPU</span>
+        <span>45%</span>
+      </div>
+      <div class="metric-bar">
+        <div class="metric-fill cpu"></div>
+      </div>
+    </div>
+    
+    <div class="metric">
+      <div class="metric-header">
+        <span>Memory</span>
+        <span>62%</span>
+      </div>
+      <div class="metric-bar">
+        <div class="metric-fill mem"></div>
+      </div>
+    </div>
+    
+    <div class="metric">
+      <div class="metric-header">
+        <span>Disk</span>
+        <span>28%</span>
+      </div>
+      <div class="metric-bar">
+        <div class="metric-fill disk"></div>
+      </div>
+    </div>
+    
+    <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.1);">
+      <div class="panel-title">🎵 Now Playing</div>
+      <div class="now-playing">
+        <div class="album-art">🎸</div>
+        <div class="track-info">
+          <div class="track-name">Singularity</div>
+          <div class="artist">Matty Hogan</div>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="btn">⏮</div>
+        <div class="btn primary">⏸</div>
+        <div class="btn">⏭</div>
+      </div>
+      <div class="slider-container">
+        <span class="slider-label">Volume</span>
+        <div class="slider">
+          <div class="slider-fill"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="text-content">
+    <div class="badge">Dynamic Interfaces</div>
+    <h1>Nero builds UI <span>on demand</span></h1>
+    <p>Buttons, sliders, progress bars, live data—generated instantly and pushed to any connected display. Ask for a Spotify controller, get a Spotify controller.</p>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<html>
+<head>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1280px;
+  height: 800px;
+  background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #16213e 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+}
+.container {
+  text-align: center;
+  position: relative;
+}
+.sphere {
+  width: 400px;
+  height: 400px;
+  position: relative;
+  margin: 0 auto 40px;
+}
+.sphere-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(99, 102, 241, 0.4), rgba(139, 92, 246, 0.2) 50%, rgba(0, 0, 0, 0.8));
+  box-shadow: 
+    0 0 60px rgba(99, 102, 241, 0.5),
+    0 0 120px rgba(139, 92, 246, 0.3),
+    inset 0 0 60px rgba(99, 102, 241, 0.1);
+  position: relative;
+  animation: pulse 4s ease-in-out infinite;
+}
+.node {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.8);
+}
+.node1 { width: 8px; height: 8px; top: 20%; left: 30%; }
+.node2 { width: 6px; height: 6px; top: 35%; left: 65%; }
+.node3 { width: 10px; height: 10px; top: 50%; left: 25%; }
+.node4 { width: 5px; height: 5px; top: 60%; left: 70%; }
+.node5 { width: 7px; height: 7px; top: 75%; left: 45%; }
+.node6 { width: 4px; height: 4px; top: 30%; left: 50%; }
+.node7 { width: 6px; height: 6px; top: 45%; left: 80%; }
+.node8 { width: 5px; height: 5px; top: 70%; left: 20%; }
+.edge {
+  position: absolute;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.6), rgba(139, 92, 246, 0.3));
+  transform-origin: left center;
+}
+.edge1 { width: 120px; top: 22%; left: 31%; transform: rotate(25deg); }
+.edge2 { width: 100px; top: 38%; left: 28%; transform: rotate(-15deg); }
+.edge3 { width: 140px; top: 52%; left: 30%; transform: rotate(35deg); }
+.edge4 { width: 90px; top: 62%; left: 48%; transform: rotate(-25deg); }
+.edge5 { width: 110px; top: 48%; left: 52%; transform: rotate(10deg); }
+
+h1 {
+  font-size: 48px;
+  font-weight: 700;
+  color: white;
+  margin-bottom: 16px;
+  letter-spacing: -0.5px;
+}
+h1 span {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6, #ec4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+p {
+  font-size: 24px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 400;
+}
+.badge {
+  display: inline-block;
+  padding: 8px 16px;
+  background: rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 20px;
+  font-size: 14px;
+  color: #6366f1;
+  margin-bottom: 30px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.02); opacity: 0.95; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="badge">Knowledge Graph Memory</div>
+  <div class="sphere">
+    <div class="sphere-inner">
+      <div class="node node1"></div>
+      <div class="node node2"></div>
+      <div class="node node3"></div>
+      <div class="node node4"></div>
+      <div class="node node5"></div>
+      <div class="node node6"></div>
+      <div class="node node7"></div>
+      <div class="node node8"></div>
+      <div class="edge edge1"></div>
+      <div class="edge edge2"></div>
+      <div class="edge edge3"></div>
+      <div class="edge edge4"></div>
+      <div class="edge edge5"></div>
+    </div>
+  </div>
+  <h1>Your AI's memory isn't a <span>chat log</span></h1>
+  <p>It's a graph. A living map of people, projects, and relationships.</p>
+</div>
+</body>
+</html>
