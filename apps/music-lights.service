@@ -1,0 +1,15 @@
+[Unit]
+Description=Green Room Music-Reactive Lighting
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/green-room-lights
+ExecStart=/home/pi/.bun/bin/bun run /home/pi/green-room-lights/music-reactive-lights.ts
+Restart=always
+RestartSec=10
+Environment="NODE_ENV=production"
+
+[Install]
+WantedBy=multi-user.target

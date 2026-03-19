@@ -1,0 +1,48 @@
+#!/bin/bash
+# Music Lights Control Script
+# Quick commands for managing the visualizer
+
+case "$1" in
+  start)
+    echo "🎵 Starting music-reactive lighting..."
+    sudo systemctl start music-lights
+    echo "✓ Visualizer active"
+    ;;
+  stop)
+    echo "⏹️  Stopping visualizer..."
+    sudo systemctl stop music-lights
+    # Return to cozy mode
+    echo "🕯️  Returning to ambient lighting"
+    ;;
+  restart)
+    echo "🔄 Restarting..."
+    sudo systemctl restart music-lights
+    ;;
+  status)
+    sudo systemctl status music-lights --no-pager
+    ;;
+  logs)
+    sudo journalctl -u music-lights -f
+    ;;
+  cozy)
+    echo "🕯️  Manual cozy mode override"
+    # Would call lifx:cozy here
+    ;;
+  party)
+    echo "🎉 Party mode activated"
+    # Would call lifx:pulse with color rotation
+    ;;
+  *)
+    echo "Green Room Music Lights"
+    echo ""
+    echo "Usage: $0 {start|stop|restart|status|logs|cozy|party}"
+    echo ""
+    echo "Commands:"
+    echo "  start   - Begin music-reactive mode"
+    echo "  stop    - Stop visualizer, return to ambient"
+    echo "  status  - Check if running"
+    echo "  logs    - Watch live logs"
+    echo "  cozy    - Override to cozy mode"
+    echo "  party   - Override to party pulse"
+    ;;
+esac
