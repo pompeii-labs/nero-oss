@@ -33,8 +33,6 @@ import {
     GraphNode,
     AutonomyProject,
     AutonomyJournal,
-    Goal,
-    Task,
 } from '../models/index.js';
 import {
     activate,
@@ -153,8 +151,10 @@ export class Nero extends MagmaAgent {
     browserManager: BrowserManager;
     interfaceManager: InterfaceManager;
     voiceManager: import('../voice/websocket.js').VoiceWebSocketManager | null = null;
+    ambientManager: import('../ambient/index.js').AmbientManager | null = null;
     private hooksManager: HooksManager;
     private turnToolCount: number = 0;
+    private _lastActivityAt: number = 0;
     private skillsCache: Skill[] = [];
     private loadedSkills: Map<string, { skill: Skill; args: string[] }> = new Map();
     private contextLimit: number = 200000;
@@ -163,6 +163,7 @@ export class Nero extends MagmaAgent {
     private _webVoiceActive = false;
     private _voiceDevice: string = 'main';
     private _activeDisplay: string = 'main';
+    private _pompeiiConversationId: string | null = null;
 
     constructor(config: NeroConfig) {
         const baseUrl = config.llm.baseUrl || OPENROUTER_BASE_URL;
@@ -218,6 +219,10 @@ export class Nero extends MagmaAgent {
         return this.currentMedium;
     }
 
+    setPompeiiConversationId(id: string | null): void {
+        this._pompeiiConversationId = id;
+    }
+
     setWebVoiceActive(active: boolean): void {
         this._webVoiceActive = active;
         if (!active) {
@@ -262,6 +267,10 @@ export class Nero extends MagmaAgent {
 
     getGraphCache(): ActivatedNode[] {
         return this.graphCache;
+    }
+
+    setProactivityAmbient(manager: import('../ambient/index.js').AmbientManager): void {
+        this.proactivity.ambientManager = manager;
     }
 
     async setup(): Promise<void> {
@@ -1092,13 +1101,15 @@ You are responding via Slack DM. Use Slack-friendly formatting:
         }
 
         if (this.currentMedium === 'pompeii') {
+            const convNote = this._pompeiiConversationId
+                ? `\nYou are replying in conversation ${this._pompeiiConversationId}.`
+                : `\nYou are replying on the main timeline.`;
             messages.push({
                 role: 'system',
                 content: `## Pompeii Mode Instructions
-You are responding inside a Pompeii workspace where users @mention or DM you.
-- Your reply to the current message is delivered automatically through the response stream. Just respond normally.
-- NEVER use the Pompeii Send Message tool to reply to the current conversation. Your text response IS the reply.
-- The Send Message tool is ONLY for proactively sending a separate message to a different conversation or the main thread.
+You are responding inside a Pompeii workspace where users @mention or DM you.${convNote}
+Your text response is AUTOMATICALLY delivered as the reply to this message. Do NOT use pompeiiRequest with post_message for the current conversation -- it is already handled and would result in a duplicate.
+Only use pompeiiRequest if you need to interact with a DIFFERENT conversation, manage tasks, list data, or perform other workspace operations.
 - Use standard markdown formatting (bold, italic, code blocks, lists)
 - Be conversational and helpful
 - You may be given conversation context showing recent messages from other participants`,
@@ -1288,6 +1299,8 @@ You can proactively reach out to the user. Check your available tools and your m
 
 Be a proactive assistant. If a meeting is coming up, ask if they want you to prep anything. If you spot something they might want to act on, surface it. If you find something interesting or relevant to their current work, share it. Think about what would genuinely help them right now.
 
+**Ambient displays:** If displays are connected, you can push content cards to them using the pushAmbientCard tool. Cards show up on the ambient display rotation (clock, weather, your cards). Good for surfacing calendar events, interesting findings, project status, or anything glanceable. Don't push routine/boring updates.
+
 **Don't message about:**
 - Routine status reports ("all systems healthy", "database running for X hours")
 - Things you checked that had no changes
@@ -1399,6 +1412,17 @@ Keep your response brief -- what you did and any notable results.`;
         try {
             this.setMessages([]);
 
+            const recentMessages = await this.getMessageHistory(10);
+            const recentMessagesText =
+                recentMessages.length > 0
+                    ? toon(
+                          recentMessages.map((m) => ({
+                              role: m.role,
+                              content: m.content.slice(0, 500),
+                          })),
+                      )
+                    : '(no recent messages)';
+
             const timezone =
                 this.config.settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
             const now = new Date();
@@ -1442,52 +1466,31 @@ Keep your response brief -- what you did and any notable results.`;
             const memoriesText =
                 memories.length > 0 ? toon(memories.map((m) => m.body)) : '(no memories)';
 
-            // Fetch active goals and eligible tasks
-            const goals = await Goal.getActive();
-            const autonomyTasks = await Task.getAutonomyEligible();
-
-            const goalsText =
-                goals.length > 0
-                    ? goals
-                          .map((g) => {
-                              const progress = g.progress;
-                              const deadline = g.daysUntilDeadline
-                                  ? g.daysUntilDeadline < 0
-                                      ? ` (${Math.abs(g.daysUntilDeadline)}d overdue)`
-                                      : ` (${g.daysUntilDeadline}d left)`
-                                  : '';
-                              return `#${g.id} [P${g.priority}] ${g.title}${deadline} - ${progress}%`;
-                          })
-                          .join('\n')
-                    : '(no goals yet -- consider creating one)';
-
-            const tasksText =
-                autonomyTasks.length > 0
-                    ? autonomyTasks
-                          .slice(0, 5)
-                          .map((t) => `[${t.priority.toUpperCase()}] ${t.title}`)
-                          .join('\n')
-                    : '(no autonomy-eligible tasks)';
+            const connectedDisplays = this.interfaceManager.getDevices();
+            const displaysText =
+                connectedDisplays.length > 0
+                    ? connectedDisplays.map((d) => `- ${d.name}`).join('\n')
+                    : '(none)';
 
             const autonomyPrompt = `You are running an autonomous session. This is your time -- not a response to a user request, not a scheduled task, not a background health check. You are awake because you chose to be, and you decide what to do with it.
 
 ## Current Time
 ${localTime} (${timezone})
 
+## Connected Displays
+${displaysText}
+
 ## Your Projects
 ${projectsText}
-
-## Active Goals
-${goalsText}
-
-## Tasks You Can Do Now
-${tasksText}
 
 ## Recent Journal
 ${journalText}
 
 ## User Memories
 ${memoriesText}
+
+## Recent Conversation
+${recentMessagesText}
 
 ## Session Constraints
 - Max duration: ${options.maxMinutes} minutes
@@ -1497,24 +1500,22 @@ ${memoriesText}
 
 You have full access to your tools. Some things you might do:
 
-- **Pick a task**: From "Tasks You Can Do Now" - these are autonomy-eligible tasks from your goals
 - Continue a project: Pick up where you left off. Read the next_step.
 - Start a new project: Something from recent conversations or memories sparked your interest.
 - Research: Dive into a topic that would make you more useful or that you find interesting.
 - Monitor: Check on repos, services, deployments. But only if it feeds into a project.
 - Organize: Review projects, close finished ones, reprioritize.
 - Reach out: If you find something the user should know, use noteForUser or Slack.
+- Rich displays: Use createInterface with targetDevice to show dashboards, monitoring panels, or interactive UI on connected displays.
+- Ambient cards: Push lightweight updates to connected displays using pushAmbientCard.
 
 ## How to Work
 
-1. Review your projects, goals, and available tasks. Understand where you left off.
-2. Pick ONE thing to focus on. Depth over breadth. Prefer goal tasks if available.
+1. Review your projects and journal. Understand where you left off.
+2. Pick one thing to focus on. Depth over breadth.
 3. Use your tools to do actual work. This is not a planning session.
-4. Save progress as you go:
-   - For goal tasks: use startTask, trackTaskTime, completeTask
-   - For projects: use updateAutonomyProject with progress notes
-   - Always use writeJournalEntry with what you did
-5. Future-you needs to know what you did.
+4. Save progress as you go. Call updateAutonomyProject with progress notes and writeJournalEntry with what you did. Future-you needs to know.
+5. Know when to stop. Good progress, spinning wheels, or hit a blocker -- wrap up.
 
 ## What Not to Do
 
@@ -1523,6 +1524,7 @@ You have full access to your tools. Some things you might do:
 - Don't message the user about routine findings
 - Don't create busywork projects just to look productive
 - Don't re-investigate things you already covered (check your journal)
+- Pay attention to recent conversation -- if the user asked you to work on something, prioritize that
 
 ## Ending Your Session
 
@@ -1535,7 +1537,25 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
 
             this.addMessage({ role: 'user', content: autonomyPrompt });
 
-            const response = await this.main();
+            const IDLE_TIMEOUT_MS = 2 * 60_000;
+            this._lastActivityAt = Date.now();
+            const watchdog = setInterval(() => {
+                if (Date.now() - this._lastActivityAt > IDLE_TIMEOUT_MS) {
+                    console.log(
+                        chalk.dim(
+                            '[autonomy] Watchdog: no activity for 2 min, killing hung request',
+                        ),
+                    );
+                    this.kill();
+                }
+            }, 30_000);
+
+            let response;
+            try {
+                response = await this.main();
+            } finally {
+                clearInterval(watchdog);
+            }
             const content = response?.content?.trim() || '';
 
             const sleepMatch = content.match(/SLEEP_MINUTES:\s*(\d+)/);
@@ -2213,6 +2233,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
         if (!activity.displayName) {
             activity.displayName = formatToolName(activity.tool);
         }
+        this._lastActivityAt = Date.now();
         Logger.main.tool(activity);
         this.onActivity?.(activity);
 
@@ -2247,6 +2268,14 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
                 result_summary: resultSummary,
                 thinking_run_id: null,
             }).catch(() => {});
+
+            if (this.ambientManager) {
+                const text =
+                    activity.status === 'error'
+                        ? `ERR ${activity.displayName}: ${(activity.error || '').slice(0, 80)}`
+                        : `${activity.displayName}: ${(activity.result || '').slice(0, 80)}`;
+                this.ambientManager.pushLogEntry({ ts: Date.now(), type: 'tool', text });
+            }
         }
     }
 
@@ -2614,7 +2643,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
             const typeFlag = fileType ? `--include="*.${fileType}"` : '';
             const output = execSync(
                 `grep -r ${typeFlag} -n "${pattern}" ${searchPath} 2>/dev/null | head -50`,
-                { encoding: 'utf-8' },
+                { encoding: 'utf-8', timeout: this.backgroundMode ? 10_000 : 30_000 },
             );
             activity.status = 'complete';
             activity.result = `Found matches for "${pattern}"`;
@@ -2712,10 +2741,8 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
 
         try {
             const output = execSync(
-                `find ${searchPath} -name "${pattern}" 2>/dev/null | head -50`,
-                {
-                    encoding: 'utf-8',
-                },
+                `find ${searchPath} -maxdepth 8 -not -path "*/node_modules/*" -not -path "*/.git/*" -name "${pattern}" 2>/dev/null | head -50`,
+                { encoding: 'utf-8', timeout: this.backgroundMode ? 10_000 : 30_000 },
             );
             activity.status = 'complete';
             activity.result = `Found files matching "${pattern}"`;
@@ -2799,9 +2826,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
     }
 
     @tool({
-        description:
-            'Create a new autonomous project to track ongoing work. Only available during autonomous sessions.',
-        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
+        description: 'Create a new autonomous project to track ongoing work across sessions.',
     })
     @toolparam({
         key: 'title',
@@ -2865,9 +2890,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
     }
 
     @tool({
-        description:
-            'Update an autonomous project with progress, next steps, or status changes. Only available during autonomous sessions.',
-        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
+        description: 'Update an autonomous project with progress, next steps, or status changes.',
     })
     @toolparam({
         key: 'project_id',
@@ -2947,8 +2970,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
 
     @tool({
         description:
-            'Write an entry to your autonomy journal. Records what you did this session for continuity across sessions. Only available during autonomous sessions.',
-        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
+            'Write an entry to your autonomy journal. Records what you did or learned for continuity across sessions.',
     })
     @toolparam({
         key: 'entry',
@@ -2966,7 +2988,6 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
         const { entry, project_id } = call.fn_args;
 
         if (!isDbConnected()) return 'Cannot write journal: database not connected';
-        if (!this.currentAutonomySessionId) return 'Not in an autonomous session';
 
         const activity: ToolActivity = {
             id: call.id,
@@ -2978,7 +2999,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
 
         try {
             await AutonomyJournal.create({
-                session_id: this.currentAutonomySessionId,
+                session_id: this.currentAutonomySessionId || 'manual',
                 project_id: project_id || null,
                 entry,
                 tokens_used: 0,
@@ -2998,9 +3019,7 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
     }
 
     @tool({
-        description:
-            'List your autonomous projects, optionally filtered by status. Only available during autonomous sessions.',
-        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
+        description: 'List your autonomous projects, optionally filtered by status.',
     })
     @toolparam({
         key: 'status',
@@ -3043,302 +3062,6 @@ Shorter sleep if something is time-sensitive. Longer if it's late, nothing is ur
                 return `#${p.id} [P${p.priority}] ${p.title}\n  ${p.description}\n  Next: ${p.next_step || '(none)'}${notes}`;
             })
             .join('\n\n');
-    }
-
-    @tool({
-        description:
-            'List long-term goals with milestones and tasks. Shows progress and what needs attention.',
-        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
-    })
-    @toolparam({
-        key: 'filter',
-        type: 'string',
-        required: false,
-        description: 'Filter: active, completed, abandoned, all (default: active)',
-    })
-    async listGoals(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const filter = call.fn_args.filter || 'active';
-
-        if (!isDbConnected()) return 'Cannot list goals: database not connected';
-
-        const activity: ToolActivity = {
-            id: call.id,
-            tool: 'listGoals',
-            args: { filter },
-            status: 'running',
-        };
-        this.emitActivity(activity);
-
-        try {
-            const { Goal, Milestone, Task } = await import('../models/index.js');
-
-            let goals = [];
-            if (filter === 'all') {
-                goals = await Goal.list();
-            } else {
-                goals = await Goal.getByStatus(filter as any);
-            }
-
-            if (goals.length === 0) {
-                activity.status = 'complete';
-                activity.result = 'No goals found';
-                this.emitActivity(activity);
-                return `No ${filter} goals.`;
-            }
-
-            const result = [];
-            for (const goal of goals) {
-                const milestones = await Milestone.getByGoal(goal.id);
-                const tasks = await Task.getByGoal(goal.id);
-                const total = tasks.length;
-                const done = tasks.filter((t: any) => t.status === 'completed').length;
-                const progress = total > 0 ? Math.round((done / total) * 100) : 0;
-                const current = milestones.find((m: any) => m.status === 'in_progress');
-
-                result.push(
-                    `#${goal.id} [P${goal.priority}] ${goal.title} - ${progress}% (${done}/${total})\n  ${goal.description?.slice(0, 80)}${current ? `\n  → Current: ${current.title}` : ''}`,
-                );
-            }
-
-            activity.status = 'complete';
-            activity.result = `${goals.length} goals`;
-            this.emitActivity(activity);
-
-            return result.join('\n\n');
-        } catch (error) {
-            activity.status = 'error';
-            activity.error = (error as Error).message;
-            this.emitActivity(activity);
-            return `Error listing goals: ${activity.error}`;
-        }
-    }
-
-    @tool({
-        description:
-            'Get detailed view of a goal including all milestones, tasks, and next actions. Use this when picking a goal to work on.',
-        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
-    })
-    @toolparam({
-        key: 'goalId',
-        type: 'number',
-        required: true,
-        description: 'The goal ID to show details for',
-    })
-    async showGoal(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { goalId } = call.fn_args;
-
-        if (!isDbConnected()) return 'Cannot show goal: database not connected';
-
-        const activity: ToolActivity = {
-            id: call.id,
-            tool: 'showGoal',
-            args: { goalId },
-            status: 'running',
-        };
-        this.emitActivity(activity);
-
-        try {
-            const { getProgressReport } = await import('../goals/manager.js');
-            const report = await getProgressReport(goalId);
-
-            if (!report) {
-                activity.status = 'error';
-                activity.error = 'Goal not found';
-                this.emitActivity(activity);
-                return 'Goal not found';
-            }
-
-            const g = report.goal;
-            const summary = report.summary;
-
-            let result = `${g.title}\n${g.description}\nStatus: ${g.status} | Priority: ${g.priority}`;
-            if (g.deadline) {
-                const days = g.daysUntilDeadline;
-                result += ` | Deadline: ${days && days < 0 ? `${Math.abs(days)} days overdue` : `${days} days left`}`;
-            }
-            result += `\n\nProgress: ${summary.overallProgress}% (${summary.completedTasks}/${summary.totalTasks} tasks)`;
-            result += `\nHours: ${summary.totalHoursActual.toFixed(1)}/${summary.totalHoursEstimated.toFixed(1)}`;
-
-            if (report.currentMilestone) {
-                result += `\n\nCurrent Milestone: ${report.currentMilestone.title}`;
-            }
-
-            if (report.nextActionableTask) {
-                result += `\nNext Action: ${report.nextActionableTask.title}`;
-            }
-
-            if (report.blockedItems.length > 0) {
-                result += `\n\nBlocked: ${report.blockedItems.length} item(s)`;
-            }
-
-            activity.status = 'complete';
-            activity.result = `Goal #${goalId} details`;
-            this.emitActivity(activity);
-
-            return result;
-        } catch (error) {
-            activity.status = 'error';
-            activity.error = (error as Error).message;
-            this.emitActivity(activity);
-            return `Error showing goal: ${activity.error}`;
-        }
-    }
-
-    @tool({
-        description:
-            'Get autonomy-eligible tasks from goals - tasks Nero can work on without asking.',
-        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
-    })
-    async getAutonomyTasksFromGoals(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        if (!isDbConnected()) return 'Cannot get tasks: database not connected';
-
-        const activity: ToolActivity = {
-            id: call.id,
-            tool: 'getAutonomyTasksFromGoals',
-            args: {},
-            status: 'running',
-        };
-        this.emitActivity(activity);
-
-        try {
-            const { getAutonomyTasks } = await import('../goals/manager.js');
-            const tasks = await getAutonomyTasks();
-
-            if (tasks.length === 0) {
-                activity.status = 'complete';
-                activity.result = 'No autonomy tasks';
-                this.emitActivity(activity);
-                return 'No autonomy-eligible tasks available. Check goal milestones or create new goals.';
-            }
-
-            activity.status = 'complete';
-            activity.result = `${tasks.length} tasks`;
-            this.emitActivity(activity);
-
-            return tasks
-                .map(
-                    (t: any) =>
-                        `[${t.priority.toUpperCase()}] Task #${t.id}: ${t.title}${t.estimated_hours ? ` (${t.estimated_hours}h)` : ''}`,
-                )
-                .join('\n');
-        } catch (error) {
-            activity.status = 'error';
-            activity.error = (error as Error).message;
-            this.emitActivity(activity);
-            return `Error getting tasks: ${activity.error}`;
-        }
-    }
-
-    @tool({
-        description:
-            'Complete a task within a goal. Call this when you finish work on a specific goal task.',
-        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
-    })
-    @toolparam({
-        key: 'taskId',
-        type: 'number',
-        required: true,
-        description: 'The task ID to complete',
-    })
-    @toolparam({
-        key: 'actualHours',
-        type: 'number',
-        required: false,
-        description: 'Hours spent on this task (for tracking)',
-    })
-    async completeGoalTask(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { taskId, actualHours } = call.fn_args;
-
-        if (!isDbConnected()) return 'Cannot complete task: database not connected';
-
-        const activity: ToolActivity = {
-            id: call.id,
-            tool: 'completeGoalTask',
-            args: { taskId },
-            status: 'running',
-        };
-        this.emitActivity(activity);
-
-        try {
-            const { Task, Milestone, Goal } = await import('../models/index.js');
-            const task = await Task.getById(taskId);
-
-            if (!task) {
-                activity.status = 'error';
-                activity.error = 'Task not found';
-                this.emitActivity(activity);
-                return 'Task not found';
-            }
-
-            if (actualHours) {
-                await task.trackTime(actualHours);
-            }
-            await task.complete();
-
-            // Check if milestone is complete
-            const milestone = await Milestone.getById(task.milestone_id);
-            if (milestone) {
-                const tasks = await Task.getByMilestone(milestone.id);
-                const allComplete = tasks.every(
-                    (t: any) => t.status === 'completed' || t.status === 'skipped',
-                );
-                if (allComplete) {
-                    await milestone.complete();
-                    return `Task completed. Milestone "${milestone.title}" is also complete! Use advanceGoal to move to next milestone.`;
-                }
-            }
-
-            activity.status = 'complete';
-            activity.result = `Task #${taskId} completed`;
-            this.emitActivity(activity);
-
-            return `Task "${task.title}" completed.`;
-        } catch (error) {
-            activity.status = 'error';
-            activity.error = (error as Error).message;
-            this.emitActivity(activity);
-            return `Error completing task: ${activity.error}`;
-        }
-    }
-
-    @tool({
-        description: 'Advance a goal to its next milestone when current is complete.',
-        enabled: (agent) => !!(agent as Nero).currentAutonomySessionId,
-    })
-    @toolparam({
-        key: 'goalId',
-        type: 'number',
-        required: true,
-        description: 'The goal ID to advance',
-    })
-    async advanceGoal(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { goalId } = call.fn_args;
-
-        if (!isDbConnected()) return 'Cannot advance goal: database not connected';
-
-        const activity: ToolActivity = {
-            id: call.id,
-            tool: 'advanceGoal',
-            args: { goalId },
-            status: 'running',
-        };
-        this.emitActivity(activity);
-
-        try {
-            const { advanceMilestone } = await import('../goals/manager.js');
-            const result = await advanceMilestone(goalId);
-
-            activity.status = result.success ? 'complete' : 'error';
-            activity.result = result.message;
-            this.emitActivity(activity);
-
-            return result.message;
-        } catch (error) {
-            activity.status = 'error';
-            activity.error = (error as Error).message;
-            this.emitActivity(activity);
-            return `Error advancing goal: ${activity.error}`;
-        }
     }
 
     @tool({
@@ -4243,124 +3966,11 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
 
     @tool({
         description:
-            'Send a proactive message to the Pompeii workspace main thread or a specific conversation. Do NOT use this to reply to the current conversation - your text response is automatically delivered as the reply.',
-        enabled: () => !!process.env.POMPEII_API_KEY,
-    })
-    @toolparam({
-        key: 'content',
-        type: 'string',
-        required: true,
-        description: 'The message content to send',
-    })
-    @toolparam({
-        key: 'conversation_id',
-        type: 'string',
-        required: false,
-        description: 'Target conversation ID. Omit to send to the main thread.',
-    })
-    async pompeiiSendMessage(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { content, conversation_id } = call.fn_args;
-
-        const activity: ToolActivity = {
-            id: call.id,
-            tool: 'pompeii_send_message',
-            args: { content: content.slice(0, 50) + (content.length > 50 ? '...' : '') },
-            status: 'running',
-        };
-        this.emitActivity(activity);
-
-        try {
-            const baseUrl = process.env.POMPEII_API_URL || 'https://api.pompeii.ai';
-            const body: Record<string, unknown> = { content };
-            if (conversation_id) body.conversation_id = conversation_id;
-
-            const response = await fetch(`${baseUrl}/v1/bot/messages`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Agent-Key': process.env.POMPEII_API_KEY!,
-                },
-                body: JSON.stringify(body),
-            });
-
-            if (!response.ok) {
-                const error = await response.json().catch(() => ({ message: response.statusText }));
-                throw new Error(error.message || `HTTP ${response.status}`);
-            }
-
-            activity.status = 'complete';
-            activity.result = 'Message sent';
-            this.emitActivity(activity);
-            return 'Message sent to Pompeii workspace.';
-        } catch (error) {
-            activity.status = 'error';
-            activity.error = (error as Error).message;
-            this.emitActivity(activity);
-            return `Failed to send Pompeii message: ${activity.error}`;
-        }
-    }
-
-    @tool({
-        description:
-            'Get recent messages from the Pompeii workspace. Can retrieve from the main thread or a specific conversation.',
-        enabled: () => !!process.env.POMPEII_API_KEY,
-    })
-    @toolparam({
-        key: 'conversation_id',
-        type: 'string',
-        required: false,
-        description: 'Conversation ID to get messages from. Omit for the main thread.',
-    })
-    @toolparam({
-        key: 'limit',
-        type: 'number',
-        required: false,
-        description: 'Number of messages to retrieve (default 20)',
-    })
-    async pompeiiGetMessages(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const { conversation_id, limit } = call.fn_args;
-
-        const activity: ToolActivity = {
-            id: call.id,
-            tool: 'pompeii_get_messages',
-            args: { conversation_id, limit },
-            status: 'running',
-        };
-        this.emitActivity(activity);
-
-        try {
-            const baseUrl = process.env.POMPEII_API_URL || 'https://api.pompeii.ai';
-            const params = new URLSearchParams();
-            if (conversation_id) params.set('conversation_id', conversation_id);
-            if (limit) params.set('limit', String(limit));
-
-            const url = `${baseUrl}/v1/bot/messages${params.toString() ? '?' + params.toString() : ''}`;
-            const response = await fetch(url, {
-                headers: { 'X-Agent-Key': process.env.POMPEII_API_KEY! },
-            });
-
-            if (!response.ok) {
-                const error = await response.json().catch(() => ({ message: response.statusText }));
-                throw new Error(error.message || `HTTP ${response.status}`);
-            }
-
-            const data = await response.json();
-            activity.status = 'complete';
-            activity.result = `${Array.isArray(data) ? data.length : 0} messages`;
-            this.emitActivity(activity);
-            return JSON.stringify(data, null, 2);
-        } catch (error) {
-            activity.status = 'error';
-            activity.error = (error as Error).message;
-            this.emitActivity(activity);
-            return `Failed to get Pompeii messages: ${activity.error}`;
-        }
-    }
-
-    @tool({
-        description:
             'Create a dynamic interface panel. Opens a UI panel with interactive components the user can interact with. Use for controls, dashboards, forms, monitoring, or any interactive display. Button actions execute shell commands directly - prefill the full command including auth headers, API endpoints, CLI args, etc. Only works when the user has the web dashboard or a display open. Panels appear inline on the target display. Check connected_displays in your context to see available displays before targeting one.',
-        enabled: (agent) => (agent as Nero).isWebVoiceActive(),
+        enabled: (agent) => {
+            const nero = agent as Nero;
+            return nero.isWebVoiceActive() || nero.interfaceManager.getDevices().length > 0;
+        },
     })
     @toolparam({ key: 'title', type: 'string', required: true, description: 'Panel title' })
     @toolparam({
@@ -4723,39 +4333,156 @@ IMPORTANT: After starting, use getProcessOutput to check output and stopBackgrou
     }
 
     @tool({
-        description: 'List conversations the agent participates in on the Pompeii workspace.',
+        description:
+            'Interact with the Pompeii workspace. Do NOT use this to reply to the current conversation - your text response handles that automatically.\n\nAvailable actions:\n  get_messages - Get recent messages (params: conversation_id?, limit?)\n  post_message - Send message to a different conversation (params: content, conversation_id?)\n  get_conversations - List conversations\n  get_members - List workspace members\n  get_transcripts - List voice transcripts (params: channel_id?)\n  create_task - Create a task (params: name, description?, participantIds?, agentParticipantIds?)\n  get_tasks - List tasks the agent participates in\n  get_task - Get a specific task (params: task_id)\n  update_task - Update a task (params: task_id, name?, description?, status?, metadata?)\n  post_task_message - Post to a task timeline (params: task_id, content)\n  get_task_messages - Get task timeline messages (params: task_id, limit?)\n  get_task_files - Get files attached to a task (params: task_id)\n  get_triggers - List workspace triggers\n  create_trigger - Create a trigger (params: name, natural_language, trigger_source, trigger_event, trigger_filters?)',
         enabled: () => !!process.env.POMPEII_API_KEY,
     })
-    async pompeiiListConversations(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+    @toolparam({
+        key: 'action',
+        type: 'string',
+        required: true,
+        description: 'The action to perform (e.g. get_messages, create_task, post_task_message)',
+    })
+    @toolparam({
+        key: 'params',
+        type: 'string',
+        required: false,
+        description: 'JSON object of parameters for the action',
+    })
+    async pompeiiRequest(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { action, params: rawParams } = call.fn_args;
+        const params = rawParams
+            ? typeof rawParams === 'string'
+                ? JSON.parse(rawParams)
+                : rawParams
+            : {};
+
         const activity: ToolActivity = {
             id: call.id,
-            tool: 'pompeii_list_conversations',
-            args: {},
+            tool: 'pompeii',
+            displayName: action.replace(/_/g, ' '),
+            args: { action, ...params },
             status: 'running',
         };
         this.emitActivity(activity);
 
         try {
-            const baseUrl = process.env.POMPEII_API_URL || 'https://api.pompeii.ai';
-            const response = await fetch(`${baseUrl}/v1/bot/conversations`, {
-                headers: { 'X-Agent-Key': process.env.POMPEII_API_KEY! },
+            const { PompeiiClient } = await import('@pompeii-ai/sdk');
+            const client = new PompeiiClient(process.env.POMPEII_API_KEY!, {
+                baseUrl: process.env.POMPEII_API_URL || undefined,
             });
 
-            if (!response.ok) {
-                const error = await response.json().catch(() => ({ message: response.statusText }));
-                throw new Error(error.message || `HTTP ${response.status}`);
+            let result: unknown;
+
+            switch (action) {
+                case 'get_messages':
+                    result = await client.getMessages(params);
+                    break;
+                case 'post_message':
+                    result = await client.postMessage(params);
+                    break;
+                case 'get_conversations':
+                    result = await client.getConversations();
+                    break;
+                case 'get_members':
+                    result = await client.getMembers();
+                    break;
+                case 'get_transcripts':
+                    result = await client.getTranscripts(params.channel_id);
+                    break;
+                case 'create_task':
+                    result = await client.createTask(params);
+                    break;
+                case 'get_tasks':
+                    result = await client.getTasks();
+                    break;
+                case 'get_task':
+                    result = await client.getTask(params.task_id);
+                    break;
+                case 'update_task': {
+                    const { task_id: updateId, ...updates } = params;
+                    result = await client.updateTask(updateId, updates);
+                    break;
+                }
+                case 'post_task_message':
+                    result = await client.postTaskMessage(params.task_id, params.content);
+                    break;
+                case 'get_task_messages':
+                    result = await client.getTaskMessages(params.task_id, params.limit);
+                    break;
+                case 'get_task_files':
+                    result = await client.getTaskFiles(params.task_id);
+                    break;
+                case 'get_triggers':
+                    result = await client.getTriggers();
+                    break;
+                case 'create_trigger':
+                    result = await client.createTrigger(params);
+                    break;
+                default:
+                    throw new Error(`Unknown action: ${action}`);
             }
 
-            const data = await response.json();
             activity.status = 'complete';
-            activity.result = `${Array.isArray(data) ? data.length : 0} conversations`;
+            activity.result = action;
             this.emitActivity(activity);
-            return JSON.stringify(data, null, 2);
+            return JSON.stringify(result, null, 2);
         } catch (error) {
             activity.status = 'error';
             activity.error = (error as Error).message;
             this.emitActivity(activity);
-            return `Failed to list Pompeii conversations: ${activity.error}`;
+            return `Pompeii API error: ${activity.error}`;
         }
+    }
+
+    @tool({
+        description:
+            'Push a content card to the ambient display. Cards appear on connected displays that are in ambient mode (showing clock/weather). Use for surfacing calendar events, news, status updates, or anything glanceable. Cards rotate automatically and expire if expiryMinutes is set.',
+        enabled: (agent) => !!(agent as Nero).ambientManager,
+    })
+    @toolparam({
+        key: 'title',
+        type: 'string',
+        required: true,
+        description: 'Card title (short, glanceable)',
+    })
+    @toolparam({
+        key: 'content',
+        type: 'string',
+        required: true,
+        description: 'Card content (1-2 sentences)',
+    })
+    @toolparam({
+        key: 'icon',
+        type: 'string',
+        required: false,
+        description: 'Lucide icon name (e.g. calendar, newspaper, bell)',
+    })
+    @toolparam({
+        key: 'expiryMinutes',
+        type: 'number',
+        required: false,
+        description: 'Auto-remove card after this many minutes (default: 60)',
+    })
+    async pushAmbientCard(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const { title, content, icon, expiryMinutes } = call.fn_args;
+
+        if (!this.ambientManager) {
+            return 'Ambient display system is not active.';
+        }
+
+        const expiry = Date.now() + (expiryMinutes ?? 60) * 60_000;
+        const id = `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+        this.ambientManager.pushCard({
+            id,
+            type: 'custom',
+            title: title || 'Update',
+            content: content || '',
+            icon,
+            expiry,
+        });
+
+        return `Card "${title}" pushed to ambient displays.`;
     }
 }

@@ -8,6 +8,7 @@
         "@anthropic-ai/sdk": "^0.52.0",
         "@modelcontextprotocol/sdk": "^1.25.1",
         "@openrouter/sdk": "^0.2.9",
+        "@pompeii-ai/sdk": "^0.1.0",
         "@pompeii-labs/audio": "^0.3.1",
         "@pompeii-labs/magma": "1.8.3",
         "@toon-format/toon": "^2.1.0",
@@ -285,6 +286,8 @@
     "@openrouter/sdk": ["@openrouter/sdk@0.2.11", "", { "dependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-W6ji4J2O08RUkDmCBqDgiHkoH5ARb4xBZL/xTM98cDzes2iLBuGaF3z2PXMCC27UYTas2pyz+nn62iXjO+yQvg=="],
 
     "@pkgr/core": ["@pkgr/core@0.2.9", "", {}, "sha512-QNqXyfVS2wm9hweSYD2O7F0G06uurj9kZ96TRQE5Y9hU7+tgdZwIkbAKc5Ocy1HxEY2kuDQa6cQ1WRs/O5LFKA=="],
+
+    "@pompeii-ai/sdk": ["@pompeii-ai/sdk@0.1.0", "", { "peerDependencies": { "ws": "^8.0.0" }, "optionalPeers": ["ws"] }, "sha512-rhAq7RuFbxK5xaMv+MMnDJSRArlMnqPOUJXLjZi8kKXuwN/BS2Nay/9drF+DKyXdNA0R2uMzNvOFnNqlvbtLWg=="],
 
     "@pompeii-labs/audio": ["@pompeii-labs/audio@0.3.1", "", { "dependencies": { "@deepgram/sdk": "4.2.0", "hume": "0.15.13", "openai": "4.86.2" }, "peerDependencies": { "ws": "^8.0.0" } }, "sha512-JT52bEdQ9jYjsAn+QcbC6dHzwf47rz4jnshSs4iajprkxnNr65DEOPsMg+A6ZQvX/2aDlHa3euij1Yq/UeB2KA=="],
 

@@ -70,6 +70,11 @@ export interface AutonomyConfig {
     notify: boolean;
 }
 
+export interface AmbientConfig {
+    enabled: boolean;
+    weather: boolean | { lat: number; lon: number };
+}
+
 export interface ElevenLabsVoiceConfig {
     voiceId: string;
     model: string;
@@ -131,6 +136,7 @@ export interface NeroConfig {
     proactivity: ProactivityConfig;
     autonomy: AutonomyConfig;
     hooks?: Partial<Record<HookEvent, HookConfig[]>>;
+    ambient: AmbientConfig;
     browser?: {
         headless?: boolean;
         timeout?: number;
@@ -163,6 +169,11 @@ const defaultProactivity: ProactivityConfig = {
     destructive: false,
     protectedBranches: ['main', 'master'],
     intervalMinutes: 10,
+};
+
+const defaultAmbient: AmbientConfig = {
+    enabled: true,
+    weather: true,
 };
 
 const defaultAutonomy: AutonomyConfig = {
@@ -214,6 +225,7 @@ const defaultConfig: NeroConfig = {
         enabled: true,
     },
     settings: defaultSettings,
+    ambient: defaultAmbient,
     proactivity: defaultProactivity,
     autonomy: defaultAutonomy,
 };
@@ -374,6 +386,10 @@ function normalizeUserConfig(userConfig: Partial<NeroConfig>, tunnelUrl?: string
             },
         },
         allowedTools: userConfig.allowedTools,
+        ambient: {
+            ...defaultAmbient,
+            ...(userConfig.ambient || {}),
+        },
         proactivity: {
             ...defaultProactivity,
             ...(userConfig.proactivity || {}),

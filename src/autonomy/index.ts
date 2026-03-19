@@ -4,6 +4,7 @@ import { isDbConnected } from '../db/index.js';
 import { AutonomyJournal, AutonomyProject } from '../models/index.js';
 import type { NeroConfig } from '../config.js';
 import type { Nero } from '../agent/nero.js';
+import type { AmbientManager } from '../ambient/index.js';
 
 const INITIAL_DELAY_MS = 2 * 60 * 1000;
 const RETRY_DELAY_MS = 10 * 60 * 1000;
@@ -13,6 +14,7 @@ const RETENTION_DAYS = 30;
 export class AutonomyManager {
     private config: NeroConfig;
     private agent: Nero | null = null;
+    private ambientManager: AmbientManager | null = null;
     private wakeTimer: ReturnType<typeof setTimeout> | null = null;
     private isRunning: boolean = false;
     private currentSessionId: string | null = null;
@@ -20,6 +22,10 @@ export class AutonomyManager {
 
     constructor(config: NeroConfig) {
         this.config = config;
+    }
+
+    setAmbientManager(manager: AmbientManager): void {
+        this.ambientManager = manager;
     }
 
     setAgent(agent: Nero): void {
@@ -61,6 +67,8 @@ export class AutonomyManager {
 
         const minutes = Math.round(delayMs / 60000);
         console.log(chalk.dim(`[autonomy] Next session in ${minutes} minutes`));
+
+        this.ambientManager?.setAutonomyStatus('sleeping', Date.now() + delayMs);
 
         this.wakeTimer = setTimeout(() => {
             this.runSession().catch((err) => {
@@ -113,6 +121,8 @@ export class AutonomyManager {
         this.sessionAborted = false;
         const sessionId = randomUUID();
         this.currentSessionId = sessionId;
+        this.ambientManager?.startAutonomyLog(sessionId);
+        this.ambientManager?.setAutonomyStatus('active', null);
 
         console.log(chalk.dim(`[autonomy] Starting session ${sessionId.slice(0, 8)}`));
 
@@ -144,12 +154,31 @@ export class AutonomyManager {
 
             await AutonomyJournal.deleteOlderThan(RETENTION_DAYS);
 
+            if (this.ambientManager) {
+                const entries = await AutonomyJournal.getBySession(sessionId);
+                if (entries.length > 0) {
+                    const lastEntry = entries[entries.length - 1];
+                    this.ambientManager.pushCard(
+                        {
+                            id: `session-${sessionId.slice(0, 8)}`,
+                            type: 'custom',
+                            title: 'Session Complete',
+                            content: lastEntry.entry.slice(0, 120),
+                            expiry: Date.now() + 4 * 60 * 60_000,
+                        },
+                        false,
+                    );
+                }
+                this.ambientManager.setAutonomyStatus('sleeping', undefined, activeProjects.length);
+            }
+
             const sleepMs = this.calculateSleepDuration(result.requestedSleepMinutes);
             this.scheduleWake(sleepMs);
         } catch (error) {
             console.error(chalk.dim(`[autonomy] Session error: ${(error as Error).message}`));
             this.scheduleWake(RETRY_DELAY_MS);
         } finally {
+            this.ambientManager?.endAutonomyLog(this.currentSessionId || sessionId);
             this.isRunning = false;
             this.currentSessionId = null;
         }

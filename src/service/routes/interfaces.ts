@@ -172,10 +172,6 @@ export function createInterfacesRouter(agent: Nero, manager: InterfaceManager) {
         const deviceId = req.query.device as string | undefined;
         const deviceName = req.query.name as string | undefined;
 
-        if (deviceId) {
-            manager.registerDevice(deviceId, deviceName || deviceId);
-        }
-
         manager.addWebClient();
 
         const heartbeat = setInterval(() => {
@@ -204,10 +200,22 @@ export function createInterfacesRouter(agent: Nero, manager: InterfaceManager) {
                 if (!isSource && !isTarget) return;
             }
 
+            if (deviceId && event.type === 'ambient_suppress') {
+                if (event.displayName !== deviceName && event.displayName !== deviceId) return;
+            }
+
+            if (deviceId && event.type === 'ambient_restore') {
+                if (event.displayName !== deviceName && event.displayName !== deviceId) return;
+            }
+
             try {
                 res.write(`data: ${JSON.stringify(event)}\n\n`);
             } catch {}
         });
+
+        if (deviceId) {
+            manager.registerDevice(deviceId, deviceName || deviceId);
+        }
 
         req.on('close', () => {
             clearInterval(heartbeat);

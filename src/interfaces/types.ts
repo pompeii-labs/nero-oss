@@ -14,6 +14,7 @@ export interface NeroInterface {
     state?: Record<string, any>;
     triggers?: InterfaceTrigger[];
     targetDevice?: string;
+    ambient?: boolean;
 }
 
 export type NeroComponent =
@@ -169,4 +170,8 @@ export type GlobalInterfaceEvent =
     | { type: 'closed'; id: string }
     | { type: 'moved'; id: string; fromDevice?: string; toDevice: string }
     | { type: 'voice_migrate'; targetDevice: string }
-    | { type: 'presence'; display: string };
+    | { type: 'presence'; display: string }
+    | { type: 'device_connected'; deviceName: string }
+    | { type: 'device_disconnected'; deviceName: string }
+    | { type: 'ambient_suppress'; displayName: string }
+    | { type: 'ambient_restore'; displayName: string; iface: NeroInterface };

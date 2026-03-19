@@ -54,7 +54,7 @@ function createInterfacesStore() {
             if (!event.data || event.data === '{}') return;
             try {
                 const parsed = JSON.parse(event.data);
-                if (parsed.type === 'opened' && parsed.iface) {
+                if (parsed.type === 'opened' && parsed.iface && !parsed.iface.ambient) {
                     openInterface(parsed.iface);
                 } else if (parsed.type === 'closed' && parsed.id) {
                     closeInterface(parsed.id);

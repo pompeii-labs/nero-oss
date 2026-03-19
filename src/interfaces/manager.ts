@@ -43,9 +43,14 @@ export class InterfaceManager {
             }
         }
         this.devices.set(id, { id, name, connectedAt: Date.now() });
+        this.emitGlobal({ type: 'device_connected', deviceName: name });
     }
 
     unregisterDevice(id: string): void {
+        const device = this.devices.get(id);
+        if (device) {
+            this.emitGlobal({ type: 'device_disconnected', deviceName: device.name });
+        }
         this.devices.delete(id);
     }
 
@@ -58,6 +63,12 @@ export class InterfaceManager {
             if (device.name === name) return device;
         }
         return undefined;
+    }
+
+    getRealInterfacesForDevice(name: string): NeroInterface[] {
+        return Array.from(this.interfaces.values()).filter(
+            (iface) => iface.targetDevice === name && !iface.ambient,
+        );
     }
 
     moveToDevice(interfaceId: string, targetDeviceName: string): boolean {
@@ -86,7 +97,7 @@ export class InterfaceManager {
         this.emitGlobal({ type: 'presence', display });
     }
 
-    private emitGlobal(event: GlobalInterfaceEvent): void {
+    emitGlobal(event: GlobalInterfaceEvent): void {
         for (const cb of this.globalListeners) {
             try {
                 cb(event);
