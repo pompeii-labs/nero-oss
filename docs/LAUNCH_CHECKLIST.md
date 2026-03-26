@@ -24,12 +24,12 @@
 - [ ] Autonomy deep-dive blog post
 
 ### Marketing Assets
-- [ ] Create 5 Product Hunt gallery images (1280x800 or 2400x1600)
-  - [ ] Image 1: Neural sphere hero
-  - [ ] Image 2: Autonomy journal terminal
-  - [ ] Image 3: Multi-interface grid
-  - [ ] Image 4: Dynamic interface showcase
-  - [ ] Image 5: Voice + emotion detection
+- [x] Create 5 Product Hunt gallery images (1280x800 or 2400x1600)
+  - [x] Image 1: Neural sphere hero
+  - [x] Image 2: Autonomy journal terminal
+  - [x] Image 3: Multi-interface grid
+  - [x] Image 4: Dynamic interface showcase
+  - [x] Image 5: Voice + emotion detection
 - [ ] Demo video (30-60 seconds, optional but recommended)
 - [ ] Twitter/X teaser thread drafted
 - [ ] LinkedIn post drafted
