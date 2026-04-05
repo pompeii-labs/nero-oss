@@ -42,7 +42,7 @@ Nero isn't built to be a lightweight rust-based agent runtime. It's meant to be 
 ## Quick Start
 
 ```bash
-curl -fsSL nero.sh/install | bash
+curl -fsSL https://raw.githubusercontent.com/pompeii-labs/nero-oss/main/install.sh | bash
 ```
 
 That's it. The installer downloads the CLI and launches interactive setup automatically. Nero is running at `http://localhost:4848`. Every device on your LAN can reach it at `https://nero.local` -- TLS certs are auto-generated on first run.
