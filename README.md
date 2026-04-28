@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/pompeii-labs-nero-oss-badge.png)](https://mseep.ai/app/pompeii-labs-nero-oss)
+
 <p align="center">
   <img src="assets/icon.png" alt="Nero" width="120" />
 </p>
