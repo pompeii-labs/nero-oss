@@ -23,7 +23,6 @@ RUN bun install --frozen-lockfile --production --ignore-scripts \
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prompts ./prompts
-COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/web/build ./web/build
 
 RUN printf '#!/bin/sh\nexec bun run /app/dist/index.js "$@"\n' > /usr/local/bin/nero \

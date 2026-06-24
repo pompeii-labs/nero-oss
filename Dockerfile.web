@@ -1,0 +1,14 @@
+# Nero Web — the SvelteKit static build, served by nginx. nginx also reverse-
+# proxies /v1, /api, /webhook to the API container, so the browser sees one
+# origin (no CORS, no runtime API-URL config) and deep links fall back to the SPA.
+FROM oven/bun:1 AS builder
+WORKDIR /app/web
+COPY web/package.json web/bun.lock* ./
+RUN bun install --frozen-lockfile
+COPY web/ ./
+RUN bun run build
+
+FROM nginx:alpine
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/web/build /usr/share/nginx/html
+EXPOSE 80

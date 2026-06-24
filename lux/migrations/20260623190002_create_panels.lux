@@ -1,0 +1,1 @@
+TCREATE panels id UUID PRIMARY KEY DEFAULT uuid(), device_id TEXT, title TEXT, x INT DEFAULT 40, y INT DEFAULT 40, w INT DEFAULT 380, h INT DEFAULT 300, z INT DEFAULT 0, components JSON, state JSON, status TEXT DEFAULT 'open', created_at INT DEFAULT now(), updated_at INT DEFAULT now()

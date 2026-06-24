@@ -149,9 +149,12 @@ export async function removeAllowedTool(tool: string): Promise<boolean> {
     return result.success;
 }
 
-export async function compactContext(): Promise<{ success: boolean; summary?: string }> {
-    const result = await post<{ summary: string }>('/api/compact');
-    if (result.success) return { success: true, summary: result.data.summary };
+export async function compactContext(): Promise<{
+    success: boolean;
+    compacted?: boolean;
+}> {
+    const result = await post<{ compacted: boolean; summary: string }>('/v1/compact');
+    if (result.success) return { success: true, compacted: result.data.compacted };
     return { success: false };
 }
 

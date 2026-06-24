@@ -1,47 +1,45 @@
-import { get, post, del, type NeroResult } from './helpers';
+import { get, post } from './helpers';
 
-export type McpServerConfig = {
-    transport?: 'stdio' | 'http';
-    command?: string;
-    args?: string[];
-    env?: Record<string, string>;
-    url?: string;
-    headers?: Record<string, string>;
-    disabled?: boolean;
-};
-
-export type McpServersResponse = {
-    servers: Record<string, McpServerConfig>;
+export interface Integration {
+    name: string;
+    url: string | null;
+    transport: string;
+    connected: boolean;
+    hasAuth: boolean;
     tools: string[];
-    authStatus: Record<string, boolean>;
-};
-
-export function getMcpServers(): Promise<NeroResult<McpServersResponse>> {
-    return get('/api/mcp/servers');
 }
 
-export function addMcpServer(name: string, config: McpServerConfig): Promise<NeroResult<void>> {
-    return post('/api/mcp/servers', { name, config });
+export interface ConnectResult {
+    status: 'connected' | 'auth_required' | 'error';
+    authUrl?: string;
+    message: string;
 }
 
-export function removeMcpServer(name: string): Promise<NeroResult<void>> {
-    return del(`/api/mcp/servers/${encodeURIComponent(name)}`);
+export async function listIntegrations(): Promise<Integration[]> {
+    const r = await get<{ integrations: Integration[] }>('/v1/mcp/list');
+    return r.success ? r.data.integrations : [];
 }
 
-export function toggleMcpServer(name: string, disabled: boolean): Promise<NeroResult<void>> {
-    return post(`/api/mcp/servers/${encodeURIComponent(name)}/toggle`, { disabled });
-}
-
-export function startMcpAuth(name: string): Promise<NeroResult<{ authUrl: string }>> {
-    return post(`/api/mcp/servers/${encodeURIComponent(name)}/auth`);
-}
-
-export function getMcpAuthStatus(
+export async function connectIntegration(
     name: string,
-): Promise<NeroResult<{ authenticated: boolean; error?: string }>> {
-    return get(`/api/mcp/servers/${encodeURIComponent(name)}/auth/status`);
+    url: string,
+    apiKey?: string,
+): Promise<ConnectResult> {
+    const r = await post<ConnectResult>('/v1/mcp/connect', {
+        name,
+        url,
+        apiKey: apiKey || undefined,
+    });
+    return r.success ? r.data : { status: 'error', message: r.error.message };
 }
 
-export function logoutMcpServer(name: string): Promise<NeroResult<{ success: boolean }>> {
-    return post(`/api/mcp/servers/${encodeURIComponent(name)}/logout`);
+export async function reconnectIntegration(
+    name: string,
+): Promise<{ ok: boolean; message: string }> {
+    const r = await post<{ ok: boolean; message: string }>('/v1/mcp/reconnect', { name });
+    return r.success ? r.data : { ok: false, message: r.error.message };
+}
+
+export async function disconnectIntegration(name: string): Promise<void> {
+    await post('/v1/mcp/disconnect', { name });
 }

@@ -1,12 +1,15 @@
 import { randomBytes, createHash } from 'crypto';
-import { spawn } from 'child_process';
-import chalk from 'chalk';
+
+// MCP OAuth 2.1: well-known discovery, Dynamic Client Registration, PKCE, code
+// exchange, refresh. Ported from OG Nero, de-CLI'd (the web drives the browser
+// redirect + callback). Pure functions; no logging side effects beyond errors.
 
 export interface OAuthProtectedResourceMetadata {
     resource: string;
     authorization_servers: string[];
     bearer_methods_supported?: string[];
     resource_documentation?: string;
+    scopes_supported?: string[];
 }
 
 export interface OAuthAuthorizationServerMetadata {
@@ -23,8 +26,6 @@ export interface OAuthAuthorizationServerMetadata {
 export interface OAuthClientRegistration {
     client_id: string;
     client_secret?: string;
-    client_id_issued_at?: number;
-    client_secret_expires_at?: number;
     redirect_uris: string[];
     token_endpoint_auth_method?: string;
     grant_types?: string[];
@@ -48,90 +49,65 @@ export interface StoredOAuthData {
     authServerMetadata: OAuthAuthorizationServerMetadata;
 }
 
-function generateCodeVerifier(): string {
+function codeVerifier(): string {
     return randomBytes(32).toString('base64url');
 }
-
-function generateCodeChallenge(verifier: string): string {
+function codeChallenge(verifier: string): string {
     return createHash('sha256').update(verifier).digest('base64url');
 }
-
-function generateState(): string {
+function randomState(): string {
     return randomBytes(16).toString('base64url');
 }
 
+/** Discover an MCP server's OAuth metadata via the .well-known endpoints. */
 export async function discoverOAuthMetadata(serverUrl: string): Promise<{
     resource?: OAuthProtectedResourceMetadata;
     authServer?: OAuthAuthorizationServerMetadata;
 } | null> {
     try {
         const baseUrl = new URL(serverUrl);
-        let resourceMetadata: OAuthProtectedResourceMetadata | undefined;
-        let authServerMetadata: OAuthAuthorizationServerMetadata | undefined;
+        let resource: OAuthProtectedResourceMetadata | undefined;
+        let authServer: OAuthAuthorizationServerMetadata | undefined;
 
-        const resourceUrl = new URL('/.well-known/oauth-protected-resource', baseUrl);
-        const resourceResponse = await fetch(resourceUrl.toString());
-        if (resourceResponse.ok) {
-            resourceMetadata = await resourceResponse.json();
+        const rRes = await fetch(
+            new URL('/.well-known/oauth-protected-resource', baseUrl).toString(),
+        );
+        if (rRes.ok) resource = await rRes.json();
+
+        if (resource?.authorization_servers?.length) {
+            const a = resource.authorization_servers[0];
+            const metaUrl = a.includes('/.well-known/')
+                ? a
+                : new URL('/.well-known/oauth-authorization-server', new URL(a)).toString();
+            const aRes = await fetch(metaUrl);
+            if (aRes.ok) authServer = await aRes.json();
         }
 
-        if (resourceMetadata?.authorization_servers?.length) {
-            const authServerUrl = resourceMetadata.authorization_servers[0];
-            let authServerMetadataUrl: string;
-
-            if (authServerUrl.includes('/.well-known/')) {
-                authServerMetadataUrl = authServerUrl;
-            } else {
-                const authBase = new URL(authServerUrl);
-                authServerMetadataUrl = new URL(
-                    '/.well-known/oauth-authorization-server',
-                    authBase,
-                ).toString();
-            }
-
-            const authServerResponse = await fetch(authServerMetadataUrl);
-            if (authServerResponse.ok) {
-                authServerMetadata = await authServerResponse.json();
-            }
+        if (!authServer) {
+            const aRes = await fetch(
+                new URL('/.well-known/oauth-authorization-server', baseUrl).toString(),
+            );
+            if (aRes.ok) authServer = await aRes.json();
         }
 
-        if (!authServerMetadata) {
-            const authServerUrl = new URL('/.well-known/oauth-authorization-server', baseUrl);
-            const authServerResponse = await fetch(authServerUrl.toString());
-            if (authServerResponse.ok) {
-                authServerMetadata = await authServerResponse.json();
-            }
-        }
-
-        if (!resourceMetadata && !authServerMetadata) {
-            return null;
-        }
-
-        return {
-            resource: resourceMetadata,
-            authServer: authServerMetadata,
-        };
-    } catch (error) {
+        if (!resource && !authServer) return null;
+        return { resource, authServer };
+    } catch {
         return null;
     }
 }
 
+/** Dynamic Client Registration. Returns null if the server doesn't support it. */
 export async function registerClient(
-    authServerMetadata: OAuthAuthorizationServerMetadata,
+    authServer: OAuthAuthorizationServerMetadata,
     clientName: string,
     redirectUri: string,
 ): Promise<OAuthClientRegistration | null> {
-    if (!authServerMetadata.registration_endpoint) {
-        console.log(chalk.yellow('No registration endpoint available'));
-        return null;
-    }
-
+    if (!authServer.registration_endpoint) return null;
     try {
-        const response = await fetch(authServerMetadata.registration_endpoint, {
+        const res = await fetch(authServer.registration_endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 client_name: clientName,
                 redirect_uris: [redirectUri],
@@ -140,26 +116,15 @@ export async function registerClient(
                 token_endpoint_auth_method: 'none',
             }),
         });
-
-        if (!response.ok) {
-            const error = await response.text();
-            console.log(chalk.red(`Client registration failed: ${error}`));
+        if (!res.ok) {
+            console.error('[mcp:oauth] client registration failed:', await res.text());
             return null;
         }
-
-        return await response.json();
-    } catch (error) {
-        const err = error as Error;
-        console.log(chalk.red(`Client registration error: ${err.message}`));
+        return await res.json();
+    } catch (e) {
+        console.error('[mcp:oauth] client registration error:', e);
         return null;
     }
-}
-
-export interface AuthorizationParams {
-    authServerMetadata: OAuthAuthorizationServerMetadata;
-    clientId: string;
-    redirectUri: string;
-    scope?: string;
 }
 
 export interface AuthorizationResult {
@@ -168,126 +133,91 @@ export interface AuthorizationResult {
     authUrl: string;
 }
 
-export function buildAuthorizationUrl(params: AuthorizationParams): AuthorizationResult {
-    const codeVerifier = generateCodeVerifier();
-    const codeChallenge = generateCodeChallenge(codeVerifier);
-    const state = generateState();
+export function buildAuthorizationUrl(params: {
+    authServer: OAuthAuthorizationServerMetadata;
+    clientId: string;
+    redirectUri: string;
+    scope?: string;
+}): AuthorizationResult {
+    const verifier = codeVerifier();
+    const challenge = codeChallenge(verifier);
+    const state = randomState();
 
-    const url = new URL(params.authServerMetadata.authorization_endpoint);
+    const url = new URL(params.authServer.authorization_endpoint);
     url.searchParams.set('client_id', params.clientId);
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('redirect_uri', params.redirectUri);
     url.searchParams.set('state', state);
-    url.searchParams.set('code_challenge', codeChallenge);
+    url.searchParams.set('code_challenge', challenge);
     url.searchParams.set('code_challenge_method', 'S256');
+    if (params.scope) url.searchParams.set('scope', params.scope);
 
-    if (params.scope) {
-        url.searchParams.set('scope', params.scope);
-    }
-
-    return {
-        codeVerifier,
-        state,
-        authUrl: url.toString(),
-    };
+    return { codeVerifier: verifier, state, authUrl: url.toString() };
 }
 
 export async function exchangeCodeForTokens(
-    authServerMetadata: OAuthAuthorizationServerMetadata,
+    authServer: OAuthAuthorizationServerMetadata,
     clientId: string,
     code: string,
-    codeVerifier: string,
+    verifier: string,
     redirectUri: string,
 ): Promise<OAuthTokens | null> {
     try {
-        const response = await fetch(authServerMetadata.token_endpoint, {
+        const res = await fetch(authServer.token_endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
                 grant_type: 'authorization_code',
                 client_id: clientId,
                 code,
-                code_verifier: codeVerifier,
+                code_verifier: verifier,
                 redirect_uri: redirectUri,
             }).toString(),
         });
-
-        if (!response.ok) {
-            const error = await response.text();
-            console.log(chalk.red(`Token exchange failed: ${error}`));
+        if (!res.ok) {
+            console.error('[mcp:oauth] token exchange failed:', await res.text());
             return null;
         }
-
-        const tokens: OAuthTokens = await response.json();
+        const tokens: OAuthTokens = await res.json();
         tokens.issued_at = Date.now();
         return tokens;
-    } catch (error) {
-        const err = error as Error;
-        console.log(chalk.red(`Token exchange error: ${err.message}`));
+    } catch (e) {
+        console.error('[mcp:oauth] token exchange error:', e);
         return null;
     }
 }
 
 export async function refreshAccessToken(
-    authServerMetadata: OAuthAuthorizationServerMetadata,
+    authServer: OAuthAuthorizationServerMetadata,
     clientId: string,
     refreshToken: string,
 ): Promise<OAuthTokens | null> {
     try {
-        const response = await fetch(authServerMetadata.token_endpoint, {
+        const res = await fetch(authServer.token_endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
                 grant_type: 'refresh_token',
                 client_id: clientId,
                 refresh_token: refreshToken,
             }).toString(),
         });
-
-        if (!response.ok) {
-            const error = await response.text();
-            console.log(chalk.red(`Token refresh failed: ${error}`));
+        if (!res.ok) {
+            console.error('[mcp:oauth] token refresh failed:', await res.text());
             return null;
         }
-
-        const tokens: OAuthTokens = await response.json();
+        const tokens: OAuthTokens = await res.json();
         tokens.issued_at = Date.now();
+        if (!tokens.refresh_token) tokens.refresh_token = refreshToken;
         return tokens;
-    } catch (error) {
-        const err = error as Error;
-        console.log(chalk.red(`Token refresh error: ${err.message}`));
+    } catch (e) {
+        console.error('[mcp:oauth] token refresh error:', e);
         return null;
     }
 }
 
 export function isTokenExpired(tokens: OAuthTokens): boolean {
-    if (!tokens.expires_in || !tokens.issued_at) {
-        return false;
-    }
+    if (!tokens.expires_in || !tokens.issued_at) return false;
     const expiresAt = tokens.issued_at + tokens.expires_in * 1000;
-    const bufferMs = 60 * 1000;
-    return Date.now() > expiresAt - bufferMs;
-}
-
-export function openBrowser(url: string): void {
-    const platform = process.platform;
-    let command: string;
-    let args: string[];
-
-    if (platform === 'darwin') {
-        command = 'open';
-        args = [url];
-    } else if (platform === 'win32') {
-        command = 'cmd';
-        args = ['/c', 'start', url];
-    } else {
-        command = 'xdg-open';
-        args = [url];
-    }
-
-    spawn(command, args, { detached: true, stdio: 'ignore' }).unref();
+    return Date.now() > expiresAt - 60_000;
 }

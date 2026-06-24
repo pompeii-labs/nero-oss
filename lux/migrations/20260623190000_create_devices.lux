@@ -1,0 +1,1 @@
+TCREATE devices id TEXT PRIMARY KEY, name TEXT, kind TEXT DEFAULT 'web', screen_w INT DEFAULT 0, screen_h INT DEFAULT 0, connected BOOL DEFAULT true, last_seen INT DEFAULT now(), created_at INT DEFAULT now()

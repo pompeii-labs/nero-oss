@@ -1,0 +1,1 @@
+TCREATE compaction id UUID PRIMARY KEY DEFAULT uuid(), summary TEXT, through_at INT, created_at INT DEFAULT now()

@@ -1,4 +1,14 @@
-import { get, put, del, type NeroResult } from './helpers';
+import { get, put, del, post, type NeroResult } from './helpers';
+
+/** Current effective model (Lux override or env default). */
+export function getModel(): Promise<NeroResult<{ model: string }>> {
+    return get('/v1/settings');
+}
+
+/** Set the runtime model (any OpenRouter slug). Takes effect next message. */
+export function setModel(model: string): Promise<NeroResult<{ model: string }>> {
+    return post('/v1/settings', { model });
+}
 
 export type NeroSettings = {
     streaming: boolean;

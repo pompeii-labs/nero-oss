@@ -1,0 +1,1 @@
+TCREATE settings key TEXT PRIMARY KEY, value TEXT, updated_at INT DEFAULT now()

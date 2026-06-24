@@ -1,13 +1,8 @@
 import { reloadConfig, getHealth, getContext, getUsage, installSlack } from './actions/health';
 import { getAllowedTools, revokeAllowedTool } from './actions/settings';
 import { getMemories } from './actions/memories';
-import { getMcpServers } from './actions/mcp';
-import {
-    getSettings,
-    updateModelSettings,
-    updateSettings,
-    validateModel,
-} from './actions/settings';
+import { listIntegrations } from './actions/mcp';
+import { getModel, getSettings, setModel, updateSettings } from './actions/settings';
 import { compactContext, streamThink, abortChat, type ToolActivity } from './actions/chat';
 import {
     getSkills,
@@ -252,49 +247,23 @@ export const commands: SlashCommand[] = [
         },
     },
     {
-        name: 'tools',
-        aliases: ['t'],
-        description: 'List available MCP tools',
-        execute: async (_, ctx) => {
-            ctx.setLoading('Loading tools');
-            const response = await getMcpServers();
-            ctx.setLoading(null);
-            if (!response.success) {
-                return { error: 'Failed to load tools' };
-            }
-            const tools = response.data.tools;
-            if (tools.length === 0) {
-                return { message: 'No MCP tools configured. Add servers in the MCP page.' };
-            }
-            const list = tools.map((t) => `  ${t}`).join('\n');
-            return { message: `Available MCP Tools:\n\n${list}` };
-        },
-    },
-    {
         name: 'mcp',
-        aliases: [],
-        description: 'Show MCP server status',
+        aliases: ['integrations', 'tools'],
+        description: 'Show connected integrations',
         execute: async (_, ctx) => {
-            ctx.setLoading('Loading MCP status');
-            const response = await getMcpServers();
+            ctx.setLoading('Loading integrations');
+            const integrations = await listIntegrations();
             ctx.setLoading(null);
-            if (!response.success) {
-                return { error: 'Failed to load MCP status' };
+            if (integrations.length === 0) {
+                return { message: 'No integrations yet. Open Integrations to connect one.' };
             }
-            const servers = Object.entries(response.data.servers);
-            if (servers.length === 0) {
-                return { message: 'No MCP servers configured.\nGo to /mcp to add servers.' };
-            }
-            const list = servers
-                .map(([name, config]) => {
-                    const status = config.disabled ? 'disabled' : 'enabled';
-                    const transport = config.transport || 'stdio';
-                    return `${config.disabled ? '○' : '●'} ${name} (${transport}, ${status})`;
-                })
+            const list = integrations
+                .map(
+                    (i) =>
+                        `${i.connected ? '●' : '○'} ${i.name} (${i.connected ? `${i.tools.length} tools` : 'not connected'})`,
+                )
                 .join('\n');
-            return {
-                message: `MCP Servers:\n\n${list}\n\n${response.data.tools.length} tools available`,
-            };
+            return { message: `Integrations:\n\n${list}` };
         },
     },
     {
@@ -334,58 +303,23 @@ export const commands: SlashCommand[] = [
     {
         name: 'model',
         aliases: ['m'],
-        description: 'Show or change the current model',
+        description: 'Show or change the model (any OpenRouter slug)',
         execute: async (args, ctx) => {
-            ctx.setLoading('Loading settings');
-            const response = await getSettings();
-            ctx.setLoading(null);
-
-            if (!response.success) {
-                return { error: 'Failed to load settings' };
-            }
-
             if (args.length === 0) {
-                return { message: `Current model: ${response.data.llm.model}` };
+                const res = await getModel();
+                return res.success
+                    ? { message: `Current model: ${res.data.model}` }
+                    : { error: 'Failed to read the model' };
             }
 
-            const newModel = args.join('/');
-
-            ctx.setLoading('Validating model');
-            const isValid = await validateModel(newModel);
+            const slug = args.join('/');
+            ctx.setLoading('Setting model');
+            const res = await setModel(slug);
             ctx.setLoading(null);
 
-            if (!isValid) {
-                return {
-                    error: `Model not found: ${newModel}\nCheck available models at https://openrouter.ai/models`,
-                };
-            }
-
-            ctx.setLoading('Updating model');
-            const updateResponse = await updateModelSettings(newModel);
-            ctx.setLoading(null);
-
-            if (!updateResponse.success) {
-                return { error: 'Failed to update model' };
-            }
-            return { message: `Model changed to ${newModel}` };
-        },
-    },
-    {
-        name: 'memories',
-        aliases: [],
-        description: 'Go to memories page',
-        execute: async (_, ctx) => {
-            ctx.navigateTo('/memories');
-            return {};
-        },
-    },
-    {
-        name: 'voice',
-        aliases: ['call'],
-        description: 'Go to voice mode',
-        execute: async (_, ctx) => {
-            ctx.navigateTo('/voice');
-            return {};
+            return res.success
+                ? { message: `Model set to ${res.data.model}. Takes effect on your next message.` }
+                : { error: 'Failed to set the model' };
         },
     },
     {
@@ -442,7 +376,7 @@ export const commands: SlashCommand[] = [
         aliases: [],
         description: 'Compact conversation to save context',
         execute: async (_, ctx) => {
-            ctx.setLoading('Compacting conversation');
+            ctx.setLoading('Compacting memory');
             const response = await compactContext();
             ctx.setLoading(null);
 
@@ -451,7 +385,9 @@ export const commands: SlashCommand[] = [
             }
 
             return {
-                message: `Conversation compacted.\n\nSummary:\n${response.summary || 'No summary available.'}`,
+                message: response.compacted
+                    ? 'Memory compacted, older history folded into the summary.'
+                    : 'Already compact, nothing to fold right now.',
             };
         },
     },
@@ -501,7 +437,7 @@ export const commands: SlashCommand[] = [
             ctx.setLoading(null);
 
             if (!response.success) {
-                return { error: response.error || 'Failed to fetch usage' };
+                return { error: response.error?.message || 'Failed to fetch usage' };
             }
 
             const { limit, usage, limit_remaining } = response.data;
@@ -527,7 +463,7 @@ export const commands: SlashCommand[] = [
             ctx.setLoading(null);
 
             if (!response.success) {
-                return { error: response.error || 'Failed to get Slack install URL' };
+                return { error: response.error?.message || 'Failed to get Slack install URL' };
             }
 
             window.open(response.data.url, '_blank');

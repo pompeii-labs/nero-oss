@@ -1,0 +1,32 @@
+[package]
+name = "nero-media"
+version = "0.1.0"
+edition = "2021"
+description = "Nero's WebRTC media sidecar: terminates the browser peer and bridges Opus<->PCM to the agent."
+license = "MIT"
+
+[lib]
+name = "nero_media"
+path = "src/lib.rs"
+
+[[bin]]
+name = "nero-media"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.24"
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+parking_lot = "0.12"
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+audiopus = "0.2"            # Opus encode/decode (vendored libopus on macOS/musl)
+str0m = "0.20"              # sans-IO WebRTC peer
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

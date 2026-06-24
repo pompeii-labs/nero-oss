@@ -1,0 +1,1 @@
+TCREATE mcp_connections id UUID PRIMARY KEY DEFAULT uuid(), name TEXT, url TEXT, transport TEXT DEFAULT 'http', auth JSON, config JSON, disabled BOOL DEFAULT false, created_at INT DEFAULT now()

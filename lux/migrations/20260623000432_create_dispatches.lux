@@ -1,0 +1,1 @@
+TCREATE dispatches id UUID PRIMARY KEY DEFAULT uuid(), status TEXT DEFAULT 'running', streaming_text TEXT, activities JSON, created_at INT DEFAULT now(), updated_at INT DEFAULT now()

@@ -1,0 +1,4 @@
+project_id = ""
+project_name = ""
+local_http_port = 8090
+local_resp_port = 16399

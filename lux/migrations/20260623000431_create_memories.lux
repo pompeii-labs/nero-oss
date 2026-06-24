@@ -1,0 +1,1 @@
+TCREATE memories id UUID PRIMARY KEY DEFAULT uuid(), body TEXT, category TEXT, type TEXT DEFAULT 'fact', embedding VECTOR(1536), use_count INT DEFAULT 0, last_used_at INT, created_at INT DEFAULT now()

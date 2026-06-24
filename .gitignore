@@ -3,6 +3,10 @@ node_modules/
 
 # Build output
 dist/
+target/
+
+# Wakeword (python venv + rust build)
+wakeword/venv/
 
 # Environment
 .env
@@ -45,3 +49,5 @@ CLAUDE.md
 TODOS.md
 WISHLIST.md
 proactive-monitoring-thoughts.md
+.env.local
+lux/.lux-local.json

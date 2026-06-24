@@ -1,1236 +1,181 @@
-import chalk from 'chalk';
-import { writeFile, readFile } from 'fs/promises';
-import { resolve } from 'path';
-import { existsSync } from 'fs';
-import { NERO_BLUE } from './theme.js';
-import { createServer } from 'http';
-import {
-    NeroConfig,
-    updateSettings,
-    updateLlmSettings,
-    getConfigPath,
-    getConfigDir,
-    saveConfig,
-    updateMcpServerOAuth,
-    getAllowedTools,
-    removeAllowedTool,
-    isOpenRouter,
-    OPENROUTER_BASE_URL,
-} from '../config.js';
-import { validateExportFile } from '../export-import.js';
-import type { NeroProxy } from '../client/proxy.js';
-import {
-    discoverOAuthMetadata,
-    registerClient,
-    buildAuthorizationUrl,
-    exchangeCodeForTokens,
-    openBrowser,
-    type StoredOAuthData,
-} from '../mcp/oauth.js';
-import {
-    discoverSkills,
-    loadSkill,
-    getSkillContent,
-    getSkillsDir,
-    findSkill,
-    type Skill,
-} from '../skills/index.js';
+/** The `nero` command handlers. Lifecycle drives docker compose; mcp/config/
+ *  doctor talk straight to Lux (the "write desired state to Lux" path). */
+import { c, ok, warn, info, line, kv, die } from './term';
+import { ensureDocker, compose, composeCapture } from './docker';
+import { ensureHome, ensureStackEnv, writeCompose, readEnv, luxMode, HOME } from './home';
+import { loadConfig } from '../config';
 
-let cachedSkills: Skill[] | null = null;
-
-export async function getSkills(): Promise<Skill[]> {
-    if (!cachedSkills) {
-        cachedSkills = await discoverSkills();
-    }
-    return cachedSkills;
+export interface StartOpts {
+    foreground?: boolean;
 }
 
-export function clearSkillsCache(): void {
-    cachedSkills = null;
-}
-
-export interface SkillInvocation {
-    skill: Skill;
-    content: string;
-    args: string[];
-}
-
-export interface SlashCommand {
-    name: string;
-    aliases: string[];
-    description: string;
-    execute: (args: string[], ctx: CommandContext) => Promise<CommandResult>;
-}
-
-export interface CommandContext {
-    nero: NeroProxy;
-    config: NeroConfig;
-    clearScreen: () => void;
-    exit: () => void;
-    log: (message: string) => void;
-    setLoading: (message: string | null) => void;
-}
-
-export interface CommandResult {
-    message?: string;
-    error?: string;
-    shouldContinue?: boolean;
-}
-
-async function validateModel(modelId: string, config: NeroConfig): Promise<boolean> {
-    if (!isOpenRouter(config)) return true;
-    try {
-        const response = await fetch(`https://openrouter.ai/api/v1/models/${modelId}/endpoints`, {
-            headers: {
-                Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            },
-        });
-        return response.ok;
-    } catch {
-        return true;
-    }
-}
-
-export const commands: SlashCommand[] = [
-    {
-        name: 'help',
-        aliases: ['h', '?'],
-        description: 'Show available commands',
-        execute: async () => {
-            const helpText = commands
-                .map((cmd) => {
-                    const aliases = cmd.aliases.length > 0 ? ` (${cmd.aliases.join(', ')})` : '';
-                    return `  /${cmd.name}${aliases} - ${cmd.description}`;
-                })
-                .join('\n');
-            return { message: `\n${chalk.bold('Available Commands:')}\n\n${helpText}\n` };
-        },
-    },
-    {
-        name: 'exit',
-        aliases: ['quit', 'q'],
-        description: 'Exit Nero',
-        execute: async (_, ctx) => {
-            ctx.log(chalk.dim('Goodbye.'));
-            setTimeout(() => {
-                ctx.exit();
-                process.exit(0);
-            }, 100);
-            return { shouldContinue: false };
-        },
-    },
-    {
-        name: 'clear',
-        aliases: ['c'],
-        description: 'Clear current session (use --confirm to skip prompt)',
-        execute: async (args, ctx) => {
-            if (!args.includes('--confirm')) {
-                return {
-                    message:
-                        chalk.yellow('This will clear your current conversation.\n') +
-                        chalk.dim('Run /clear --confirm to proceed.'),
-                };
-            }
-            ctx.nero.clearHistory();
-            ctx.clearScreen();
-            return { message: chalk.dim('Conversation cleared.') };
-        },
-    },
-    {
-        name: 'streaming',
-        aliases: ['stream'],
-        description: 'Toggle streaming output on/off',
-        execute: async (args, ctx) => {
-            const current = ctx.config.settings.streaming;
-            const newValue = args[0] === 'on' ? true : args[0] === 'off' ? false : !current;
-            await updateSettings({ streaming: newValue });
-            ctx.config.settings.streaming = newValue;
-            return {
-                message: `Streaming ${newValue ? chalk.green('enabled') : chalk.dim('disabled')}`,
-            };
-        },
-    },
-    {
-        name: 'model',
-        aliases: ['m'],
-        description: 'Show or change the current model',
-        execute: async (args, ctx) => {
-            if (args.length === 0) {
-                const baseUrl = ctx.config.llm.baseUrl || OPENROUTER_BASE_URL;
-                const provider = isOpenRouter(ctx.config) ? 'OpenRouter' : baseUrl;
-                return {
-                    message:
-                        `Current model: ${chalk.cyan(ctx.config.llm.model)}\n` +
-                        `Provider: ${chalk.dim(provider)}`,
-                };
-            }
-            const newModel = args.join('/');
-
-            ctx.log(chalk.dim(`Validating model ${newModel}...`));
-            const isValid = await validateModel(newModel, ctx.config);
-            if (!isValid) {
-                return {
-                    error: `Model not found: ${newModel}. Check available models at https://openrouter.ai/models`,
-                };
-            }
-
-            await updateLlmSettings({ model: newModel });
-            ctx.config.llm.model = newModel;
-            ctx.nero.setModel(newModel);
-            return { message: `Model changed to ${chalk.cyan(newModel)}` };
-        },
-    },
-    {
-        name: 'provider',
-        aliases: ['baseurl'],
-        description: 'Show or change the API provider (base URL)',
-        execute: async (args, ctx) => {
-            if (args.length === 0) {
-                const baseUrl = ctx.config.llm.baseUrl || OPENROUTER_BASE_URL;
-                const label = isOpenRouter(ctx.config) ? 'OpenRouter' : 'Custom';
-                return {
-                    message:
-                        `Provider: ${chalk.cyan(label)}\n` +
-                        `Base URL: ${chalk.dim(baseUrl)}\n` +
-                        chalk.dim('\nUsage: /provider <url> or /provider openrouter'),
-                };
-            }
-
-            const value = args[0];
-
-            if (value === 'openrouter' || value === 'reset') {
-                await updateLlmSettings({ baseUrl: undefined });
-                ctx.config.llm.baseUrl = undefined;
-                ctx.nero.setModel(ctx.config.llm.model, OPENROUTER_BASE_URL);
-                return { message: `Provider reset to ${chalk.cyan('OpenRouter')}` };
-            }
-
-            if (!value.startsWith('http')) {
-                return { error: 'Base URL must start with http:// or https://' };
-            }
-
-            await updateLlmSettings({ baseUrl: value });
-            ctx.config.llm.baseUrl = value;
-            ctx.nero.setModel(ctx.config.llm.model, value);
-            return { message: `Provider changed to ${chalk.cyan(value)}` };
-        },
-    },
-    {
-        name: 'verbose',
-        aliases: ['v'],
-        description: 'Toggle verbose logging',
-        execute: async (_, ctx) => {
-            const newValue = !ctx.config.settings.verbose;
-            await updateSettings({ verbose: newValue });
-            ctx.config.settings.verbose = newValue;
-            return {
-                message: `Verbose mode ${newValue ? chalk.green('enabled') : chalk.dim('disabled')}`,
-            };
-        },
-    },
-    {
-        name: 'memory',
-        aliases: ['mem'],
-        description: 'Show stored memories',
-        execute: async (_, ctx) => {
-            const memories = await ctx.nero.getMemories();
-            if (memories.length === 0) {
-                return { message: chalk.dim('No memories stored yet.') };
-            }
-            const list = memories
-                .map(
-                    (m, i) =>
-                        `  ${chalk.dim(`${i + 1}.`)} ${m.body}\n      ${chalk.dim(m.created_at)}`,
-                )
-                .join('\n');
-            return { message: `\n${chalk.bold('Memories:')}\n\n${list}\n` };
-        },
-    },
-    {
-        name: 'actions',
-        aliases: ['a'],
-        description: 'Manage scheduled actions (run <id>, remove <id>)',
-        execute: async (args, ctx) => {
-            if (args[0] === 'run' && args[1]) {
-                const id = parseInt(args[1], 10);
-                if (isNaN(id)) return { error: 'Invalid action ID' };
-
-                ctx.setLoading(`Running action #${id}`);
-                try {
-                    const { NeroClient } = await import('../client/index.js');
-                    const client = new NeroClient({
-                        baseUrl: 'http://localhost:4847',
-                        licenseKey: ctx.config.licenseKey,
-                    });
-                    const run = await client.triggerAction(id);
-                    ctx.setLoading(null);
-
-                    const statusColor =
-                        run.status === 'success'
-                            ? chalk.green
-                            : run.status === 'error'
-                              ? chalk.red
-                              : chalk.yellow;
-                    let output = `\n${statusColor(run.status)} ${chalk.dim(`(${run.duration_ms}ms)`)}\n`;
-                    if (run.result) output += chalk.dim(run.result.slice(0, 500)) + '\n';
-                    if (run.error) output += chalk.red(run.error) + '\n';
-                    return { message: output };
-                } catch (error) {
-                    ctx.setLoading(null);
-                    return { error: `Failed to run action: ${(error as Error).message}` };
-                }
-            }
-
-            if (args[0] === 'remove' && args[1]) {
-                const id = parseInt(args[1], 10);
-                if (isNaN(id)) return { error: 'Invalid action ID' };
-
-                try {
-                    const { NeroClient } = await import('../client/index.js');
-                    const client = new NeroClient({
-                        baseUrl: 'http://localhost:4847',
-                        licenseKey: ctx.config.licenseKey,
-                    });
-                    await client.deleteAction(id);
-                    return { message: chalk.green(`Action #${id} deleted.`) };
-                } catch (error) {
-                    return { error: `Failed to delete action: ${(error as Error).message}` };
-                }
-            }
-
-            const actions = await ctx.nero.getActions();
-            if (actions.length === 0) {
-                return { message: chalk.dim('No scheduled actions.') };
-            }
-            const list = actions
-                .map((a: any) => {
-                    const enabled = a.enabled !== false;
-                    const status = enabled ? chalk.green('on') : chalk.dim('off');
-                    const recurrence = a.recurrence ? chalk.cyan(` (recurring)`) : '';
-                    const nextRun = new Date(a.timestamp).toLocaleString();
-                    return `  ${chalk.dim(`#${a.id}`)} ${a.request}${recurrence}\n      ${status} ${chalk.dim(`Next: ${nextRun}`)}`;
-                })
-                .join('\n');
-            return {
-                message: `\n${chalk.bold('Scheduled Actions:')}\n\n${list}\n\n${chalk.dim('Commands: /actions run <id>, /actions remove <id>')}\n`,
-            };
-        },
-    },
-    {
-        name: 'tools',
-        aliases: ['t'],
-        description: 'List available MCP tools',
-        execute: async (_, ctx) => {
-            const tools = ctx.nero.getMcpToolNames();
-            if (tools.length === 0) {
-                return {
-                    message: chalk.dim('No MCP tools configured. Add servers to .nero/config.json'),
-                };
-            }
-            const list = tools.map((t) => `  ${chalk.cyan(t)}`).join('\n');
-            return { message: `\n${chalk.bold('Available MCP Tools:')}\n\n${list}\n` };
-        },
-    },
-    {
-        name: 'config',
-        aliases: ['settings'],
-        description: 'Show current configuration',
-        execute: async (_, ctx) => {
-            const settings = ctx.config.settings;
-            const mcpCount = Object.keys(ctx.config.mcpServers).length;
-            const timezone = settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-            const provider = isOpenRouter(ctx.config)
-                ? 'OpenRouter'
-                : ctx.config.llm.baseUrl || 'custom';
-
-            let output = `\n${chalk.bold('Settings:')}\n`;
-            output += `  Streaming: ${settings.streaming ? chalk.green('on') : chalk.dim('off')}\n`;
-            output += `  Model: ${chalk.cyan(ctx.config.llm.model)}\n`;
-            output += `  Provider: ${chalk.cyan(provider)}${ctx.config.llm.baseUrl ? '' : chalk.dim(' (default)')}\n`;
-            output += `  Timezone: ${chalk.cyan(timezone)}${!settings.timezone ? chalk.dim(' (auto)') : ''}\n`;
-            output += `  Verbose: ${settings.verbose ? chalk.green('on') : chalk.dim('off')}\n`;
-            output += `  MCP Servers: ${mcpCount > 0 ? chalk.green(mcpCount) : chalk.dim('none')}\n`;
-            output += `  Config Path: ${chalk.dim(getConfigPath())}\n`;
-
-            return { message: output };
-        },
-    },
-    {
-        name: 'timezone',
-        aliases: ['tz'],
-        description: 'Show or set your timezone (e.g., America/New_York)',
-        execute: async (args, ctx) => {
-            const current =
-                ctx.config.settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-            if (args.length === 0) {
-                const isAuto = !ctx.config.settings.timezone;
-                return {
-                    message:
-                        `Current timezone: ${chalk.cyan(current)}${isAuto ? chalk.dim(' (auto-detected)') : ''}\n` +
-                        chalk.dim('Set with: /timezone America/New_York'),
-                };
-            }
-
-            if (args[0] === 'auto' || args[0] === 'reset') {
-                await updateSettings({ timezone: undefined });
-                ctx.config.settings.timezone = undefined;
-                const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                return {
-                    message: `Timezone reset to auto-detect: ${chalk.cyan(detected)}`,
-                };
-            }
-
-            const newTimezone = args.join('/');
-
-            try {
-                new Date().toLocaleString('en-US', { timeZone: newTimezone });
-            } catch {
-                return {
-                    error: `Invalid timezone: ${newTimezone}\nExamples: America/New_York, Europe/London, Asia/Tokyo`,
-                };
-            }
-
-            await updateSettings({ timezone: newTimezone });
-            ctx.config.settings.timezone = newTimezone;
-            return { message: `Timezone set to ${chalk.cyan(newTimezone)}` };
-        },
-    },
-    {
-        name: 'mcp',
-        aliases: [],
-        description: 'Manage MCP servers (auth|enable|disable|logout|status)',
-        execute: async (args, ctx) => {
-            const subcommand = args[0];
-            const serverName = args[1];
-
-            if (subcommand === 'auth') {
-                if (!serverName) {
-                    return { error: 'Usage: /mcp auth <server-name>' };
-                }
-                return await handleMcpAuth(serverName, ctx);
-            }
-
-            if (subcommand === 'enable') {
-                if (!serverName) {
-                    return { error: 'Usage: /mcp enable <server-name>' };
-                }
-                return await handleMcpEnable(serverName, ctx);
-            }
-
-            if (subcommand === 'disable') {
-                if (!serverName) {
-                    return { error: 'Usage: /mcp disable <server-name>' };
-                }
-                return await handleMcpDisable(serverName, ctx);
-            }
-
-            if (subcommand === 'logout') {
-                if (!serverName) {
-                    return { error: 'Usage: /mcp logout <server-name>' };
-                }
-                return await handleMcpLogout(serverName, ctx);
-            }
-
-            const servers = Object.entries(ctx.config.mcpServers);
-
-            if (servers.length === 0) {
-                let output = chalk.cyan('No MCP servers configured.\n\n');
-                output += chalk.dim('Add one with:\n');
-                output += chalk.cyan(
-                    '  nero mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem ~/Documents\n',
-                );
-                output += chalk.cyan(
-                    '  nero mcp add github -e GITHUB_TOKEN=xxx -- npx -y @modelcontextprotocol/server-github\n',
-                );
-                return { message: output };
-            }
-
-            const tools = ctx.nero.getMcpToolNames();
-            const connectedServers = new Set(tools.map((t) => t.split(':')[0]));
-
-            let output = `\n${chalk.bold('MCP Servers:')}\n\n`;
-            for (const [name, config] of servers) {
-                const isDisabled = config.disabled;
-                const isConnected = connectedServers.has(name);
-                const transport = config.transport || (config.url ? 'http' : 'stdio');
-
-                let statusIcon: string;
-                let statusText: string;
-
-                if (isDisabled) {
-                    statusIcon = chalk.dim('○');
-                    statusText = chalk.dim('disabled');
-                } else if (isConnected) {
-                    statusIcon = chalk.green('●');
-                    statusText = chalk.green('connected');
-                } else {
-                    statusIcon = chalk.cyan('○');
-                    statusText = chalk.cyan('disconnected');
-                }
-
-                output += `  ${statusIcon} ${chalk.bold(name)} ${chalk.dim(`(${transport}, ${statusText})`)}\n`;
-
-                if (config.url) {
-                    output += `    ${chalk.dim('URL:')} ${config.url}\n`;
-                } else if (config.command) {
-                    output += `    ${chalk.dim('Command:')} ${config.command} ${(config.args || []).join(' ')}\n`;
-                }
-
-                if (config.env) {
-                    const envKeys = Object.keys(config.env);
-                    const hasValues = envKeys.every((k) => config.env![k] && config.env![k] !== '');
-                    if (hasValues) {
-                        output += `    ${chalk.dim('Env:')} ${envKeys.join(', ')} ${chalk.green('✓')}\n`;
-                    } else {
-                        output += `    ${chalk.dim('Env:')} ${envKeys.join(', ')} ${chalk.red('(needs configuration)')}\n`;
-                    }
-                }
-
-                if (config.headers) {
-                    output += `    ${chalk.dim('Headers:')} ${Object.keys(config.headers).join(', ')}\n`;
-                }
-
-                if (transport === 'http') {
-                    if (config.oauth?.tokens) {
-                        output += `    ${chalk.dim('Auth:')} ${chalk.green('authenticated')} ${chalk.dim('(/mcp logout ' + name + ')')}\n`;
-                    } else {
-                        output += `    ${chalk.dim('Auth:')} ${chalk.cyan('not authenticated')} ${chalk.dim('(/mcp auth ' + name + ')')}\n`;
-                    }
-                }
-
-                if (isDisabled) {
-                    output += `    ${chalk.dim('Action:')} ${chalk.cyan('/mcp enable ' + name)}\n`;
-                } else {
-                    output += `    ${chalk.dim('Action:')} ${chalk.cyan('/mcp disable ' + name)}\n`;
-                }
-            }
-
-            if (tools.length > 0) {
-                output += `\n${chalk.bold('Available Tools:')} ${chalk.dim(`(${tools.length})`)}\n`;
-                const grouped: Record<string, string[]> = {};
-                for (const t of tools) {
-                    const [server, tool] = t.split(':');
-                    if (!grouped[server]) grouped[server] = [];
-                    grouped[server].push(tool);
-                }
-                for (const [server, serverTools] of Object.entries(grouped)) {
-                    output += `  ${chalk.cyan(server)}: ${serverTools.join(', ')}\n`;
-                }
-            }
-
-            output += `\n${chalk.dim('Commands: /mcp auth|enable|disable|logout <server>')}\n`;
-            output += `${chalk.dim('CLI: nero mcp add|list|remove')}\n`;
-            return { message: output };
-        },
-    },
-    {
-        name: 'compact',
-        aliases: [],
-        description: 'Summarize conversation to reduce context',
-        execute: async (_, ctx) => {
-            ctx.setLoading('Compacting conversation');
-
-            try {
-                const summary = await ctx.nero.performCompaction();
-                ctx.setLoading(null);
-                ctx.clearScreen();
-                return {
-                    message:
-                        chalk.green('Conversation compacted.\n\n') +
-                        chalk.dim('Summary: ') +
-                        summary,
-                };
-            } catch (error) {
-                ctx.setLoading(null);
-                const err = error as Error;
-                return { error: `Failed to compact: ${err.message}` };
-            }
-        },
-    },
-    {
-        name: 'history',
-        aliases: ['hist'],
-        description: 'Show recent message history',
-        execute: async (args, ctx) => {
-            const limit = args[0] ? parseInt(args[0], 10) : 20;
-
-            if (isNaN(limit) || limit < 1 || limit > 100) {
-                return { error: 'Please provide a number between 1 and 100' };
-            }
-
-            const messages = await ctx.nero.getMessageHistory(limit);
-
-            if (messages.length === 0) {
-                return { message: chalk.dim('No message history found.') };
-            }
-
-            let output = `\n${chalk.bold('Message History')} ${chalk.dim(`(last ${messages.length})`)}\n\n`;
-
-            for (const msg of messages) {
-                const role = msg.role === 'user' ? chalk.cyan('you') : chalk.blue('nero');
-                const time = new Date(msg.created_at).toLocaleTimeString();
-                const preview =
-                    msg.content.length > 60 ? msg.content.slice(0, 60) + '...' : msg.content;
-                output += `  ${chalk.dim(time)} ${role}: ${preview}\n`;
-            }
-
-            return { message: output };
-        },
-    },
-    {
-        name: 'context',
-        aliases: ['ctx'],
-        description: 'Show context usage (tokens, % of limit)',
-        execute: async (_, ctx) => {
-            const usage = ctx.nero.getContextUsage();
-
-            let bar = '';
-            const filled = Math.round(usage.percentage / 5);
-            for (let i = 0; i < 20; i++) {
-                bar += i < filled ? '=' : '-';
-            }
-
-            const color =
-                usage.percentage > 80
-                    ? chalk.red
-                    : usage.percentage > 60
-                      ? chalk.hex(NERO_BLUE)
-                      : chalk.green;
-
-            let output = `\n${chalk.bold('Context Usage')}\n\n`;
-            output += `  Tokens: ${chalk.cyan(usage.tokens.toLocaleString())} / ${usage.limit.toLocaleString()}\n`;
-            output += `  Usage:  [${color(bar)}] ${color(usage.percentage + '%')}\n`;
-
-            if (usage.percentage > 70) {
-                output += `\n  ${chalk.yellow('Tip:')} Run /compact to reduce context usage\n`;
-            }
-
-            return { message: output };
-        },
-    },
-    {
-        name: 'install-slack',
-        aliases: ['slack'],
-        description: 'Connect Nero to Slack for DM conversations',
-        execute: async (_, ctx) => {
-            if (!ctx.config.licenseKey) {
-                return {
-                    error:
-                        'License key required for Slack integration.\n' +
-                        chalk.dim('Get one at https://nero.pompeiilabs.com'),
-                };
-            }
-
-            ctx.setLoading('Getting Slack install URL');
-
-            try {
-                const apiUrl = process.env.BACKEND_URL || 'https://api.magmadeploy.com';
-                const response = await fetch(`${apiUrl}/v1/nero/slack/install`, {
-                    headers: {
-                        'x-license-key': ctx.config.licenseKey,
-                    },
-                });
-
-                if (!response.ok) {
-                    ctx.setLoading(null);
-                    const data = await response.json().catch(() => ({}));
-                    return { error: data.error || `Failed to get install URL: ${response.status}` };
-                }
-
-                const { url } = await response.json();
-                ctx.setLoading(null);
-
-                ctx.log(chalk.blue('\nOpening browser to connect Slack...'));
-                ctx.log(chalk.dim(`If the browser doesn't open, visit:\n${url}\n`));
-
-                openBrowser(url);
-
-                return {
-                    message:
-                        chalk.green('Complete the authorization in your browser.\n') +
-                        chalk.dim('Once done, you can DM Nero directly in Slack!'),
-                };
-            } catch (error) {
-                ctx.setLoading(null);
-                const err = error as Error;
-                return { error: `Failed to start Slack install: ${err.message}` };
-            }
-        },
-    },
-    {
-        name: 'usage',
-        aliases: ['credits', 'balance'],
-        description: 'Show OpenRouter API usage and credits',
-        execute: async (_, ctx) => {
-            if (!isOpenRouter(ctx.config)) {
-                return { message: chalk.dim('Usage tracking is only available with OpenRouter.') };
-            }
-            ctx.setLoading('Fetching usage data');
-
-            try {
-                const apiKey = process.env.OPENROUTER_API_KEY;
-                if (!apiKey) {
-                    ctx.setLoading(null);
-                    return { error: 'OPENROUTER_API_KEY not set' };
-                }
-
-                const response = await fetch('https://openrouter.ai/api/v1/key', {
-                    headers: { Authorization: `Bearer ${apiKey}` },
-                });
-
-                if (!response.ok) {
-                    ctx.setLoading(null);
-                    return { error: `Failed to fetch usage: ${response.status}` };
-                }
-
-                const data = await response.json();
-                const { limit, usage, limit_remaining } = data.data;
-
-                const hasLimit = limit !== null && limit > 0;
-                const totalUsage = usage || 0;
-                const remaining = limit_remaining ?? 0;
-                const usagePercent = hasLimit ? Math.round((totalUsage / limit) * 100) : 0;
-
-                ctx.setLoading(null);
-
-                let output = `\n${chalk.bold('OpenRouter Usage')}\n\n`;
-
-                if (hasLimit) {
-                    let bar = '';
-                    const filled = Math.round(usagePercent / 5);
-                    for (let i = 0; i < 20; i++) {
-                        bar += i < filled ? '=' : '-';
-                    }
-
-                    const color =
-                        usagePercent > 90
-                            ? chalk.red
-                            : usagePercent > 70
-                              ? chalk.hex(NERO_BLUE)
-                              : chalk.green;
-
-                    const remainingColor =
-                        remaining < 1
-                            ? chalk.red
-                            : remaining < 5
-                              ? chalk.hex(NERO_BLUE)
-                              : chalk.green;
-
-                    output += `  Limit:     $${limit.toFixed(2)}\n`;
-                    output += `  Used:      $${totalUsage.toFixed(2)}\n`;
-                    output += `  Remaining: ${remainingColor('$' + remaining.toFixed(2))}\n\n`;
-                    output += `  Usage: [${color(bar)}] ${color(usagePercent + '%')}\n`;
-
-                    if (remaining < 1) {
-                        output += `\n  ${chalk.red('Warning:')} Low balance! Top up at openrouter.ai/credits\n`;
-                    }
-                } else {
-                    output += `  Used: $${totalUsage.toFixed(2)}\n`;
-                    output += `  ${chalk.dim('No spending limit set')}\n`;
-                }
-
-                if (data.data.usage_monthly !== undefined) {
-                    output += `\n${chalk.bold('This Month')}\n`;
-                    output += `  Usage: $${(data.data.usage_monthly || 0).toFixed(2)}\n`;
-                }
-
-                if (data.data.rate_limit) {
-                    output += `\n${chalk.bold('Rate Limit')}\n`;
-                    output += `  ${chalk.dim(data.data.rate_limit.requests + ' requests / ' + data.data.rate_limit.interval)}\n`;
-                }
-
-                return { message: output };
-            } catch (error) {
-                ctx.setLoading(null);
-                const err = error as Error;
-                return { error: `Failed to fetch usage: ${err.message}` };
-            }
-        },
-    },
-    {
-        name: 'think',
-        aliases: ['bg', 'background'],
-        description: 'Manually trigger a background thinking run',
-        execute: async (_, ctx) => {
-            ctx.setLoading('Running background thinking');
-
-            try {
-                const result = await ctx.nero.runThink((status) => {
-                    ctx.log(chalk.dim(`[think] ${status}`));
-                });
-
-                ctx.setLoading(null);
-
-                if (!result.thought) {
-                    return { message: chalk.dim('Nothing notable found.') };
-                }
-
-                let output = `\n${chalk.bold('Background Thought')}\n\n`;
-                if (result.urgent) {
-                    output += chalk.red('[URGENT] ');
-                }
-                output += result.thought + '\n';
-
-                return { message: output };
-            } catch (error) {
-                ctx.setLoading(null);
-                const err = error as Error;
-                return { error: `Think failed: ${err.message}` };
-            }
-        },
-    },
-    {
-        name: 'revoke',
-        aliases: [],
-        description: 'Revoke always-allowed tool permissions',
-        execute: async (args, ctx) => {
-            const allowed = getAllowedTools();
-
-            if (args.length === 0) {
-                if (allowed.length === 0) {
-                    return { message: chalk.dim('No tools are always-allowed.') };
-                }
-                let output = chalk.bold('Always-allowed tools:\n\n');
-                allowed.forEach((tool) => {
-                    output += `  ${chalk.cyan(tool)}\n`;
-                });
-                output += chalk.dim('\nUse /revoke <tool> to remove.');
-                return { message: output };
-            }
-
-            const tool = args[0];
-            if (!allowed.includes(tool)) {
-                return { error: `Tool "${tool}" is not in the always-allowed list.` };
-            }
-
-            await removeAllowedTool(tool);
-            return { message: chalk.green(`Revoked always-allow for "${tool}".`) };
-        },
-    },
-    {
-        name: 'reload',
-        aliases: ['r'],
-        description: 'Reload configuration, MCP servers, and skills',
-        execute: async (_, ctx) => {
-            ctx.setLoading('Reloading');
-
-            try {
-                const result = await ctx.nero.reload();
-                clearSkillsCache();
-                ctx.setLoading(null);
-                return {
-                    message:
-                        chalk.green('Reloaded successfully.\n') +
-                        chalk.dim(`MCP tools: ${result.mcpTools}\n`) +
-                        chalk.dim(
-                            `Active skills: ${result.loadedSkills.length > 0 ? result.loadedSkills.join(', ') : 'none'}`,
-                        ),
-                };
-            } catch (error) {
-                ctx.setLoading(null);
-                const err = error as Error;
-                return { error: `Reload failed: ${err.message}` };
-            }
-        },
-    },
-    {
-        name: 'skills',
-        aliases: ['skill'],
-        description: 'List available skills or show skill details',
-        execute: async (args, ctx) => {
-            clearSkillsCache();
-            const skills = await getSkills();
-
-            if (args.length > 0) {
-                const skillName = args[0];
-                const skill = findSkill(skillName, skills);
-
-                if (!skill) {
-                    return { error: `Skill not found: ${skillName}` };
-                }
-
-                let output = `\n${chalk.bold(skill.name)}\n`;
-                if (skill.metadata.description) {
-                    output += chalk.dim(skill.metadata.description) + '\n';
-                }
-                output += chalk.dim(`Path: ${skill.path}\n`);
-                output += chalk.dim(`\nInvoke: /${skill.name}\n`);
-
-                return { message: output };
-            }
-
-            if (skills.length === 0) {
-                const skillsDir = getSkillsDir();
-                let output = chalk.yellow('No skills installed.\n\n');
-                output += chalk.dim('Install skills with:\n');
-                output += chalk.cyan(`  npx skills add <repo> --path ${skillsDir}\n\n`);
-                output += chalk.dim('Or create your own:\n');
-                output += chalk.cyan('  nero skills create my-skill\n');
-                return { message: output };
-            }
-
-            let output = `\n${chalk.bold('Available Skills:')}\n\n`;
-            for (const skill of skills) {
-                output += `  ${chalk.cyan('/' + skill.name)}\n`;
-                if (skill.metadata.description) {
-                    output += `    ${chalk.dim(skill.metadata.description)}\n`;
-                }
-            }
-
-            output += chalk.dim('\nUse /skills <name> for details\n');
-            return { message: output };
-        },
-    },
-    {
-        name: 'export',
-        aliases: ['backup'],
-        description: 'Export Nero state to a .nro file',
-        execute: async (args, ctx) => {
-            const date = new Date().toISOString().split('T')[0];
-            const defaultPath = resolve(getConfigDir(), `export-${date}.nro`);
-            const outputPath = args[0] ? resolve(args[0]) : defaultPath;
-
-            ctx.setLoading('Exporting data');
-
-            try {
-                const data = await ctx.nero.exportState();
-                ctx.setLoading(null);
-
-                const tableNames = Object.keys(data.data) as (keyof typeof data.data)[];
-                let output = `\n${chalk.bold('Export Summary')}\n\n`;
-                let totalRows = 0;
-                for (const table of tableNames) {
-                    const count = data.data[table].length;
-                    totalRows += count;
-                    output += `  ${chalk.dim(table + ':')} ${count}\n`;
-                }
-                output += `\n  ${chalk.dim('Total:')} ${totalRows} rows\n`;
-
-                await writeFile(outputPath, JSON.stringify(data, null, 2));
-                output += `\n${chalk.green('Saved to')} ${chalk.cyan(outputPath)}`;
-                return { message: output };
-            } catch (error) {
-                ctx.setLoading(null);
-                return { error: `Export failed: ${(error as Error).message}` };
-            }
-        },
-    },
-    {
-        name: 'import',
-        aliases: ['restore'],
-        description: 'Import Nero state from a .nro file',
-        execute: async (args, ctx) => {
-            if (args.length === 0) {
-                return { error: 'Usage: /import <path-to-file.nro>' };
-            }
-
-            const filePath = resolve(args[0]);
-            if (!existsSync(filePath)) {
-                return { error: `File not found: ${filePath}` };
-            }
-
-            let data: unknown;
-            try {
-                const content = await readFile(filePath, 'utf-8');
-                data = JSON.parse(content);
-            } catch {
-                return { error: 'Failed to parse file as JSON' };
-            }
-
-            if (!validateExportFile(data)) {
-                return {
-                    error: 'Invalid export file (missing nero_export marker or wrong version)',
-                };
-            }
-
-            const tableNames = Object.keys(data.data) as (keyof typeof data.data)[];
-            let preview = `\n${chalk.bold('Import Preview')} ${chalk.dim(`(v${data.version}, exported ${data.exported_at})`)}\n\n`;
-            for (const table of tableNames) {
-                const count = data.data[table].length;
-                preview += `  ${chalk.dim(table + ':')} ${count}\n`;
-            }
-            preview += `\n${chalk.yellow('This will replace all existing data.')}\n`;
-
-            ctx.log(preview);
-            ctx.setLoading('Importing data');
-
-            try {
-                const result = await ctx.nero.importState(data);
-                ctx.setLoading(null);
-
-                let output = `\n${chalk.green('Import complete')}\n\n`;
-                if (result.config) output += `  ${chalk.dim('Config:')} merged\n`;
-                for (const [table, count] of Object.entries(result.counts)) {
-                    output += `  ${chalk.dim(table + ':')} ${count} rows\n`;
-                }
-                return { message: output };
-            } catch (error) {
-                ctx.setLoading(null);
-                return { error: `Import failed: ${(error as Error).message}` };
-            }
-        },
-    },
-];
-
-async function handleMcpAuth(serverName: string, ctx: CommandContext): Promise<CommandResult> {
-    const serverConfig = ctx.config.mcpServers[serverName];
-
-    if (!serverConfig) {
-        return { error: `MCP server not found: ${serverName}` };
-    }
-
-    if (serverConfig.transport !== 'http' || !serverConfig.url) {
-        return { error: `Server ${serverName} is not an HTTP MCP server` };
-    }
-
-    if (serverConfig.oauth?.tokens) {
-        return {
-            message: chalk.cyan(
-                `Server ${serverName} is already authenticated. Use /mcp logout ${serverName} first.`,
-            ),
-        };
-    }
-
-    ctx.log(chalk.dim(`Discovering OAuth metadata for ${serverName}...`));
-    const metadata = await discoverOAuthMetadata(serverConfig.url);
-
-    if (!metadata?.authServer) {
-        return { error: `Server ${serverName} does not support OAuth authentication` };
-    }
-
-    ctx.log(chalk.dim(`Found authorization server: ${metadata.authServer.issuer}`));
-
-    const port = 8976;
-    const redirectUri = `http://localhost:${port}/callback`;
-
-    let clientRegistration = serverConfig.oauth?.clientRegistration;
-    if (!clientRegistration) {
-        ctx.log(chalk.dim('Registering client...'));
-        clientRegistration = await registerClient(
-            metadata.authServer,
-            `nero-${serverName}`,
-            redirectUri,
+export function start(opts: StartOpts = {}): void {
+    ensureDocker();
+    ensureHome();
+    const added = ensureStackEnv();
+    writeCompose();
+
+    const env = readEnv();
+    if (!env.OPENROUTER_API_KEY) {
+        warn(
+            `OPENROUTER_API_KEY not set in ${c.cyan('~/.nero/.env')} — Nero can't think until it is.`,
         );
-
-        if (!clientRegistration) {
-            return { error: 'Failed to register OAuth client' };
-        }
-        ctx.log(chalk.dim(`Client registered: ${clientRegistration.client_id}`));
     }
+    if (added.length) info(`Generated ${added.join(', ')} in ~/.nero/.env`);
 
-    const { codeVerifier, state, authUrl } = buildAuthorizationUrl({
-        authServerMetadata: metadata.authServer,
-        clientId: clientRegistration.client_id,
-        redirectUri,
+    info('Pulling images…');
+    compose(['pull']);
+    info('Starting the stack…');
+    const code = compose(['up', opts.foreground ? '' : '-d'].filter(Boolean));
+    if (code !== 0) die('Stack failed to start. See the output above.');
+
+    if (!opts.foreground) {
+        const port = env.NERO_PORT || '4848';
+        line();
+        ok(`Nero is up  →  ${c.cyan(`http://localhost:${port}`)}`);
+        info(`${c.dim('logs:')} nero logs    ${c.dim('stop:')} nero stop`);
+    }
+}
+
+export function stop(): void {
+    ensureDocker();
+    const code = compose(['down']);
+    if (code === 0) ok('Nero stopped.');
+}
+
+export function restart(): void {
+    ensureDocker();
+    writeCompose();
+    compose(['restart']);
+    ok('Nero restarted.');
+}
+
+export function status(): void {
+    ensureDocker();
+    line(c.bold('Nero stack'));
+    compose(['ps']);
+    const env = readEnv();
+    line();
+    kv('lux', luxMode(env) === 'bundled' ? 'bundled engine' : 'external');
+    kv('url', `http://localhost:${env.NERO_PORT || '4848'}`);
+    kv('home', HOME);
+}
+
+export function logs(tail: string | undefined, follow: boolean): void {
+    ensureDocker();
+    compose(['logs', follow ? '-f' : '', '--tail', tail || '200'].filter(Boolean));
+}
+
+// ---- mcp (declarative: writes desired state to Lux) ----
+
+export async function mcpList(): Promise<void> {
+    const mcp = await import('../data/mcp');
+    const rows = await mcp.list();
+    if (!rows.length) {
+        line(c.dim('No MCP connections. Add one with `nero mcp add <name> <url>`.'));
+        return;
+    }
+    for (const r of rows) {
+        const auth = r.auth?.oauth ? 'oauth' : r.auth?.apiKey ? 'api-key' : 'open';
+        const flag = r.disabled ? c.yellow(' disabled') : '';
+        line(`${c.bold(r.name)}${flag}`);
+        kv('url', r.url || c.dim('(stdio)'));
+        kv('transport', r.transport);
+        kv('auth', auth);
+    }
+}
+
+export interface McpAddOpts {
+    transport?: 'http' | 'sse' | 'stdio';
+    header?: Record<string, string>;
+    key?: string;
+}
+
+export async function mcpAdd(name: string, url: string, opts: McpAddOpts): Promise<void> {
+    if (!name || !url)
+        die('Usage: nero mcp add <name> <url> [--transport http|sse|stdio] [--key <token>]');
+    const mcp = await import('../data/mcp');
+    await mcp.upsert({
+        name,
+        url,
+        transport: opts.transport ?? 'http',
+        auth: opts.key ? { apiKey: opts.key } : null,
+        config: opts.header && Object.keys(opts.header).length ? { headers: opts.header } : null,
+        disabled: false,
     });
-
-    ctx.log(chalk.blue('\nOpening browser for authentication...'));
-    ctx.log(chalk.dim(`If the browser doesn't open, visit:\n${authUrl}\n`));
-
-    openBrowser(authUrl);
-
-    try {
-        const tokens = await new Promise<Awaited<ReturnType<typeof exchangeCodeForTokens>>>(
-            (resolve, reject) => {
-                const server = createServer(async (req, res) => {
-                    const url = new URL(req.url || '', `http://localhost:${port}`);
-
-                    if (url.pathname === '/callback') {
-                        const code = url.searchParams.get('code');
-                        const returnedState = url.searchParams.get('state');
-                        const error = url.searchParams.get('error');
-
-                        if (error) {
-                            res.writeHead(400, { 'Content-Type': 'text/html' });
-                            res.end(
-                                `<html><body><h1>Authentication Failed</h1><p>${error}</p></body></html>`,
-                            );
-                            server.close();
-                            reject(new Error(`OAuth error: ${error}`));
-                            return;
-                        }
-
-                        if (!code || returnedState !== state) {
-                            res.writeHead(400, { 'Content-Type': 'text/html' });
-                            res.end(
-                                '<html><body><h1>Invalid Response</h1><p>Missing code or state mismatch</p></body></html>',
-                            );
-                            server.close();
-                            reject(new Error('Invalid OAuth response'));
-                            return;
-                        }
-
-                        res.writeHead(200, { 'Content-Type': 'text/html' });
-                        res.end(
-                            '<html><body><h1>Authentication Successful</h1><p>You can close this window and return to Nero.</p></body></html>',
-                        );
-                        server.close();
-
-                        const tokens = await exchangeCodeForTokens(
-                            metadata.authServer!,
-                            clientRegistration!.client_id,
-                            code,
-                            codeVerifier,
-                            redirectUri,
-                        );
-                        resolve(tokens);
-                    } else {
-                        res.writeHead(404);
-                        res.end('Not found');
-                    }
-                });
-
-                server.listen(port, () => {
-                    ctx.log(chalk.dim(`Waiting for OAuth callback on port ${port}...`));
-                });
-
-                server.on('error', (err) => {
-                    reject(err);
-                });
-
-                setTimeout(
-                    () => {
-                        server.close();
-                        reject(new Error('OAuth timeout - no callback received within 5 minutes'));
-                    },
-                    5 * 60 * 1000,
-                );
-            },
-        );
-
-        if (!tokens) {
-            return { error: 'Failed to obtain access token' };
-        }
-
-        const oauthData: StoredOAuthData = {
-            serverUrl: serverConfig.url,
-            clientRegistration,
-            tokens,
-            authServerMetadata: metadata.authServer,
-        };
-
-        await updateMcpServerOAuth(serverName, oauthData);
-        ctx.config.mcpServers[serverName].oauth = oauthData;
-
-        return {
-            message: chalk.green(
-                `\nAuthentication successful for ${serverName}! Restart Nero to connect.`,
-            ),
-        };
-    } catch (error) {
-        const err = error as Error;
-        return { error: `Authentication failed: ${err.message}` };
-    }
+    ok(`Saved ${c.bold(name)}. Nero will connect it on its next reconcile.`);
 }
 
-async function handleMcpEnable(serverName: string, ctx: CommandContext): Promise<CommandResult> {
-    const serverConfig = ctx.config.mcpServers[serverName];
-
-    if (!serverConfig) {
-        return { error: `MCP server not found: ${serverName}` };
-    }
-
-    if (!serverConfig.disabled) {
-        return { message: chalk.cyan(`Server ${serverName} is already enabled.`) };
-    }
-
-    delete ctx.config.mcpServers[serverName].disabled;
-    await saveConfig(ctx.config);
-
-    return { message: chalk.green(`Server ${serverName} enabled. Restart Nero to connect.`) };
+export async function mcpRemove(name: string): Promise<void> {
+    if (!name) die('Usage: nero mcp remove <name>');
+    const mcp = await import('../data/mcp');
+    await mcp.remove(name);
+    ok(`Removed ${c.bold(name)}.`);
 }
 
-async function handleMcpDisable(serverName: string, ctx: CommandContext): Promise<CommandResult> {
-    const serverConfig = ctx.config.mcpServers[serverName];
+export async function mcpReconnect(name: string): Promise<void> {
+    if (!name) die('Usage: nero mcp reconnect <name>');
+    const mcp = await import('../data/mcp');
+    const conn = await mcp.getByName(name);
+    if (!conn) die(`No MCP connection named ${c.bold(name)}.`);
+    await mcp.upsert({ name, disabled: false });
+    ok(`Flagged ${c.bold(name)} for reconnect.`);
+}
 
-    if (!serverConfig) {
-        return { error: `MCP server not found: ${serverName}` };
+// ---- model ----
+
+export async function model(slug?: string): Promise<void> {
+    const settings = await import('../data/settings');
+    if (!slug) {
+        const current = (await settings.getModel().catch(() => null)) ?? loadConfig().model;
+        kv('model', current);
+        return;
     }
+    await settings.setModel(slug);
+    ok(`Model set to ${c.bold(slug)}. Takes effect on the next message.`);
+}
 
-    if (serverConfig.disabled) {
-        return { message: chalk.cyan(`Server ${serverName} is already disabled.`) };
-    }
+// ---- config / doctor ----
 
-    ctx.config.mcpServers[serverName].disabled = true;
-    await saveConfig(ctx.config);
+export function config(): void {
+    const cfg = loadConfig();
+    line(c.bold('Nero config') + c.dim('  (resolved from ~/.nero/.env — secrets hidden)'));
+    kv('model', cfg.model);
+    kv('embed model', cfg.embedModel);
+    kv('port', String(cfg.port));
+    kv('timezone', cfg.timezone);
+    kv('lux', luxMode() === 'bundled' ? 'bundled engine' : 'external');
+    kv('openrouter', cfg.openrouter.apiKey ? c.green('set') : c.red('missing'));
+    kv('tavily', cfg.tavilyApiKey ? c.green('set') : c.dim('unset'));
+}
 
-    return {
-        message: chalk.green(`Server ${serverName} disabled. It will not connect on next restart.`),
+export async function doctor(): Promise<void> {
+    line(c.bold('nero doctor'));
+    let bad = 0;
+    const check = (label: string, pass: boolean, note = '') => {
+        line(`  ${pass ? c.green('✓') : c.red('✗')} ${label}${note ? c.dim('  ' + note) : ''}`);
+        if (!pass) bad++;
     };
-}
 
-async function handleMcpLogout(serverName: string, ctx: CommandContext): Promise<CommandResult> {
-    const serverConfig = ctx.config.mcpServers[serverName];
-
-    if (!serverConfig) {
-        return { error: `MCP server not found: ${serverName}` };
-    }
-
-    if (!serverConfig.oauth) {
-        return { message: chalk.cyan(`Server ${serverName} is not authenticated.`) };
-    }
-
-    delete ctx.config.mcpServers[serverName].oauth;
-    await saveConfig(ctx.config);
-
-    return { message: chalk.green(`Logged out of ${serverName}.`) };
-}
-
-export function findCommand(input: string): SlashCommand | null {
-    const name = input.toLowerCase();
-    return commands.find((cmd) => cmd.name === name || cmd.aliases.includes(name)) || null;
-}
-
-export async function checkForSkillInvocation(input: string): Promise<SkillInvocation | null> {
-    if (!input.startsWith('/')) return null;
-
-    const parts = input.slice(1).split(/\s+/);
-    const cmdName = parts[0].toLowerCase();
-    const args = parts.slice(1);
-
-    if (findCommand(cmdName)) {
-        return null;
-    }
-
-    const skills = await getSkills();
-    const skill = findSkill(cmdName, skills);
-
-    if (!skill) {
-        return null;
-    }
-
-    const content = getSkillContent(skill, args);
-
-    return {
-        skill,
-        content,
-        args,
-    };
-}
-
-export function getCommandSuggestions(partial: string): SlashCommand[] {
-    const lower = partial.toLowerCase();
-    return commands.filter(
-        (cmd) => cmd.name.startsWith(lower) || cmd.aliases.some((a) => a.startsWith(lower)),
+    const cfg = loadConfig();
+    check(
+        'OPENROUTER_API_KEY',
+        !!cfg.openrouter.apiKey,
+        cfg.openrouter.apiKey ? '' : 'set it in ~/.nero/.env',
     );
-}
+    check('LUX configured', !!cfg.lux.url && !!cfg.lux.secretKey);
 
-export async function executeCommand(input: string, ctx: CommandContext): Promise<CommandResult> {
-    const parts = input.slice(1).split(/\s+/);
-    const cmdName = parts[0];
-    const args = parts.slice(1);
-
-    const command = findCommand(cmdName);
-    if (!command) {
-        return { error: `Unknown command: ${cmdName}. Type /help for available commands.` };
-    }
-
+    let luxReachable = false;
     try {
-        return await command.execute(args, ctx);
-    } catch (error) {
-        const err = error as Error;
-        return { error: `Command failed: ${err.message}` };
+        const { getLux } = await import('../lux/client');
+        await getLux().table('mcp_connections').select().limit(1);
+        luxReachable = true;
+    } catch {
+        /* unreachable */
     }
+    check('Lux reachable', luxReachable, luxReachable ? '' : 'is the stack up? `nero start`');
+
+    line();
+    if (bad) warn(`${bad} issue${bad > 1 ? 's' : ''} to fix.`);
+    else ok('All good.');
 }

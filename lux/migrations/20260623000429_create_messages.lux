@@ -1,0 +1,1 @@
+TCREATE messages id INT PRIMARY KEY DEFAULT autoincrement(), role TEXT, type TEXT DEFAULT 'message', content TEXT, metadata JSON, attachments JSON, medium TEXT DEFAULT 'web', dispatch_id TEXT, created_at INT DEFAULT now()

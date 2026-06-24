@@ -1,0 +1,1 @@
+TCREATE presence id TEXT PRIMARY KEY, device_id TEXT, updated_at INT DEFAULT now()

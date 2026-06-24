@@ -1,29 +1,23 @@
-#!/usr/bin/env node
-import dotenv from 'dotenv';
-import { initDb, migrateDb } from '../db/index.js';
-import { loadConfig } from '../config.js';
-import { NeroService } from './index.js';
-import { Logger } from '../util/logger.js';
-import { VERSION } from '../util/version.js';
+import { loadConfig } from '../config';
+import { isLuxConnected, ensureAnonGrants } from '../lux/client';
+import { getMcpClient } from '../mcp/client';
+import { createServer } from './index';
 
-dotenv.config();
+const cfg = loadConfig();
 
-const logger = new Logger('Nero');
-
-async function main() {
-    logger.info(`Starting Nero v${VERSION}`);
-    logger.info('Initializing database...');
-    await initDb();
-    await migrateDb();
-
-    const config = await loadConfig();
-    const port = parseInt(process.env.PORT || '4847');
-
-    const service = new NeroService(port, config);
-    await service.start();
+if (!isLuxConnected()) {
+    console.warn('[nero] Lux not configured (LUX_URL / LUX_SECRET_KEY). Run `lux start`.');
+}
+if (!cfg.openrouter.apiKey) {
+    console.warn('[nero] OPENROUTER_API_KEY not set — runs will fail until it is.');
 }
 
-main().catch((error) => {
-    logger.error(error);
-    process.exit(1);
-});
+if (isLuxConnected()) {
+    await ensureAnonGrants().catch((e) => console.error('[nero] grant setup failed:', e));
+    await getMcpClient()
+        .connectAll()
+        .catch((e) => console.error('[nero] mcp connect failed:', e));
+}
+
+const server = createServer();
+console.log(`[nero] listening on http://localhost:${server.port}  (model: ${cfg.model})`);
