@@ -1,0 +1,1 @@
+TCREATE medium_activity id UUID PRIMARY KEY DEFAULT uuid(), medium TEXT, title TEXT, body TEXT, urgency TEXT DEFAULT 'normal', status TEXT DEFAULT 'sent', error TEXT, created_at INT DEFAULT now()
