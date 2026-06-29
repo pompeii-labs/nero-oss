@@ -42,52 +42,126 @@ export interface Dispatches {
 }
 
 export interface McpConnections {
-    id: string;
-    name: string | null;
-    url: string | null;
-    transport: string | null;
     auth: Json | null;
     config: Json | null;
-    disabled: boolean | null;
     created_at: number | null;
+    disabled: boolean | null;
+    id: string;
+    name: string | null;
+    transport: string | null;
+    url: string | null;
 }
 
 export interface Settings {
     key: string;
-    value: string | null;
     updated_at: number | null;
+    value: string | null;
 }
 
 export interface Devices {
-    id: string;
-    name: string | null;
-    kind: string | null;
-    screen_w: number | null;
-    screen_h: number | null;
     connected: boolean | null;
-    last_seen: number | null;
     created_at: number | null;
+    id: string;
+    kind: string | null;
+    last_seen: number | null;
+    name: string | null;
+    screen_h: number | null;
+    screen_w: number | null;
 }
 
 export interface Presence {
-    id: string;
     device_id: string | null;
+    id: string;
     updated_at: number | null;
 }
 
 export interface Panels {
-    id: string;
-    device_id: string | null;
-    title: string | null;
-    x: number | null;
-    y: number | null;
-    w: number | null;
-    h: number | null;
-    z: number | null;
     components: Json | null;
+    created_at: number | null;
+    device_id: string | null;
+    functions: Json | null;
+    h: number | null;
+    id: string;
+    maximized: boolean | null;
     state: Json | null;
     status: string | null;
+    title: string | null;
+    updated_at: number | null;
+    w: number | null;
+    x: number | null;
+    y: number | null;
+    z: number | null;
+}
+
+export interface Secrets {
     created_at: number | null;
+    description: string | null;
+    is_placeholder: boolean | null;
+    key: string;
+    updated_at: number | null;
+    value: string | null;
+}
+
+export interface Questions {
+    answer: Json | null;
+    answers: Json | null;
+    created_at: number | null;
+    dispatch_id: string | null;
+    header: string | null;
+    id: string;
+    items: Json | null;
+    multi: boolean | null;
+    options: Json | null;
+    question: string | null;
+    status: string | null;
+    updated_at: number | null;
+}
+
+export interface MediumActivity {
+    body: string | null;
+    created_at: number | null;
+    error: string | null;
+    id: string;
+    medium: string | null;
+    status: string | null;
+    title: string | null;
+    urgency: string | null;
+}
+
+export interface Projects {
+    budget_usd: number | null;
+    created_at: number | null;
+    device_id: string | null;
+    error: string | null;
+    est_cost_usd: number | null;
+    goal: string | null;
+    id: string;
+    model: string | null;
+    parent_dispatch_id: string | null;
+    result: string | null;
+    spent_usd: number | null;
+    status: string | null;
+    title: string | null;
+    updated_at: number | null;
+}
+
+export interface ProjectTasks {
+    activities: Json | null;
+    cost_usd: number | null;
+    created_at: number | null;
+    depends_on: Json | null;
+    description: string | null;
+    id: string;
+    idx: number | null;
+    input_tokens: number | null;
+    job_id: string | null;
+    output_tokens: number | null;
+    project_id: string | null;
+    result: string | null;
+    status: string | null;
+    streaming_text: string | null;
+    title: string | null;
+    tools: Json | null;
     updated_at: number | null;
 }
 
@@ -101,4 +175,9 @@ export type Database = {
     devices: Devices;
     presence: Presence;
     panels: Panels;
+    secrets: Secrets;
+    questions: Questions;
+    medium_activity: MediumActivity;
+    projects: Projects;
+    project_tasks: ProjectTasks;
 };

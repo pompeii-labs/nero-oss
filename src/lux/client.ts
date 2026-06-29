@@ -25,7 +25,17 @@ export function isLuxConnected(): boolean {
  *  secret-key only (server-side). */
 export async function ensureAnonGrants(): Promise<void> {
     const lux = getLux();
-    for (const table of ['messages', 'dispatches']) {
+    for (const table of [
+        'messages',
+        'dispatches',
+        'devices',
+        'presence',
+        'panels',
+        'questions',
+        'settings',
+        'projects',
+        'project_tasks',
+    ]) {
         const res = await lux.exec(`GRANT read ON ${table} TO anon`);
         if (res.error) console.error(`[lux] grant on ${table} failed:`, res.error);
     }

@@ -27,7 +27,7 @@ async function getClient(): Promise<LuxProjectClient> {
 export interface MessageRow {
     id: number;
     role: 'user' | 'assistant' | 'system' | null;
-    type: 'message' | 'agent_text' | 'tool_call' | null;
+    type: 'message' | 'agent_text' | 'tool_call' | 'interaction' | null;
     content: string | null;
     metadata: Record<string, unknown> | null;
     attachments: Array<{ id: string; mime: string; name: string }> | null;
@@ -47,6 +47,109 @@ export interface DispatchRow {
         status: 'running' | 'success' | 'error';
         result?: string;
     }> | null;
+    created_at?: number | null;
+    updated_at?: number | null;
+}
+
+export interface DeviceRow {
+    id: string;
+    name: string | null;
+    kind: string | null;
+    screen_w: number | null;
+    screen_h: number | null;
+    connected: boolean | null;
+    last_seen: number | null;
+}
+
+export interface PresenceRow {
+    id: string;
+    device_id: string | null;
+}
+
+export interface AskOption {
+    label: string;
+    description?: string;
+}
+export interface AskItem {
+    question: string;
+    header?: string;
+    options: AskOption[];
+    multi?: boolean;
+}
+export interface SettingsRow {
+    key: string;
+    value: string | null;
+}
+
+export interface QuestionRow {
+    id: string;
+    items: AskItem[] | null;
+    answers: (string[] | null)[] | null;
+    status: 'pending' | 'answered' | 'cancelled' | 'timeout' | null;
+    created_at?: number | null;
+}
+
+export interface ProjectRow {
+    id: string;
+    title: string | null;
+    goal: string | null;
+    status:
+        | 'planning'
+        | 'awaiting_approval'
+        | 'running'
+        | 'paused'
+        | 'done'
+        | 'error'
+        | 'cancelled'
+        | null;
+    budget_usd: number | null;
+    spent_usd: number | null;
+    est_cost_usd: number | null;
+    model: string | null;
+    result: string | null;
+    error: string | null;
+    created_at?: number | null;
+    updated_at?: number | null;
+}
+
+export interface ProjectTaskRow {
+    id: string;
+    project_id: string | null;
+    idx: number | null;
+    title: string | null;
+    description: string | null;
+    depends_on: number[] | null;
+    status: 'pending' | 'running' | 'done' | 'failed' | 'skipped' | 'cancelled' | null;
+    streaming_text: string | null;
+    activities: Array<{
+        id: string;
+        tool: string;
+        displayName?: string;
+        status: string;
+        result?: string;
+    }> | null;
+    result: string | null;
+    cost_usd: number | null;
+    created_at?: number | null;
+    updated_at?: number | null;
+}
+
+export interface PanelRow {
+    id: string;
+    device_id: string | null;
+    title: string | null;
+    x: number | null;
+    y: number | null;
+    w: number | null;
+    h: number | null;
+    z: number | null;
+    components: unknown[] | null;
+    state: Record<string, unknown> | null;
+    status: string | null;
+    maximized?: boolean | null;
+    // Function configs ride along on the row; the browser only reads `everyMs`
+    // (to auto-poll). Values/secrets are never here — they inject server-side.
+    functions?: Record<string, { everyMs?: number }> | null;
 }
 
 export type Change<T> =
@@ -138,6 +241,93 @@ export function subscribeDispatches(
         'dispatches',
         { column: 'updated_at', asc: true },
         coerceDispatch,
+        null,
+        onChange,
+    );
+}
+
+export function subscribeDevices(onChange: (c: Change<DeviceRow>) => void): Promise<() => void> {
+    return subscribe<DeviceRow>(
+        'devices',
+        { column: 'last_seen', asc: false },
+        (r) => r as unknown as DeviceRow,
+        null,
+        onChange,
+    );
+}
+
+export function subscribePresence(onChange: (c: Change<PresenceRow>) => void): Promise<() => void> {
+    return subscribe<PresenceRow>(
+        'presence',
+        { column: 'id', asc: true },
+        (r) => r as unknown as PresenceRow,
+        null,
+        onChange,
+    );
+}
+
+export function subscribeSettings(onChange: (c: Change<SettingsRow>) => void): Promise<() => void> {
+    return subscribe<SettingsRow>(
+        'settings',
+        { column: 'key', asc: true },
+        (r) => r as unknown as SettingsRow,
+        null,
+        onChange,
+    );
+}
+
+export function subscribeQuestions(
+    onChange: (c: Change<QuestionRow>) => void,
+): Promise<() => void> {
+    return subscribe<QuestionRow>(
+        'questions',
+        { column: 'created_at', asc: true },
+        (r) => ({
+            ...(r as unknown as QuestionRow),
+            items: parseJson(r.items) ?? [],
+            answers: parseJson(r.answers) ?? null,
+        }),
+        null,
+        onChange,
+    );
+}
+
+export function subscribeProjects(onChange: (c: Change<ProjectRow>) => void): Promise<() => void> {
+    return subscribe<ProjectRow>(
+        'projects',
+        { column: 'created_at', asc: true },
+        (r) => r as unknown as ProjectRow,
+        null,
+        onChange,
+    );
+}
+
+export function subscribeProjectTasks(
+    onChange: (c: Change<ProjectTaskRow>) => void,
+): Promise<() => void> {
+    return subscribe<ProjectTaskRow>(
+        'project_tasks',
+        { column: 'idx', asc: true },
+        (r) => ({
+            ...(r as unknown as ProjectTaskRow),
+            depends_on: parseJson(r.depends_on) ?? [],
+            activities: parseJson(r.activities) ?? [],
+        }),
+        null,
+        onChange,
+    );
+}
+
+export function subscribePanels(onChange: (c: Change<PanelRow>) => void): Promise<() => void> {
+    return subscribe<PanelRow>(
+        'panels',
+        { column: 'z', asc: true },
+        (r) => ({
+            ...(r as unknown as PanelRow),
+            components: parseJson(r.components) ?? [],
+            state: parseJson(r.state) ?? {},
+            functions: parseJson(r.functions) ?? {},
+        }),
         null,
         onChange,
     );
