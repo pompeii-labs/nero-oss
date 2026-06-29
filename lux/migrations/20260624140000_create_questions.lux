@@ -1,0 +1,1 @@
+TCREATE questions id UUID PRIMARY KEY DEFAULT uuid(), dispatch_id TEXT, header TEXT, question TEXT, options JSON, multi BOOL DEFAULT false, answer JSON, status TEXT DEFAULT 'pending', created_at INT DEFAULT now(), updated_at INT DEFAULT now()
