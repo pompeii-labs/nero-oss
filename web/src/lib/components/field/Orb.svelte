@@ -11,8 +11,6 @@
         state = 'idle',
     }: { size?: number; state?: 'idle' | 'thinking' | 'speaking' | 'tool' } = $props();
 
-    const uid = 'orb-' + id();
-
     // A small neural net inside the sphere (viewBox 200, center 100,100).
     const nodes: [number, number][] = [
         [100, 54], [141, 78], [150, 122], [116, 151],
@@ -22,13 +20,6 @@
         [7, 0], [7, 1], [7, 2], [7, 3], [7, 4], [7, 5], [7, 6],
         [0, 1], [1, 2], [3, 4], [5, 6],
     ];
-</script>
-
-<script lang="ts" module>
-    let n = 0;
-    function id() {
-        return (n++).toString(36);
-    }
 </script>
 
 <div class="orb" data-state={state} style="width:{size}px; height:{size}px;">
@@ -70,12 +61,7 @@
     </svg>
 
     <svg class="reticle" viewBox="0 0 200 200" aria-hidden="true">
-        <defs>
-            <filter id={uid} x="-40%" y="-40%" width="180%" height="180%">
-                <feGaussianBlur stdDeviation="1.4" />
-            </filter>
-        </defs>
-        <g filter="url(#{uid})">
+        <g class="rings">
             <circle class="r1" cx="100" cy="100" r="92" />
             <circle class="r2" cx="100" cy="100" r="78" />
             <circle class="r3" cx="100" cy="100" r="64" />
@@ -205,8 +191,8 @@
         animation: pulse-hot 1.5s ease-in-out infinite;
     }
     @keyframes pulse-hot {
-        0%, 100% { opacity: 0.85; transform: scale(0.92); filter: blur(2px) brightness(1); }
-        45% { opacity: 1; transform: scale(1.12); filter: blur(1.5px) brightness(1.45); }
+        0%, 100% { opacity: 0.85; transform: scale(0.92); }
+        45% { opacity: 1; transform: scale(1.12); }
     }
     .orb[data-state='thinking'] .bloom { opacity: 1.25; }
     .orb[data-state='thinking'] .rim,

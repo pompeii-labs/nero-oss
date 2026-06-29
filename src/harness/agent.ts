@@ -51,6 +51,8 @@ export class NeroAgent extends MagmaAgent {
     onDelta?: (text: string) => void;
     /** Tool-execution events (set by the dispatch layer -> realtime). */
     onActivity?: (activity: AgentActivity) => void;
+    /** Token usage on the final chunk (project workers meter spend with this). */
+    onUsage?: (u: { input: number; output: number; cached: number }) => void;
     /** Memory recall block injected into the system prompt for the current run. */
     currentMemories = '';
     /** Set by the dispatcher; called at tool boundaries to fold in steering. */
@@ -122,6 +124,7 @@ export class NeroAgent extends MagmaAgent {
             console.log(
                 `[cache] fresh=${u.input_tokens} cached=${cached} out=${u.output_tokens ?? 0}`,
             );
+            this.onUsage?.({ input: u.input_tokens, output: u.output_tokens ?? 0, cached });
         }
     }
 
@@ -181,7 +184,21 @@ export class NeroAgent extends MagmaAgent {
     getSystemPrompts() {
         const cfg = loadConfig();
         const now = new Date();
-        const context = `Current time: ${now.toISOString()} (${cfg.timezone})`;
+        const human = now.toLocaleString('en-US', {
+            timeZone: cfg.timezone,
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            timeZoneName: 'short',
+        });
+        const context =
+            `Right now it is ${human} (${cfg.timezone}). ` +
+            `The current year is ${now.getFullYear()} — use today's real date for anything ` +
+            `time-sensitive (web searches, "latest"/"recent" queries, scheduling). Do not assume ` +
+            `an earlier year from your training. ISO: ${now.toISOString()}.`;
 
         // Prompt caching: split the template at its volatile tail. The stable
         // instructions get a cache breakpoint, and because Anthropic's cache prefix

@@ -53,6 +53,23 @@ export async function update(
     );
 }
 
+/** On boot, finalize any dispatch left mid-flight by a crashed/killed process.
+ *  Single-flight means nothing can legitimately be running when we start, so any
+ *  non-terminal row is an orphan that would otherwise pin the UI in THINKING. */
+export async function cancelOrphans(): Promise<number> {
+    let n = 0;
+    for (const status of ['thinking', 'running', 'compacting'] as const) {
+        const rows = unwrap(
+            await getLux().table('dispatches').select().eq('status', status).limit(500),
+        ) as Dispatches[];
+        for (const r of rows) {
+            await update(r.id, { status: 'cancelled' });
+            n++;
+        }
+    }
+    return n;
+}
+
 export async function get(id: string): Promise<DispatchRow | null> {
     const rows = unwrap(
         await getLux().table('dispatches').select().eq('id', id).limit(1),

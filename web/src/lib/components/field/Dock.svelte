@@ -26,7 +26,7 @@
         border-radius: 14px;
         background: linear-gradient(180deg, rgb(var(--void) / 0) 0%, rgb(0 0 0 / 0.35) 100%), var(--panel-bg);
         border: 1px solid rgb(var(--holo) / 0.2);
-        backdrop-filter: blur(18px);
+        backdrop-filter: blur(11px);
         box-shadow:
             inset 0 1px 0 rgb(var(--metal-hi) / 0.16),
             0 0 40px -12px rgb(var(--holo) / 0.22),

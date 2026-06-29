@@ -222,7 +222,7 @@ body::before {
         color-mix(in oklch, #0d1117 90%, transparent) 50%,
         color-mix(in oklch, var(--nero-cyan) 2%, transparent) 100%
     );
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(12px);
     border: 1px solid color-mix(in oklch, var(--nero-blue) 12%, transparent);
     box-shadow:
         0 0 0 1px color-mix(in oklch, var(--nero-blue) 3%, transparent) inset,
@@ -235,7 +235,7 @@ body::before {
         color-mix(in oklch, var(--nero-blue) 30%, transparent) 0%,
         color-mix(in oklch, var(--nero-blue) 22%, transparent) 100%
     );
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(12px);
     border: 1px solid color-mix(in oklch, var(--nero-blue) 30%, transparent);
     box-shadow:
         0 0 0 1px color-mix(in oklch, var(--nero-blue) 10%, transparent) inset,

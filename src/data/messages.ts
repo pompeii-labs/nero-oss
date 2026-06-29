@@ -2,7 +2,7 @@ import { getLux, unwrap } from '../lux/client';
 import type { Messages } from '../lux/types';
 
 export type MessageRole = 'user' | 'assistant' | 'system';
-export type MessageType = 'message' | 'agent_text' | 'tool_call';
+export type MessageType = 'message' | 'agent_text' | 'tool_call' | 'interaction';
 
 export interface ToolCallMeta {
     tool_id: string;
@@ -89,6 +89,16 @@ export function insertUser(
         dispatchId: opts.dispatchId ?? null,
         medium: opts.medium ?? 'web',
     });
+}
+
+/** A UI interaction (a panel button press), persisted as a labeled event, NOT a
+ *  user message. Nero receives it as `[interaction] ...` context; the chat doesn't
+ *  render it as the user talking. */
+export function insertInteraction(
+    content: string,
+    dispatchId?: string | null,
+): Promise<MessageRow> {
+    return insert({ role: 'user', type: 'interaction', content, dispatchId: dispatchId ?? null });
 }
 
 export function insertAgentText(content: string, dispatchId: string): Promise<MessageRow> {

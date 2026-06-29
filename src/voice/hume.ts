@@ -28,6 +28,7 @@ export class HumeStreamingTTS implements VoiceTTS {
     private activeContext = '';
     private voiceLoaded = false; // per-socket: voice sent + model warmed
     private sinceFlush = 0;
+    private primeUntil = 0; // discard window for the throwaway warm-up audio
 
     constructor(private opts: HumeTTSOpts) {
         void this.ensureOpen();
@@ -74,7 +75,12 @@ export class HumeStreamingTTS implements VoiceTTS {
                 } catch {
                     return;
                 }
-                if (msg.type === 'audio' && msg.audio && this.activeContext) {
+                if (
+                    msg.type === 'audio' &&
+                    msg.audio &&
+                    this.activeContext &&
+                    Date.now() >= this.primeUntil
+                ) {
                     this.opts.onPcm(Buffer.from(msg.audio, 'base64'), this.activeContext);
                 }
             };
@@ -95,6 +101,10 @@ export class HumeStreamingTTS implements VoiceTTS {
      *  unset, so the audio is discarded and the first real turn is already warm. */
     private prime(): void {
         if (this.voiceLoaded) return;
+        // Any audio that comes back within this window is the warm-up "Hello" and
+        // must be dropped even if a real turn has since set activeContext (the
+        // generation arrives async and would otherwise leak into the next turn).
+        this.primeUntil = Date.now() + 3000;
         this.send({
             text: 'Hello. ',
             voice: { name: this.opts.voice, provider: this.opts.voiceProvider },

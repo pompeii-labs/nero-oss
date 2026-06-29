@@ -5,6 +5,8 @@ import { loadConfig } from '../../config';
 import { runVoiceTurn } from '../../voice/turn';
 import { StreamingTTS, type VoiceTTS } from '../../voice/tts';
 import { HumeStreamingTTS } from '../../voice/hume';
+import * as panelsData from '../../data/panels';
+import { formatInteraction } from '../../panels/interaction';
 
 let nextPeer = 1;
 
@@ -87,20 +89,11 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
 
             const isBusy = () => turnActive || Date.now() < speakingUntil;
 
-            // The user started talking over Nero: hard-cancel the synth context, drop
-            // the sidecar's buffered audio, and kill the in-flight generation.
-            const bargeIn = (ws: WSLike) => {
-                if (!isBusy()) return;
-                turnAbort?.abort();
-                if (currentReqId) tts?.cancel(currentReqId);
-                sidecar?.send(JSON.stringify({ t: 'interrupt', peer }));
-                speakingUntil = 0;
-                if (listenTimer) clearTimeout(listenTimer);
-                ws.send(JSON.stringify({ type: 'turn', state: 'listening' }));
-                console.log('[voice] barge-in');
-            };
-
-            const runTurn = async (transcript: string, ws: WSLike) => {
+            const runTurn = async (
+                transcript: string,
+                ws: WSLike,
+                turnOpts: { interaction?: boolean } = {},
+            ) => {
                 if (turnActive || !transcript.trim()) return;
                 turnActive = true;
                 turnAbort = new AbortController();
@@ -131,6 +124,7 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                                 ws.send(JSON.stringify({ type: 'activity', activity })),
                         },
                         signal,
+                        { interaction: turnOpts.interaction },
                     );
                     if (!signal.aborted) tts?.endTurn(reqId);
                     console.log(
@@ -156,11 +150,18 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                         eagerEotThreshold: 0.4,
                     });
                     flux.onSpeechDetected = () => {
-                        if (isBusy()) bargeIn(ws);
-                        else ws.send(JSON.stringify({ type: 'turn', state: 'listening' }));
+                        // Mere sound onset (incl. Nero's own voice echoing into the
+                        // mic) does NOT barge — only actual transcribed words do.
+                        if (!isBusy())
+                            ws.send(JSON.stringify({ type: 'turn', state: 'listening' }));
                     };
-                    flux.onEagerEndOfTurn = (text: string) =>
+                    flux.onEagerEndOfTurn = (text: string) => {
+                        // Show the live partial. Barge-in is off for now: half-duplex
+                        // gates the mic while Nero speaks, so the only phase a barge
+                        // could fire is mid-think/mid-tool, where stray noise would
+                        // wrongly cancel him. Full turn-taking until we have real AEC.
                         ws.send(JSON.stringify({ type: 'transcript', text, final: false }));
+                    };
                     flux.onOutput = ({ text }: { text: string }) => {
                         ws.send(JSON.stringify({ type: 'transcript', text, final: true }));
                         void runTurn(text, ws);
@@ -201,6 +202,11 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                     };
                     sidecar.onmessage = (ev) => {
                         // Binary = mic PCM (12-byte AudioHeader + 48 kHz linear16) -> Flux.
+                        // Half-duplex: while Nero is speaking (through speakingUntil's
+                        // jitter pad), DON'T transcribe the mic, or his own voice
+                        // echoes back in and interrupts him. Re-opens the instant he
+                        // stops. (Trades barge-during-speech for not self-hearing.)
+                        if (typeof ev.data !== 'string' && Date.now() < speakingUntil) return;
                         if (typeof ev.data !== 'string') {
                             const buf = Buffer.from(ev.data as ArrayBuffer);
                             if (buf.length > 12) flux?.input(buf.subarray(12));
@@ -220,8 +226,15 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                             JSON.stringify({ type: 'error', message: 'media sidecar unavailable' }),
                         );
                 },
-                onMessage(evt) {
-                    let msg: { type?: string; sdp?: string };
+                onMessage(evt, ws) {
+                    let msg: {
+                        type?: string;
+                        sdp?: string;
+                        panelId?: string;
+                        control?: string;
+                        intent?: string;
+                        value?: unknown;
+                    };
                     try {
                         msg = JSON.parse(String(evt.data));
                     } catch {
@@ -230,6 +243,23 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                     if (msg.type === 'offer' && msg.sdp) {
                         if (sidecar?.readyState === WebSocket.OPEN) sendOpen(msg.sdp);
                         else pendingOffer = msg.sdp;
+                    } else if (msg.type === 'interact' && msg.panelId) {
+                        // A panel interaction while engaged: run it through the voice
+                        // turn so Nero SPEAKS the response (not just text it).
+                        const pid = msg.panelId;
+                        const payload = {
+                            control: msg.control,
+                            intent: msg.intent,
+                            value: msg.value,
+                        };
+                        void (async () => {
+                            const panel = await panelsData.get(pid);
+                            if (panel) {
+                                void runTurn(formatInteraction(panel, payload), ws, {
+                                    interaction: true,
+                                });
+                            }
+                        })();
                     }
                 },
                 onClose() {

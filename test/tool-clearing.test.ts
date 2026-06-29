@@ -103,6 +103,7 @@ describe('NeroAgent.getSystemPrompts', () => {
         expect(stable.text).not.toContain('the user likes terse replies');
         expect(volatile.cache).toBeFalsy();
         expect(volatile.text).toContain('the user likes terse replies');
-        expect(volatile.text).toContain('Current time:');
+        expect(volatile.text).toContain('Right now it is');
+        expect(volatile.text).toContain(String(new Date().getFullYear()));
     });
 });

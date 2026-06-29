@@ -10,6 +10,14 @@ export function setModel(model: string): Promise<NeroResult<{ model: string }>> 
     return post('/v1/settings', { model });
 }
 
+/** Field theme + day/night are shared across all of Nero's screens. */
+export function setTheme(theme: string): Promise<NeroResult<{ ok: boolean }>> {
+    return post('/v1/settings', { theme });
+}
+export function setFieldMode(mode: string): Promise<NeroResult<{ ok: boolean }>> {
+    return post('/v1/settings', { mode });
+}
+
 export type NeroSettings = {
     streaming: boolean;
     theme: 'dark' | 'light';

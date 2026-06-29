@@ -36,10 +36,12 @@ export async function runVoiceTurn(
     transcript: string,
     hooks: VoiceTurnHooks = {},
     signal?: AbortSignal,
+    opts: { interaction?: boolean } = {},
 ): Promise<string> {
     const t0 = Date.now();
     const dispatch = await dispatches.create();
-    await messagesData.insertUser(transcript, { dispatchId: dispatch.id });
+    if (opts.interaction) await messagesData.insertInteraction(transcript, dispatch.id);
+    else await messagesData.insertUser(transcript, { dispatchId: dispatch.id });
 
     // Kick recall off immediately; it's an embedding round-trip we overlap with
     // agent setup + session assembly.

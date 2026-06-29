@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import { setTheme, setFieldMode } from '$lib/actions/settings';
 
 export type FieldTheme = 'obsidian' | 'forge';
 export type FieldMode = 'night' | 'day';
@@ -29,14 +30,25 @@ class FieldThemeState {
         return this.mode === 'day' ? `${this.value}-day` : this.value;
     }
 
-    set(t: FieldTheme) {
+    /** Apply a value locally without writing back — used for incoming sync from
+     *  other screens (avoids a write loop). */
+    applyTheme(t: FieldTheme) {
         this.value = t;
         if (browser) localStorage.setItem(THEME_KEY, t);
     }
-
-    setMode(m: FieldMode) {
+    applyMode(m: FieldMode) {
         this.mode = m;
         if (browser) localStorage.setItem(MODE_KEY, m);
+    }
+
+    set(t: FieldTheme) {
+        this.applyTheme(t);
+        if (browser) void setTheme(t); // shared across all screens
+    }
+
+    setMode(m: FieldMode) {
+        this.applyMode(m);
+        if (browser) void setFieldMode(m);
     }
 
     toggle() {

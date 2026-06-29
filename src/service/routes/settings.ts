@@ -25,13 +25,27 @@ export function settingsRoutes(): Hono {
     });
 
     app.post('/v1/settings', async (c) => {
-        const body = (await c.req.json().catch(() => ({}))) as { model?: string };
+        const body = (await c.req.json().catch(() => ({}))) as {
+            model?: string;
+            theme?: string;
+            mode?: string;
+        };
+        let touched = false;
         if (typeof body.model === 'string' && body.model.trim()) {
-            const model = body.model.trim();
-            await settings.setModel(model);
-            return c.json({ model });
+            await settings.setModel(body.model.trim());
+            touched = true;
         }
-        return c.json({ error: 'model (string) required' }, 400);
+        // Field theme + day/night are shared across all of Nero's screens.
+        if (typeof body.theme === 'string' && body.theme.trim()) {
+            await settings.set('field_theme', body.theme.trim());
+            touched = true;
+        }
+        if (typeof body.mode === 'string' && body.mode.trim()) {
+            await settings.set('field_mode', body.mode.trim());
+            touched = true;
+        }
+        if (!touched) return c.json({ error: 'nothing to set' }, 400);
+        return c.json({ ok: true });
     });
 
     return app;

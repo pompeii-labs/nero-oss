@@ -107,6 +107,13 @@ export function rowsToSessionMessages(rows: MessageRow[], opts: RowMapOpts = {})
     for (const row of rows) {
         const type = row.type ?? 'message';
 
+        // A panel interaction: a user turn whose content is already labeled
+        // `[interaction] ...`, so Nero reads it as an event, not chat.
+        if (type === 'interaction') {
+            if (row.content) messages.push({ role: 'user', content: row.content } as Magma);
+            continue;
+        }
+
         if (type === 'message') {
             const images = (row.attachments ?? []).filter((a) => a.mime.startsWith('image/'));
             const hydrated: MagmaImage[] = [];

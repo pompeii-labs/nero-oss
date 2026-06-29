@@ -340,7 +340,7 @@
         border-radius: 12px;
         background: var(--panel-bg);
         border: 1px solid rgb(var(--holo) / 0.16);
-        backdrop-filter: blur(16px);
+        backdrop-filter: blur(10px);
         box-shadow: 0 20px 50px -20px rgb(0 0 0 / 0.85);
         max-height: 260px;
         overflow-y: auto;
@@ -377,7 +377,7 @@
         border-radius: 16px;
         background: linear-gradient(180deg, rgb(0 0 0 / 0) 0%, rgb(0 0 0 / 0.32) 100%), var(--panel-bg);
         border: 1px solid rgb(var(--holo) / 0.2);
-        backdrop-filter: blur(18px);
+        backdrop-filter: blur(12px);
         box-shadow:
             inset 0 1px 0 rgb(var(--metal-hi) / 0.16),
             0 0 40px -12px rgb(var(--holo) / 0.22),

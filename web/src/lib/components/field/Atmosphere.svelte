@@ -4,7 +4,7 @@
     // Quiet and cool by default; theme-driven.
     let {
         floor = false,
-        motes = 16,
+        motes = 6,
     }: { floor?: boolean; motes?: number } = $props();
 
     const particles = Array.from({ length: motes }, (_, i) => {

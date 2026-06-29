@@ -15,10 +15,10 @@ export function displayRoutes(): Hono {
             screenW?: number;
             screenH?: number;
         };
-        if (!b.id || !b.name) return c.json({ error: 'id and name required' }, 400);
+        if (!b.id) return c.json({ error: 'id required' }, 400);
         const d = await devices.register({
             id: b.id,
-            name: b.name,
+            requestedName: b.name,
             kind: b.kind,
             screenW: b.screenW ?? 0,
             screenH: b.screenH ?? 0,

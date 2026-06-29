@@ -26,6 +26,13 @@ export interface VoiceEvents {
 
 export interface VoiceSession {
     stop(): void;
+    /** Route a panel interaction through the voice turn so Nero speaks the reply. */
+    interact(payload: {
+        panelId: string;
+        control?: string;
+        intent?: string;
+        value?: unknown;
+    }): void;
 }
 
 /**
@@ -106,7 +113,17 @@ export async function startVoice(events: VoiceEvents): Promise<VoiceSession> {
         onState('idle');
     }
 
-    return { stop };
+    function interact(payload: {
+        panelId: string;
+        control?: string;
+        intent?: string;
+        value?: unknown;
+    }) {
+        if (ws.readyState === WebSocket.OPEN)
+            ws.send(JSON.stringify({ type: 'interact', ...payload }));
+    }
+
+    return { stop, interact };
 }
 
 /** Resolve once ICE gathering finishes (or after a short safety timeout). */

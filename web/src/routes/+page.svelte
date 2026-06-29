@@ -21,10 +21,49 @@
         loadMessages,
         subscribeMessages,
         subscribeDispatches,
+        subscribeDevices,
+        subscribePresence,
+        subscribePanels,
+        subscribeQuestions,
+        subscribeProjects,
+        subscribeProjectTasks,
+        subscribeSettings,
         type MessageRow,
         type DispatchRow,
+        type DeviceRow,
+        type PanelRow,
+        type QuestionRow,
+        type ProjectRow,
+        type ProjectTaskRow,
     } from '$lib/lux';
+    import PanelLayer from '$lib/components/field/PanelLayer.svelte';
+    import AskCard from '$lib/components/field/AskCard.svelte';
+    import ProjectApprovalCard from '$lib/components/field/ProjectApprovalCard.svelte';
+    import ProjectPanel from '$lib/components/field/ProjectPanel.svelte';
+    import type { PanelAction } from '$lib/panels/types';
+    import {
+        closePanel,
+        movePanel,
+        interactPanel,
+        callPanel,
+        maximizePanel,
+    } from '$lib/actions/panels';
+    import { answerQuestion, dismissQuestion } from '$lib/actions/ask';
+    import {
+        runProject,
+        tweakProject,
+        rejectProject,
+        pauseProject,
+        resumeProject,
+        cancelProject,
+    } from '$lib/actions/projects';
     import { sendMessage, cancelDispatch, type AttachmentUpload } from '$lib/actions/nero';
+    import {
+        deviceId,
+        registerDevice,
+        heartbeatDevice,
+        bringNeroHere,
+    } from '$lib/device';
     import { getServerUrl } from '$lib/actions/helpers';
     import { executeCommand, type CommandResult } from '$lib/commands';
     import { goto } from '$app/navigation';
@@ -73,6 +112,90 @@
 
     let unsubMessages: (() => void) | null = null;
     let unsubDispatches: (() => void) | null = null;
+    let unsubDevices: (() => void) | null = null;
+    let unsubPresence: (() => void) | null = null;
+    let unsubPanels: (() => void) | null = null;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+
+    // Multi-device presence: the orb is a single entity that lives on one screen.
+    const myDeviceId = deviceId();
+    let neroDevice = $state<string | null>(null);
+    let devices = $state<DeviceRow[]>([]);
+    const neroIsHere = $derived(neroDevice === myDeviceId);
+    const neroDeviceName = $derived(devices.find((d) => d.id === neroDevice)?.name ?? null);
+    // This screen's server-assigned name (main / a callsign / ?name=).
+    const myDeviceName = $derived(devices.find((d) => d.id === myDeviceId)?.name ?? '');
+
+    // Travel animation: when Nero moves, the screen he leaves streaks him out and
+    // the one he arrives on streaks him in (both fire off the same presence change).
+    let travel = $state<'in' | 'out' | null>(null);
+    let travelTimer: ReturnType<typeof setTimeout> | null = null;
+    function startTravel(dir: 'in' | 'out') {
+        travel = dir;
+        if (travelTimer) clearTimeout(travelTimer);
+        // 'in' is longer: the orb waits off-screen (in transit from the other screen),
+        // then flies in. 'out' streaks off and is gone.
+        travelTimer = setTimeout(() => (travel = null), dir === 'in' ? 1350 : 700);
+    }
+
+    // Panels Nero has thrown onto this screen.
+    let panelMap = $state<Record<string, PanelRow>>({});
+    const panels = $derived(
+        Object.values(panelMap)
+            .filter((p) => p.device_id === myDeviceId && p.status === 'open')
+            .sort((a, b) => (a.z ?? 0) - (b.z ?? 0)),
+    );
+    // A question Nero is blocked on (the `ask` tool). Show the newest pending one
+    // where Nero currently is.
+    let questionMap = $state<Record<string, QuestionRow>>({});
+    let unsubQuestions: (() => void) | null = null;
+    let unsubSettings: (() => void) | null = null;
+    const activeQuestion = $derived(
+        Object.values(questionMap)
+            .filter((q) => q.status === 'pending')
+            .sort((a, b) => (a.created_at ?? 0) - (b.created_at ?? 0))
+            .at(-1) ?? null,
+    );
+
+    // Background projects: a plan awaiting approval (a card that blocks Nero's turn,
+    // like ask) plus live dashboards for projects that are running/paused/finished.
+    let projectMap = $state<Record<string, ProjectRow>>({});
+    let projectTaskMap = $state<Record<string, ProjectTaskRow>>({});
+    let unsubProjects: (() => void) | null = null;
+    let unsubProjectTasks: (() => void) | null = null;
+    let dismissedProjects = $state<Set<string>>(new Set());
+    const tasksFor = (pid: string) =>
+        Object.values(projectTaskMap).filter((t) => t.project_id === pid);
+    const activeApproval = $derived(
+        Object.values(projectMap)
+            .filter((p) => p.status === 'awaiting_approval')
+            .sort((a, b) => (a.created_at ?? 0) - (b.created_at ?? 0))
+            .at(-1) ?? null,
+    );
+    const dashboardProjects = $derived(
+        Object.values(projectMap)
+            .filter(
+                (p) =>
+                    ['running', 'paused', 'done', 'error'].includes(p.status ?? '') &&
+                    !dismissedProjects.has(p.id),
+            )
+            .sort((a, b) => (b.updated_at ?? 0) - (a.updated_at ?? 0)),
+    );
+    function dismissProject(id: string) {
+        dismissedProjects = new Set([...dismissedProjects, id]);
+    }
+
+    function handlePanelAction(panelId: string, action: PanelAction, control: string) {
+        if (action.type === 'interact') {
+            const payload = { control, intent: action.intent, value: action.value };
+            // While engaged (in a voice call), route through the voice turn so Nero
+            // SPEAKS the reply; otherwise it's a text dispatch.
+            if (engaged && voiceSession) voiceSession.interact({ panelId, ...payload });
+            else void interactPanel(panelId, payload);
+        } else if (action.type === 'call') {
+            void callPanel(panelId, action.fn);
+        }
+    }
 
     onMount(async () => {
         try {
@@ -111,6 +234,109 @@
                     dispatchMap = o;
                 }
             });
+            // Register this screen as a device and track where the orb lives.
+            await registerDevice();
+            let presenceSeeded = false;
+            unsubPresence = await subscribePresence((c) => {
+                const row =
+                    c.kind === 'snapshot' ? c.rows.find((r) => r.id === 'nero') : c.row;
+                if (c.kind === 'delete') {
+                    if (c.row.id === 'nero') neroDevice = null;
+                } else if (row && row.id === 'nero') {
+                    const prev = neroDevice;
+                    neroDevice = row.device_id;
+                    // A live move (not the initial snapshot): streak him in/out and,
+                    // on arrival, default into the orb/presence canvas.
+                    if (c.kind === 'upsert' && prev !== row.device_id) {
+                        if (row.device_id === myDeviceId) {
+                            startTravel('in');
+                            presenceMode = true;
+                        } else if (prev === myDeviceId) {
+                            startTravel('out');
+                            presenceMode = false;
+                        }
+                    }
+                }
+                // First device to ever open claims Nero, so he's never nowhere.
+                if (c.kind === 'snapshot' && !presenceSeeded) {
+                    presenceSeeded = true;
+                    if (!c.rows.some((r) => r.id === 'nero')) void bringNeroHere();
+                }
+            });
+            unsubDevices = await subscribeDevices((c) => {
+                if (c.kind === 'snapshot') devices = c.rows;
+                else if (c.kind === 'upsert') {
+                    const i = devices.findIndex((d) => d.id === c.row.id);
+                    if (i >= 0) devices[i] = c.row;
+                    else devices = [...devices, c.row];
+                    devices = [...devices];
+                } else if (c.kind === 'delete')
+                    devices = devices.filter((d) => d.id !== c.row.id);
+            });
+            unsubPanels = await subscribePanels((c) => {
+                if (c.kind === 'snapshot') {
+                    const o: Record<string, PanelRow> = {};
+                    for (const r of c.rows) o[r.id] = r;
+                    panelMap = o;
+                } else if (c.kind === 'upsert') {
+                    panelMap = { ...panelMap, [c.row.id]: c.row };
+                } else if (c.kind === 'delete') {
+                    const o = { ...panelMap };
+                    delete o[c.row.id];
+                    panelMap = o;
+                }
+            });
+            unsubQuestions = await subscribeQuestions((c) => {
+                if (c.kind === 'snapshot') {
+                    const o: Record<string, QuestionRow> = {};
+                    for (const r of c.rows) o[r.id] = r;
+                    questionMap = o;
+                } else if (c.kind === 'upsert') {
+                    questionMap = { ...questionMap, [c.row.id]: c.row };
+                } else if (c.kind === 'delete') {
+                    const o = { ...questionMap };
+                    delete o[c.row.id];
+                    questionMap = o;
+                }
+            });
+            unsubProjects = await subscribeProjects((c) => {
+                if (c.kind === 'snapshot') {
+                    const o: Record<string, ProjectRow> = {};
+                    for (const r of c.rows) o[r.id] = r;
+                    projectMap = o;
+                } else if (c.kind === 'upsert') {
+                    projectMap = { ...projectMap, [c.row.id]: c.row };
+                } else if (c.kind === 'delete') {
+                    const o = { ...projectMap };
+                    delete o[c.row.id];
+                    projectMap = o;
+                }
+            });
+            unsubProjectTasks = await subscribeProjectTasks((c) => {
+                if (c.kind === 'snapshot') {
+                    const o: Record<string, ProjectTaskRow> = {};
+                    for (const r of c.rows) o[r.id] = r;
+                    projectTaskMap = o;
+                } else if (c.kind === 'upsert') {
+                    projectTaskMap = { ...projectTaskMap, [c.row.id]: c.row };
+                } else if (c.kind === 'delete') {
+                    const o = { ...projectTaskMap };
+                    delete o[c.row.id];
+                    projectTaskMap = o;
+                }
+            });
+            // Theme + day/night are shared: apply whatever any screen last set.
+            unsubSettings = await subscribeSettings((c) => {
+                const rows = c.kind === 'snapshot' ? c.rows : c.kind === 'upsert' ? [c.row] : [];
+                for (const r of rows) {
+                    if (r.key === 'field_theme' && (r.value === 'obsidian' || r.value === 'forge'))
+                        fieldTheme.applyTheme(r.value);
+                    else if (r.key === 'field_mode' && (r.value === 'day' || r.value === 'night'))
+                        fieldTheme.applyMode(r.value);
+                }
+            });
+            heartbeat = setInterval(() => void heartbeatDevice(), 15_000);
+
             connected = true;
         } catch (e) {
             connectionError = e instanceof Error ? e.message : String(e);
@@ -121,9 +347,34 @@
     onDestroy(() => {
         unsubMessages?.();
         unsubDispatches?.();
+        unsubDevices?.();
+        unsubPresence?.();
+        unsubPanels?.();
+        unsubQuestions?.();
+        unsubProjects?.();
+        unsubProjectTasks?.();
+        unsubSettings?.();
+        if (heartbeat) clearInterval(heartbeat);
     });
 
-    const active = $derived(currentDispatchId ? (dispatchMap[currentDispatchId] ?? null) : null);
+    // The dispatch the orb reflects. My own dispatch (started from the composer)
+    // is always honored. A foreign running dispatch (e.g. a panel interaction)
+    // lights the orb up too, but only if it's genuinely fresh — an old row stuck
+    // at 'running' from a crashed process must never pin the UI in THINKING.
+    const RUNNING = ['thinking', 'running', 'compacting'];
+    const FRESH_MS = 120_000;
+    const active = $derived.by(() => {
+        const mine = currentDispatchId ? (dispatchMap[currentDispatchId] ?? null) : null;
+        if (mine && RUNNING.includes(mine.status ?? '')) return mine;
+        const fresh = Object.values(dispatchMap)
+            .filter(
+                (d) =>
+                    RUNNING.includes(d.status ?? '') &&
+                    Date.now() - (d.updated_at || d.created_at || 0) < FRESH_MS,
+            )
+            .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0))[0];
+        return fresh ?? mine;
+    });
     const isRunning = $derived(
         !!active && ['thinking', 'running', 'compacting'].includes(active.status ?? ''),
     );
@@ -196,11 +447,26 @@
 
     type Item =
         | { kind: 'msg'; key: string; role: 'user' | 'assistant' | 'system'; content: string; attachments: FileRef[] }
-        | { kind: 'tools'; key: string; tools: ToolActivityType[] };
+        | { kind: 'tools'; key: string; tools: ToolActivityType[] }
+        | { kind: 'event'; key: string; label: string };
+
+    // Strip the agent-facing label to a short, human event line.
+    function interactionLabel(content: string): string {
+        const m = content.match(/pressed "([^"]+)"[^]*?panel "([^"]+)"/);
+        if (m) return `pressed ${m[1]} · ${m[2]}`;
+        const m2 = content.match(/panel "([^"]+)"[^]*?pressed "([^"]+)"/);
+        if (m2) return `pressed ${m2[2]} · ${m2[1]}`;
+        return content.replace(/^\[interaction\]\s*/, '');
+    }
 
     const timeline = $derived.by(() => {
         const out: Item[] = [];
         for (const m of msgs) {
+            // Panel interactions are first-class timeline events, not chat bubbles.
+            if (m.type === 'interaction') {
+                out.push({ kind: 'event', key: `e${m.id}`, label: interactionLabel(m.content ?? '') });
+                continue;
+            }
             if (m.type === 'tool_call') {
                 const last = out[out.length - 1];
                 const t = toolFromMessage(m);
@@ -253,30 +519,47 @@
         active?.status === 'compacting' || (commandLoading?.toLowerCase().includes('compact') ?? false),
     );
 
-    // Voice layout (choreography only, no voice hookup yet): Cmd/Ctrl+Enter glides
-    // the SAME orb to center + expands it while the chat pushes aside. Esc exits.
-    let voiceMode = $state(false);
+    // Presence mode is the ambient canvas: the orb lives here, panels float around
+    // it, chat recedes. Cmd/Ctrl+Enter enters/exits it. Talking (`engaged`) is a
+    // separate interaction WITHIN presence, not what summons the canvas, so a screen
+    // can show Nero present + panels without being in a live call.
+    let presenceMode = $state(false);
+    let engaged = $state(false);
+    // When a question or a plan-approval is up in chat mode, that card stands in for
+    // the composer.
+    const askReplacesComposer = $derived(
+        !!(activeQuestion || activeApproval) && neroIsHere && !engaged,
+    );
+    // While blocked on the user (a question or plan approval) Nero is waiting, not
+    // working — idle orb.
+    const waitingOnUser = $derived(!!(activeQuestion || activeApproval) && neroIsHere);
     $effect(() => {
         function onKey(e: KeyboardEvent) {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                 e.preventDefault();
-                voiceMode = !voiceMode;
-            } else if (e.key === 'Escape' && voiceMode) {
-                voiceMode = false;
+                presenceMode = !presenceMode;
+                if (!presenceMode) engaged = false;
+            } else if (e.key === 'Escape' && presenceMode) {
+                if (engaged) engaged = false;
+                else presenceMode = false;
             }
         }
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     });
+    // Tapping the orb in presence mode starts/stops talking.
+    function toggleTalk() {
+        if (presenceMode) engaged = !engaged;
+    }
 
-    // Voice session lifecycle: open on entering voice mode, tear down on exit.
+    // Voice session lifecycle: open when engaged, tear down when disengaged.
     let voiceSession = $state<VoiceSession | null>(null);
     let voiceState = $state<VoiceState>('idle');
     let liveTranscript = $state('');
     let voicePhase = $state<TurnPhase | null>(null);
     let voiceActivities = $state<VoiceActivity[]>([]);
     $effect(() => {
-        if (voiceMode && !voiceSession) {
+        if (engaged && !voiceSession) {
             startVoice({
                 onState: (s) => (voiceState = s),
                 onTranscript: (text) => (liveTranscript = text),
@@ -293,7 +576,7 @@
             })
                 .then((s) => (voiceSession = s))
                 .catch(() => (voiceState = 'error'));
-        } else if (!voiceMode && voiceSession) {
+        } else if (!engaged && voiceSession) {
             voiceSession.stop();
             voiceSession = null;
             voiceState = 'idle';
@@ -412,27 +695,108 @@
     });
 </script>
 
-<div class="field" class:voice={voiceMode} data-theme={fieldTheme.dataTheme}>
+<div class="field" class:presence={presenceMode} data-theme={fieldTheme.dataTheme}>
     <Atmosphere />
 
-    <!-- the one orb: ambient in the gutter, glides to center + expands in voice mode -->
-    <div class="presence-orb" class:working={showLoader || (voiceMode && voiceOrbState !== 'idle')}>
-        <Orb size={132} state={voiceMode ? voiceOrbState : orbState} />
-    </div>
+    <!-- panels Nero throws onto this screen (independent of where the orb is) -->
+    <PanelLayer
+        {panels}
+        onAction={handlePanelAction}
+        onMove={(id, x, y) => void movePanel(id, { x, y })}
+        onClose={(id) => void closePanel(id)}
+        onMaximize={(id, on) => void maximizePanel(id, on)}
+        onPoll={(id, fn) => void callPanel(id, fn)}
+    />
 
-    {#if voiceMode}
-        {#if voiceToolActive && voiceToolName}
+    <!-- a question Nero is waiting on: a focused card; his turn is blocked on it -->
+    {#if neroIsHere && activeQuestion}
+        {@const q = activeQuestion}
+        <AskCard
+            question={q}
+            placement={engaged ? 'rail' : 'composer'}
+            onAnswer={(answers) => void answerQuestion(q.id, answers)}
+            onDismiss={() => void dismissQuestion(q.id)}
+        />
+    {:else if neroIsHere && activeApproval}
+        <!-- a project plan awaiting the user's go-ahead; blocks Nero's turn -->
+        {@const p = activeApproval}
+        <ProjectApprovalCard
+            project={p}
+            tasks={tasksFor(p.id)}
+            placement={engaged ? 'rail' : 'composer'}
+            onRun={(budget) => void runProject(p.id, budget)}
+            onTweak={(note) => void tweakProject(p.id, note)}
+            onCancel={() => void rejectProject(p.id)}
+        />
+    {/if}
+
+    <!-- live dashboards for background projects (running / paused / finished) -->
+    {#if neroIsHere && dashboardProjects.length}
+        <div class="project-dock">
+            {#each dashboardProjects as p (p.id)}
+                <ProjectPanel
+                    project={p}
+                    tasks={tasksFor(p.id)}
+                    onPause={() => void pauseProject(p.id)}
+                    onResume={() => void resumeProject(p.id)}
+                    onCancel={() => void cancelProject(p.id)}
+                    onDismiss={() => dismissProject(p.id)}
+                />
+            {/each}
+        </div>
+    {/if}
+
+    <!-- the one orb: a single entity that lives on one screen. Renders only where
+         Nero currently is; elsewhere you can summon him here. Tap it to talk. -->
+    {#if neroIsHere && travel !== 'in'}
+        <div
+            class="presence-orb"
+            class:working={!waitingOnUser && (showLoader || (engaged && voiceOrbState !== 'idle'))}
+            class:tappable={presenceMode}
+            onclick={toggleTalk}
+            role="button"
+            tabindex="-1"
+        >
+            <Orb size={132} state={waitingOnUser ? 'idle' : engaged ? voiceOrbState : orbState} />
+        </div>
+    {:else if !neroIsHere && travel !== 'out'}
+        <button class="elsewhere" onclick={() => bringNeroHere()}>
+            <span class="ghost-orb"></span>
+            <span class="elsewhere-text">
+                Nero is on <strong>{neroDeviceName ?? 'another screen'}</strong>
+                <span class="bring">bring him here</span>
+            </span>
+        </button>
+    {/if}
+
+    <!-- the traveling orb: the ONLY orb shown mid-hop. It flies off one screen and
+         (after an off-screen beat) flies into the next, landing exactly where the
+         real orb rests so the handoff is seamless. -->
+    {#if travel}
+        <div class="travel {travel}" aria-hidden="true">
+            <Orb size={132} state="idle" />
+        </div>
+    {/if}
+
+    {#if presenceMode}
+        {#if engaged && voiceToolActive && voiceToolName}
             <div class="voice-activity">
                 <span class="va-pulse"></span>
                 {voiceToolName}
             </div>
         {/if}
-        {#if liveTranscript}
+        {#if engaged && liveTranscript}
             <div class="voice-transcript">{liveTranscript}</div>
         {/if}
         <div class="voice-hint">
-            {#if voiceState === 'connecting'}connecting…{:else if voiceState === 'error'}voice unavailable{:else if voicePhase === 'thinking'}thinking…{:else if voicePhase === 'speaking'}speaking{:else}listening{/if}
-            · <kbd>esc</kbd> to exit
+            {#if !engaged}
+                tap the orb to talk · <kbd>esc</kbd> to exit
+            {:else if voiceState === 'connecting'}connecting…
+            {:else if voiceState === 'error'}voice unavailable
+            {:else if voicePhase === 'thinking'}thinking…
+            {:else if voicePhase === 'speaking'}speaking
+            {:else}listening{/if}
+            {#if engaged}· <kbd>esc</kbd> to stop{/if}
         </div>
     {/if}
 
@@ -441,15 +805,18 @@
             <span class="wordmark">NERO</span>
             <span class="stat">
                 {#if connected}
-                    <i class="dot"></i> field · present
+                    <i class="dot"></i> {myDeviceName}{neroIsHere ? ' · present' : ''}
                 {:else}
                     <i class="dot off"></i> {connectionError ? 'offline' : 'connecting'}
                 {/if}
             </span>
         </div>
-        <a class="ws" href="/protocols">Protocols</a>
+        {#if neroIsHere}<a class="ws" href="/protocols">Protocols</a>{/if}
     </header>
 
+    <!-- The interaction surface (chat + composer) lives ONLY where the orb is.
+         Other screens show just the device name + the orb hole + any panels. -->
+    {#if neroIsHere}
     {#if !hasConversation}
         <div class="hero">
             <p class="tagline">What are we working on?</p>
@@ -460,6 +827,8 @@
                 {#each timeline as item (item.key)}
                     {#if item.kind === 'msg'}
                         <Message role={item.role} content={item.content} attachments={item.attachments} />
+                    {:else if item.kind === 'event'}
+                        <div class="tl-event"><i class="tl-ev-dot"></i>{item.label}</div>
                     {:else}
                         <ToolGroup tools={item.tools} />
                     {/if}
@@ -490,20 +859,23 @@
                 <span class="cdots"><i></i><i></i><i></i></span>
                 compacting memory
             </div>
-        {:else if showLoader || commandLoading}
+        {:else if (showLoader || commandLoading) && !askReplacesComposer}
             <div class="statusline">
                 {commandLoading ? `${commandLoading}…` : `${loaderText}…`}
             </div>
         {/if}
-        <Composer
-            onSubmit={handleSend}
-            onCommand={handleCommand}
-            onAbort={handleStop}
-            loading={isRunning}
-        />
+        {#if !askReplacesComposer}
+            <Composer
+                onSubmit={handleSend}
+                onCommand={handleCommand}
+                onAbort={handleStop}
+                loading={isRunning}
+            />
+        {/if}
     </div>
+    {/if}
 
-    <div class="theme-dock"><ThemeSwitch /></div>
+    {#if neroIsHere}<div class="theme-dock"><ThemeSwitch /></div>{/if}
 </div>
 
 <style>
@@ -585,33 +957,162 @@
             transform 0.85s cubic-bezier(0.65, 0, 0.2, 1),
             opacity 0.6s ease;
     }
+    .presence-orb.tappable {
+        pointer-events: auto;
+        cursor: pointer;
+    }
     .presence-orb.working {
         opacity: 1;
     }
     @media (max-width: 1180px) {
-        .presence-orb { display: none; }
+        .presence-orb {
+            display: none;
+        }
+    }
+
+    /* The traveling orb: the only orb on screen mid-hop. It flies off into the
+       distance on the screen he leaves, and on the destination it waits off-screen
+       (in transit), then flies in from the far edge and grows to land at center —
+       ending at the same place/size the real orb rests, for a seamless handoff. */
+    .travel {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        z-index: 45;
+        pointer-events: none;
+        will-change: transform, opacity, filter;
+    }
+    .travel.in {
+        animation: travel-in 1.35s cubic-bezier(0.16, 0.72, 0.18, 1) forwards;
+    }
+    .travel.out {
+        animation: travel-out 0.7s cubic-bezier(0.5, 0, 0.85, 0.35) forwards;
+    }
+    /* leaves: gathers, then accelerates off the right edge, shrinking into the
+       distance toward the next screen. */
+    @keyframes travel-out {
+        0% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+            filter: brightness(1);
+        }
+        20% {
+            transform: translate(-50%, -50%) scale(1.18);
+            opacity: 1;
+            filter: brightness(1.55) blur(0);
+        }
+        100% {
+            transform: translate(-50%, -50%) translateX(82vw) scale(0.18);
+            opacity: 0;
+            filter: brightness(1.4) blur(3px);
+        }
+    }
+    /* arrives: held off-screen left for the first beat (still crossing the gap),
+       then streaks in from the far edge, decelerating and growing to rest. */
+    @keyframes travel-in {
+        0%,
+        34% {
+            transform: translate(-50%, -50%) translateX(-90vw) scale(0.16);
+            opacity: 0;
+            filter: brightness(2) blur(4px);
+        }
+        40% {
+            transform: translate(-50%, -50%) translateX(-72vw) scale(0.4);
+            opacity: 1;
+            filter: brightness(1.8) blur(2px);
+        }
+        100% {
+            transform: translate(-50%, -50%) scale(2.15);
+            opacity: 1;
+            filter: brightness(1) blur(0);
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .travel {
+            display: none;
+        }
+    }
+
+    /* Nero is on another screen: an empty socket where the orb would be, centered. */
+    .elsewhere {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--text-dim);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        text-align: center;
+        opacity: 0.4;
+        transition: opacity 0.3s ease;
+    }
+    .elsewhere:hover {
+        opacity: 0.75;
+    }
+    /* a clear hole at the real orb's size: faint ring, recessed dark center */
+    .ghost-orb {
+        width: 132px;
+        height: 132px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        border: 1px dashed rgb(var(--holo) / 0.18);
+        background: radial-gradient(circle at 50% 50%, rgb(0 0 0 / 0.55), transparent 72%);
+        box-shadow:
+            inset 0 0 50px rgb(0 0 0 / 0.7),
+            inset 0 0 0 1px rgb(var(--holo) / 0.04);
+        animation: ghost-pulse 5s ease-in-out infinite;
+    }
+    @keyframes ghost-pulse {
+        0%,
+        100% {
+            opacity: 0.6;
+        }
+        50% {
+            opacity: 0.85;
+        }
+    }
+    .elsewhere-text strong {
+        color: var(--text-dim);
+        font-weight: 600;
+    }
+    .elsewhere .bring {
+        display: block;
+        margin-top: 4px;
+        color: rgb(var(--holo-soft) / 0.7);
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 9.5px;
     }
 
     /* voice layout: orb glides to center + expands, chat pushed aside, dock recedes */
-    .field.voice .presence-orb {
+    .field.presence .presence-orb {
         left: 50%;
         transform: translate(-50%, -50%) scale(2.15);
         opacity: 1;
     }
-    .field.voice .scroller,
-    .field.voice .hero {
+    .field.presence .scroller,
+    .field.presence .hero {
         transform: translateX(40vw);
         opacity: 0;
         pointer-events: none;
     }
-    .field.voice .dockwrap {
+    .field.presence .dockwrap {
         transform: translateY(48px);
         opacity: 0;
         pointer-events: none;
     }
     /* no chrome in voice mode — full canvas for the orb + thrown panels */
-    .field.voice .bar,
-    .field.voice .theme-dock {
+    .field.presence .bar,
+    .field.presence .theme-dock {
         opacity: 0;
         pointer-events: none;
     }
@@ -675,7 +1176,7 @@
         border: 1px solid rgb(var(--holo) / 0.28);
         border-radius: 999px;
         background: rgb(var(--holo) / 0.06);
-        backdrop-filter: blur(8px);
+        backdrop-filter: blur(6px);
         box-shadow: 0 0 24px rgb(var(--holo) / 0.12);
         font-family: var(--font-mono);
         font-size: 11px;
@@ -750,6 +1251,27 @@
         text-transform: uppercase;
         color: var(--text-faint);
         margin-right: 8px;
+    }
+
+    /* a timeline event (a panel interaction, etc.): a quiet centered marker, not a
+       chat bubble */
+    .tl-event {
+        align-self: center;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 12px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        color: var(--text-faint);
+    }
+    .tl-ev-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: rgb(var(--holo) / 0.6);
+        box-shadow: 0 0 6px rgb(var(--holo) / 0.5);
     }
 
     /* local system notice for slash-command output (not part of the conversation) */
@@ -839,5 +1361,26 @@
     }
     @media (max-width: 720px) {
         .theme-dock { display: none; }
+    }
+
+    /* Background-project dashboards: a column up the left, clear of the orb + composer. */
+    .project-dock {
+        position: fixed;
+        top: 64px;
+        left: 24px;
+        z-index: 45;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        max-height: calc(100vh - 140px);
+        overflow-y: auto;
+        padding-right: 4px;
+    }
+    @media (max-width: 720px) {
+        .project-dock {
+            left: 12px;
+            right: 12px;
+            top: 56px;
+        }
     }
 </style>

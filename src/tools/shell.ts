@@ -22,7 +22,7 @@ export interface ShellResult {
 /** Run a shell command. Single-user local box, so full access by design. */
 export async function runShell(
     command: string,
-    opts: { cwd?: string; timeoutMs?: number } = {},
+    opts: { cwd?: string; timeoutMs?: number; env?: Record<string, string> } = {},
 ): Promise<ShellResult> {
     try {
         const { stdout, stderr } = await execAsync(command, {
@@ -30,6 +30,7 @@ export async function runShell(
             timeout: opts.timeoutMs ?? 120_000,
             maxBuffer: 10 * 1024 * 1024,
             shell: '/bin/bash',
+            env: opts.env ? { ...process.env, ...opts.env } : process.env,
         });
         return { stdout, stderr, code: 0 };
     } catch (e) {

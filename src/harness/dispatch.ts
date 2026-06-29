@@ -32,6 +32,9 @@ export interface RunnableAgent {
 export interface DispatchInput {
     text: string;
     attachments?: AttachmentRef[];
+    /** A panel interaction (button press), persisted as a labeled event, not as
+     *  the user talking. */
+    interaction?: boolean;
 }
 
 export interface DispatchOpts {
@@ -94,10 +97,14 @@ export async function startDispatch(
     }
 
     const dispatch = await dispatches.create();
-    await messagesData.insertUser(input.text, {
-        dispatchId: dispatch.id,
-        attachments: input.attachments ?? null,
-    });
+    if (input.interaction) {
+        await messagesData.insertInteraction(input.text, dispatch.id);
+    } else {
+        await messagesData.insertUser(input.text, {
+            dispatchId: dispatch.id,
+            attachments: input.attachments ?? null,
+        });
+    }
 
     // Resolve the model fresh each run: a Lux `/model` override wins, else the
     // env default. Takes effect on the very next message, no restart.
