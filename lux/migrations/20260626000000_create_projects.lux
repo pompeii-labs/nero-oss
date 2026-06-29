@@ -1,0 +1,1 @@
+TCREATE projects id UUID PRIMARY KEY DEFAULT uuid(), title TEXT, goal TEXT, status TEXT DEFAULT 'planning', budget_usd FLOAT DEFAULT 0, spent_usd FLOAT DEFAULT 0, model TEXT, device_id TEXT, parent_dispatch_id TEXT, result TEXT, error TEXT, created_at INT DEFAULT now(), updated_at INT DEFAULT now()

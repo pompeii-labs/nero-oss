@@ -1,0 +1,65 @@
+import { Hono } from 'hono';
+import * as projects from '../../data/projects';
+import { deliverApproval } from '../../projects/approval';
+import { scheduleReady } from '../../projects/runner';
+
+/** The user acting on a project's plan-approval card: run it (with a budget), ask
+ *  for changes, or cancel. Unblocks the waiting `plan_project` tool call. */
+export function projectRoutes(): Hono {
+    const app = new Hono();
+
+    app.post('/v1/projects/:id/approve', async (c) => {
+        const id = c.req.param('id');
+        const b = (await c.req.json().catch(() => ({}))) as {
+            action?: 'run' | 'tweak' | 'cancel';
+            budgetUsd?: number;
+            note?: string;
+        };
+
+        const p = await projects.get(id);
+        if (!p) return c.json({ ok: false, error: 'not found' }, 404);
+
+        if (b.action === 'run') {
+            const budgetUsd = Number(b.budgetUsd);
+            if (!Number.isFinite(budgetUsd) || budgetUsd <= 0)
+                return c.json({ ok: false, error: 'budget required' }, 400);
+            deliverApproval(id, { kind: 'run', budgetUsd });
+        } else if (b.action === 'tweak') {
+            deliverApproval(id, { kind: 'tweak', note: String(b.note ?? '').trim() });
+        } else {
+            deliverApproval(id, { kind: 'cancel' });
+        }
+        return c.json({ ok: true });
+    });
+
+    app.post('/v1/projects/:id/pause', async (c) => {
+        const p = await projects.get(c.req.param('id'));
+        if (!p) return c.json({ ok: false, error: 'not found' }, 404);
+        if (p.status === 'running') await projects.update(p.id, { status: 'paused' });
+        return c.json({ ok: true });
+    });
+
+    app.post('/v1/projects/:id/resume', async (c) => {
+        const p = await projects.get(c.req.param('id'));
+        if (!p) return c.json({ ok: false, error: 'not found' }, 404);
+        if (p.status !== 'paused') return c.json({ ok: true });
+        const b = (await c.req.json().catch(() => ({}))) as { budgetUsd?: number };
+        const raise = Number(b.budgetUsd);
+        await projects.update(p.id, {
+            status: 'running',
+            ...(Number.isFinite(raise) && raise > p.budgetUsd ? { budgetUsd: raise } : {}),
+        });
+        await scheduleReady(p.id);
+        return c.json({ ok: true });
+    });
+
+    app.post('/v1/projects/:id/cancel', async (c) => {
+        const p = await projects.get(c.req.param('id'));
+        if (!p) return c.json({ ok: false, error: 'not found' }, 404);
+        if (p.status !== 'done' && p.status !== 'cancelled')
+            await projects.update(p.id, { status: 'cancelled' });
+        return c.json({ ok: true });
+    });
+
+    return app;
+}
