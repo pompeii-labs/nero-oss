@@ -46,7 +46,7 @@
         border-radius: 8px;
         background: var(--panel-bg);
         border: 1px solid rgb(var(--holo) / 0.16);
-        backdrop-filter: blur(16px) saturate(1.15);
+        backdrop-filter: blur(10px) saturate(1.15);
         box-shadow:
             inset 0 1px 0 rgb(var(--metal-hi) / 0.16),
             inset 0 0 30px rgb(var(--holo) / 0.04),
