@@ -1,35 +1,37 @@
 import { loadConfig } from '../config';
 import { isLuxConnected, ensureAnonGrants } from '../lib/lux';
+import { Logger } from '../lib/logger';
 import { getMcpClient } from '../mcp/client';
 import { Dispatch } from '../models/dispatch';
 import { Question } from '../models/question';
 import { resumeProjects } from '../projects/runner';
 import { createServer } from './index';
 
+const log = new Logger('nero');
 const cfg = loadConfig();
 
 if (!isLuxConnected()) {
-    console.warn('[nero] Lux not configured (LUX_URL / LUX_SECRET_KEY). Run `lux start`.');
+    log.warn('Lux not configured (LUX_URL / LUX_SECRET_KEY). Run `lux start`.');
 }
 if (!cfg.openrouter.apiKey) {
-    console.warn('[nero] OPENROUTER_API_KEY not set — runs will fail until it is.');
+    log.warn('OPENROUTER_API_KEY not set; runs will fail until it is.');
 }
 
 if (isLuxConnected()) {
-    await ensureAnonGrants().catch((e) => console.error('[nero] grant setup failed:', e));
+    await ensureAnonGrants().catch((e) => log.error('grant setup failed', { error: String(e) }));
     await Dispatch.cancelOrphans()
-        .then((n) => n && console.log(`[nero] cleared ${n} orphaned dispatch(es)`))
-        .catch((e) => console.error('[nero] orphan cleanup failed:', e));
+        .then((n) => n && log.info(`cleared ${n} orphaned dispatch(es)`))
+        .catch((e) => log.error('orphan cleanup failed', { error: String(e) }));
     await Question.cancelOrphans()
-        .then((n) => n && console.log(`[nero] cleared ${n} orphaned question(s)`))
-        .catch((e) => console.error('[nero] question cleanup failed:', e));
+        .then((n) => n && log.info(`cleared ${n} orphaned question(s)`))
+        .catch((e) => log.error('question cleanup failed', { error: String(e) }));
     await resumeProjects()
-        .then((n) => n && console.log(`[nero] reconciled ${n} project(s)`))
-        .catch((e) => console.error('[nero] project resume failed:', e));
+        .then((n) => n && log.info(`reconciled ${n} project(s)`))
+        .catch((e) => log.error('project resume failed', { error: String(e) }));
     await getMcpClient()
         .connectAll()
-        .catch((e) => console.error('[nero] mcp connect failed:', e));
+        .catch((e) => log.error('mcp connect failed', { error: String(e) }));
 }
 
 const server = createServer();
-console.log(`[nero] listening on http://localhost:${server.port}  (model: ${cfg.model})`);
+log.info(`listening on http://localhost:${server.port} (model: ${cfg.model})`);

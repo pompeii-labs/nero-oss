@@ -8,7 +8,7 @@ import type {
     MagmaStreamChunk,
     MagmaUtilities,
 } from '@pompeii-labs/magma/types';
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import { resolve } from 'path';
 import { readFileSync } from 'fs';
 import { loadConfig } from '../config';
@@ -18,6 +18,10 @@ import { truncateToolResult } from './truncate';
 import type { AgentActivity } from './activity';
 import { buildUtilities } from '../tools';
 import { Message } from '../models/message';
+import { openrouter } from '../lib/openrouter';
+import { Logger } from '../lib/logger';
+
+const log = new Logger('agent');
 
 /** Keep recent tool output verbatim up to this fraction of the window; clear
  *  older results (block + id preserved so call/result pairing holds). */
@@ -66,15 +70,7 @@ export class NeroAgent extends MagmaAgent {
 
     constructor(opts: NeroAgentOpts = {}) {
         const cfg = loadConfig();
-        const client =
-            opts.client ??
-            new OpenAI({
-                baseURL: cfg.openrouter.baseUrl,
-                apiKey: cfg.openrouter.apiKey,
-                timeout: 120_000,
-                maxRetries: 2,
-                defaultHeaders: { 'X-Title': 'Nero' },
-            });
+        const client = opts.client ?? openrouter();
 
         const model = opts.model ?? cfg.model;
         super({
@@ -121,9 +117,7 @@ export class NeroAgent extends MagmaAgent {
         const u = chunk?.usage;
         if (u && u.input_tokens != null) {
             const cached = u.cache_write_tokens ?? 0;
-            console.log(
-                `[cache] fresh=${u.input_tokens} cached=${cached} out=${u.output_tokens ?? 0}`,
-            );
+            log.info(`cache fresh=${u.input_tokens} cached=${cached} out=${u.output_tokens ?? 0}`);
             this.onUsage?.({ input: u.input_tokens, output: u.output_tokens ?? 0, cached });
         }
     }
@@ -277,7 +271,7 @@ export class NeroAgent extends MagmaAgent {
                     status: result.error ? 'error' : 'success',
                 },
                 this.currentDispatchId,
-            ).catch((e) => console.error('[nero] persist tool row failed:', e));
+            ).catch((e) => log.error('persist tool row failed', { error: String(e) }));
         }
 
         // Fold in any steering messages queued during this tool run.
