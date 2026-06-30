@@ -1,7 +1,7 @@
 import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
-import { startConnect, disconnect } from './connect';
+import { McpConnect } from './connect';
 import { getMcpClient } from './client';
 import { McpConnection } from '../models/mcp-connection';
 
@@ -31,7 +31,7 @@ export class McpConnectUtility {
         const url = String(call.fn_args.url ?? '').trim();
         if (!name || !url) return 'name and url are required.';
         const apiKey = call.fn_args.api_key ? String(call.fn_args.api_key) : undefined;
-        const r = await startConnect({ name, url, apiKey });
+        const r = await McpConnect.start({ name, url, apiKey });
         if (r.status === 'auth_required') {
             return `${name} needs authorization. Send the user this link to approve, then it'll connect automatically:\n${r.authUrl}`;
         }
@@ -67,6 +67,6 @@ export class McpConnectUtility {
         description: 'The integration id to remove.',
     })
     async disconnect_integration(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        return disconnect(String(call.fn_args.name ?? '').trim());
+        return McpConnect.disconnect(String(call.fn_args.name ?? '').trim());
     }
 }

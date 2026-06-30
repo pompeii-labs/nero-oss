@@ -2,7 +2,7 @@ import type { MagmaMessageType } from '@pompeii-labs/magma/types';
 import { NeroAgent } from '../harness/agent';
 import { buildSessionMessages } from '../harness/session';
 import { foldThread } from '../harness/compaction';
-import { recallForPrompt } from '../memory/memory';
+import { Memory } from '../models/memory';
 import { buildUtilities } from '../tools';
 import type { AgentActivity } from '../harness/activity';
 import { Message } from '../models/message';
@@ -45,7 +45,7 @@ export async function runVoiceTurn(
 
     // Kick recall off immediately; it's an embedding round-trip we overlap with
     // agent setup + session assembly.
-    const recall = recallForPrompt(transcript).catch(() => '');
+    const recall = Memory.recallForPrompt(transcript).catch(() => '');
 
     const model = (await Settings.getModel().catch(() => null)) ?? undefined;
     const agent = new NeroAgent({

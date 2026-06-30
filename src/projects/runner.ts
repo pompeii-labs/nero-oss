@@ -1,10 +1,10 @@
 import { NeroAgent } from '../harness/agent';
 import { buildWorkerUtilities } from '../tools';
-import { recallForPrompt } from '../memory/memory';
-import { notify } from '../mediums/registry';
+import { Memory } from '../models/memory';
+import { Mediums } from '../mediums/registry';
 import { loadConfig } from '../config';
 import { pool } from './pool';
-import { costUsd } from './pricing';
+import { Pricing } from './pricing';
 import { Project } from '../models/project';
 import { ProjectTask, type TaskActivity } from '../models/project-task';
 import type { AgentActivity } from '../harness/activity';
@@ -109,7 +109,7 @@ async function runTask(projectId: string, taskId: string): Promise<void> {
                 usage.input += u.input;
                 usage.output += u.output;
             };
-            agent.currentMemories = await recallForPrompt(task.description).catch(() => '');
+            agent.currentMemories = await Memory.recallForPrompt(task.description).catch(() => '');
 
             agent.addMessage({ role: 'user', content: taskPrompt(project.goal, task, depBlock) });
             const res = await withTimeout(
@@ -120,7 +120,7 @@ async function runTask(projectId: string, taskId: string): Promise<void> {
             agent.endRun();
             const out = res?.content ?? '';
 
-            const cost = await costUsd(model, usage.input, usage.output);
+            const cost = await Pricing.costUsd(model, usage.input, usage.output);
             await ProjectTask.update(taskId, {
                 status: 'done',
                 result: out,
@@ -136,7 +136,7 @@ async function runTask(projectId: string, taskId: string): Promise<void> {
             // while paused (scheduleReady gates on status === 'running').
             if (project.budget_usd > 0 && spent >= project.budget_usd) {
                 await Project.update(projectId, { status: 'paused' });
-                await notify({
+                await Mediums.notify({
                     title: `Project paused: ${project.title}`,
                     body: `Hit the $${project.budget_usd.toFixed(2)} budget (spent $${spent.toFixed(2)}). Resume or raise the budget to continue.`,
                     urgency: 'normal',
@@ -204,10 +204,10 @@ async function finalizeProject(projectId: string, all: ProjectTask[]): Promise<v
     const res = await agent.main();
     agent.endRun();
     const out = res?.content ?? '';
-    const cost = await costUsd(model, usage.input, usage.output);
+    const cost = await Pricing.costUsd(model, usage.input, usage.output);
     const spent = await Project.addSpend(projectId, cost);
     await Project.update(projectId, { status: 'done', result: out });
-    await notify({
+    await Mediums.notify({
         title: `Project done: ${project.title}`,
         body: `${project.goal}. Finished (${all.length} tasks, ~$${spent.toFixed(2)}).`,
         urgency: 'normal',

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { startConnect, completeConnect, disconnect, reconnect } from '../../mcp/connect';
+import { McpConnect } from '../../mcp/connect';
 import { getMcpClient } from '../../mcp/client';
 import { McpConnection } from '../../models/mcp-connection';
 
@@ -19,7 +19,7 @@ export function mcpRoutes(): Hono {
         if (error) return c.html(page('Authorization failed', error, false));
         if (!code || !state)
             return c.html(page('Missing parameters', 'No code/state in the callback.', false));
-        const r = await completeConnect(state, code);
+        const r = await McpConnect.complete(state, code);
         return c.html(page(r.ok ? 'Connected' : 'Almost there', r.message, r.ok));
     });
 
@@ -45,7 +45,7 @@ export function mcpRoutes(): Hono {
     app.post('/v1/mcp/reconnect', async (c) => {
         const body = (await c.req.json().catch(() => ({}))) as { name?: string };
         if (!body.name) return c.json({ error: 'name required' }, 400);
-        return c.json(await reconnect(body.name));
+        return c.json(await McpConnect.reconnect(body.name));
     });
 
     // Begin a connection. OAuth servers return { status:'auth_required', authUrl }
@@ -57,14 +57,14 @@ export function mcpRoutes(): Hono {
             apiKey?: string;
         };
         if (!body.name || !body.url) return c.json({ error: 'name and url required' }, 400);
-        const r = await startConnect({ name: body.name, url: body.url, apiKey: body.apiKey });
+        const r = await McpConnect.start({ name: body.name, url: body.url, apiKey: body.apiKey });
         return c.json(r);
     });
 
     app.post('/v1/mcp/disconnect', async (c) => {
         const body = (await c.req.json().catch(() => ({}))) as { name?: string };
         if (!body.name) return c.json({ error: 'name required' }, 400);
-        return c.json({ message: await disconnect(body.name) });
+        return c.json({ message: await McpConnect.disconnect(body.name) });
     });
 
     return app;

@@ -1,11 +1,10 @@
 import { describe, test, expect, afterAll } from 'bun:test';
-import { formatMemoriesForPrompt, rememberFact, recallMemories } from '../src/memory/memory';
-import type { Memory } from '../src/models/memory';
+import { Memory } from '../src/models/memory';
 import { getLux } from '../src/lib/lux';
 
 describe('formatMemoriesForPrompt', () => {
     test('empty -> empty string', () => {
-        expect(formatMemoriesForPrompt([])).toBe('');
+        expect(Memory.format([])).toBe('');
     });
 
     test('frames memories as fallible hints with type + body', () => {
@@ -19,7 +18,7 @@ describe('formatMemoriesForPrompt', () => {
                 created_at: 0,
             },
         ] as Memory[];
-        const out = formatMemoriesForPrompt(rows);
+        const out = Memory.format(rows);
         expect(out).toContain('Relevant memories');
         expect(out).toContain('verify before relying');
         expect(out).toContain('(preference) likes teal');
@@ -43,7 +42,7 @@ d('memory recall (live: OpenRouter embeddings + Lux vectors)', () => {
     });
 
     test('remember then recall by semantic query, and dedup on repeat', async () => {
-        const first = await rememberFact(FACT);
+        const first = await Memory.remember(FACT);
         // Live dependency: if the embedding provider is unavailable this run, skip
         // the assertions rather than fail (same spirit as the Lux-gated skip above).
         if (first.status === 'skipped') {
@@ -54,15 +53,15 @@ d('memory recall (live: OpenRouter embeddings + Lux vectors)', () => {
 
         // Lux's vector index is eventually consistent, so poll recall until the new
         // fact is searchable (up to ~3s) before asserting index-dependent behavior.
-        let hits: Awaited<ReturnType<typeof recallMemories>> = [];
+        let hits: Awaited<ReturnType<typeof Memory.recall>> = [];
         for (let i = 0; i < 20 && !hits.some((m) => m.body === FACT); i++) {
             await Bun.sleep(150);
-            hits = await recallMemories(`what colour does the user like? ${NONCE}`, 5);
+            hits = await Memory.recall(`what colour does the user like? ${NONCE}`, 5);
         }
         expect(hits.some((m) => m.body === FACT)).toBe(true);
 
         // Now that it's indexed, a repeat is recognized as a duplicate.
-        const dup = await rememberFact(FACT);
+        const dup = await Memory.remember(FACT);
         expect(dup.status).toBe('duplicate');
     });
 });

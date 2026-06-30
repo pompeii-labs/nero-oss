@@ -1,5 +1,5 @@
 import { describe, test, expect, afterAll } from 'bun:test';
-import { startDispatch, isActive, type RunnableAgent } from '../src/harness/dispatch';
+import { Dispatcher, type RunnableAgent } from '../src/harness/dispatch';
 import { Dispatch } from '../src/models/dispatch';
 import { getLux } from '../src/lib/lux';
 import type { Messages } from '../src/lux/types';
@@ -56,7 +56,7 @@ d('dispatch round-trip', () => {
     });
 
     test('persists trigger + assistant, records activity, ends done', async () => {
-        const handle = await startDispatch(
+        const handle = await Dispatcher.start(
             { text: 'hi nero' },
             { agentFactory: () => makeFakeAgent('Hello world') },
         );
@@ -64,7 +64,7 @@ d('dispatch round-trip', () => {
         expect(handle.steered).toBe(false);
 
         await handle.done;
-        expect(isActive()).toBe(false);
+        expect(Dispatcher.isActive()).toBe(false);
 
         const row = await Dispatch.get(handle.dispatchId);
         expect(row!.status).toBe('done');
@@ -100,11 +100,11 @@ d('dispatch round-trip', () => {
             },
         };
 
-        const h = await startDispatch({ text: 'first q' }, { agentFactory: () => fake });
+        const h = await Dispatcher.start({ text: 'first q' }, { agentFactory: () => fake });
         created.push(h.dispatchId);
 
         // steer while answer 1 is held
-        const s = await startDispatch({ text: 'and also this' });
+        const s = await Dispatcher.start({ text: 'and also this' });
         expect(s.steered).toBe(true);
         expect(s.dispatchId).toBe(h.dispatchId);
 

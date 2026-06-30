@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
 import { saveUpload } from '../../files/store';
 import type { AttachmentRef } from '../../models/message';
-import type { startDispatch, cancelActive } from '../../harness/dispatch';
+import type { Dispatcher } from '../../harness/dispatch';
 
 export interface NeroDeps {
-    startDispatch: typeof startDispatch;
-    cancelActive: typeof cancelActive;
+    startDispatch: typeof Dispatcher.start;
+    cancelActive: typeof Dispatcher.cancelActive;
 }
 
 /** Fire-and-forget dispatch + cancel. The streamed result lands on Lux (the

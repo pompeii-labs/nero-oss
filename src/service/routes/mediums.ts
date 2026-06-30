@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { mediumStatuses } from '../../mediums/registry';
+import { Mediums } from '../../mediums/registry';
 import { MediumActivity } from '../../models/medium-activity';
 
 /** Read-only view of Nero's outbound channels and recent deliveries (for a future
@@ -9,7 +9,7 @@ export function mediumRoutes(): Hono {
 
     app.get('/v1/mediums', async (c) => {
         const [channels, recent] = await Promise.all([
-            mediumStatuses(),
+            Mediums.statuses(),
             MediumActivity.recent(20).catch(() => []),
         ]);
         return c.json({ channels, recent });

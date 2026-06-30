@@ -1,6 +1,15 @@
 import { DataModel } from './datamodel';
 import { getLux, unwrap } from '../lib/lux';
+import { embed } from '../memory/embed';
 import type { Memories } from '../lux/types';
+
+const DUPLICATE_SIMILARITY = 0.95; // >= this = same fact, don't re-insert
+const RECALL_SIMILARITY_FLOOR = 0.35; // below this = not relevant, abstain
+
+export type RememberResult =
+    | { status: 'added'; id: string }
+    | { status: 'duplicate'; id: string }
+    | { status: 'skipped'; reason: string };
 
 export interface MemoryData {
     id: string;
@@ -80,5 +89,49 @@ export class Memory extends DataModel<MemoryData> {
                 .order('created_at', { ascending: false }),
         ) as Memories[];
         return rows.map((r) => new Memory(r as unknown as MemoryData));
+    }
+
+    /** Record a grounded fact. Embeds, dedups against a near-identical memory, then
+     *  inserts. No-op (skipped) when embeddings are unavailable. */
+    static async remember(
+        content: string,
+        opts: { category?: string | null; type?: string } = {},
+    ): Promise<RememberResult> {
+        const body = content.trim();
+        if (!body) return { status: 'skipped', reason: 'empty' };
+        const embedding = await embed(body);
+        if (!embedding) return { status: 'skipped', reason: 'no embedding provider' };
+        const dupes = await Memory.search(embedding, { k: 1, threshold: DUPLICATE_SIMILARITY });
+        if (dupes.length > 0) return { status: 'duplicate', id: dupes[0].id };
+        const mem = await Memory.add({
+            body,
+            embedding,
+            category: opts.category ?? null,
+            type: opts.type ?? 'fact',
+        });
+        return { status: 'added', id: mem.id };
+    }
+
+    /** Top-K relevant memories for a query; abstains on weak matches. */
+    static async recall(query: string, k = 5): Promise<Memory[]> {
+        const embedding = await embed(query);
+        if (!embedding) return [];
+        return Memory.search(embedding, { k, threshold: RECALL_SIMILARITY_FLOOR });
+    }
+
+    /** Render recalled memories as a system-prompt block. Framed as fallible notes. */
+    static format(rows: Memory[]): string {
+        if (rows.length === 0) return '';
+        const lines = rows.map((m) => `- (${m.type}) ${m.body}`);
+        return (
+            `## Relevant memories\n` +
+            `Notes you recorded earlier. They may be outdated or wrong, treat as hints, verify before relying.\n` +
+            lines.join('\n')
+        );
+    }
+
+    /** Convenience for the dispatch path: recall + format in one call. */
+    static async recallForPrompt(query: string): Promise<string> {
+        return Memory.format(await Memory.recall(query));
     }
 }

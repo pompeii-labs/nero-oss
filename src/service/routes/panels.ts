@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Panel, type PanelData } from '../../models/panel';
 import { runPanelFunction } from '../../panels/exec';
-import { startDispatch } from '../../harness/dispatch';
+import { Dispatcher } from '../../harness/dispatch';
 
 /** Panel control plane: the user dismissing, dragging/resizing, or interacting
  *  with a panel. Geometry writes persist (so it survives reload AND Nero sees the
@@ -65,7 +65,7 @@ export function panelRoutes(): Hono {
         const value = b.value != null ? ` Value: ${JSON.stringify(b.value)}.` : '';
         const intent = b.intent ? ` (You set this up meaning: ${b.intent}.)` : '';
         const text = `[interaction] On your panel "${p.title}", the user pressed "${control}".${value}${intent}`;
-        const res = await startDispatch({ text, interaction: true });
+        const res = await Dispatcher.start({ text, interaction: true });
         return c.json({ dispatchId: res.dispatchId, steered: res.steered });
     });
 

@@ -1,7 +1,7 @@
 import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
-import { notify, mediumStatuses } from './registry';
+import { Mediums } from './registry';
 import type { Urgency } from './types';
 
 /** Nero reaching the user when they're away from a screen. */
@@ -34,7 +34,7 @@ export class NotifyUtility {
         const body = String(call.fn_args.body ?? '').trim();
         if (!title && !body) return 'Provide a title and body.';
 
-        const statuses = await mediumStatuses();
+        const statuses = await Mediums.statuses();
         if (!statuses.some((s) => s.available)) {
             return 'No notification channel is set up. Ask the user to pick an ntfy topic, install the ntfy app and subscribe to it, then set the NTFY_TOPIC secret (you can stage it with request_secret).';
         }
@@ -42,7 +42,7 @@ export class NotifyUtility {
         const urgency = ['low', 'normal', 'high'].includes(String(call.fn_args.urgency))
             ? (call.fn_args.urgency as Urgency)
             : 'normal';
-        const res = await notify({ title: title || 'Nero', body: body || title, urgency });
+        const res = await Mediums.notify({ title: title || 'Nero', body: body || title, urgency });
         if (res.delivered.length) return `Sent via ${res.delivered.join(', ')}.`;
         return `Could not send: ${res.failed.map((f) => `${f.name} (${f.error})`).join('; ')}`;
     }

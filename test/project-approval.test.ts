@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
 import { waitForApproval, deliverApproval } from '../src/projects/approval';
-import { __resetPriceCache, costUsd } from '../src/projects/pricing';
+import { Pricing } from '../src/projects/pricing';
 
 describe('project approval registry', () => {
     test('deliverApproval resolves the waiter with run + budget', async () => {
@@ -34,15 +34,15 @@ describe('project approval registry', () => {
 
 describe('project pricing', () => {
     test('costUsd uses the fallback map when the registry is unreachable', async () => {
-        __resetPriceCache();
+        Pricing.reset();
         // haiku-4.5 fallback: in 1e-6, out 5e-6
-        const c = await costUsd('anthropic/claude-haiku-4.5', 1_000_000, 1_000_000);
+        const c = await Pricing.costUsd('anthropic/claude-haiku-4.5', 1_000_000, 1_000_000);
         // live registry may override; just assert it is a sane positive number.
         expect(c).toBeGreaterThan(0);
     });
 
     test('an unknown model falls back to the conservative default', async () => {
-        const c = await costUsd('made-up/model-x', 100, 100);
+        const c = await Pricing.costUsd('made-up/model-x', 100, 100);
         expect(c).toBeGreaterThan(0);
     });
 });

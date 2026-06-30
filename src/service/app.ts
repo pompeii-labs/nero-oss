@@ -14,7 +14,7 @@ import { askRoutes } from './routes/ask';
 import { projectRoutes } from './routes/projects';
 import { mediumRoutes } from './routes/mediums';
 import { browserRoutes } from './routes/browser';
-import { startDispatch, cancelActive } from '../harness/dispatch';
+import { Dispatcher } from '../harness/dispatch';
 
 /** Build the Nero Hono app. Deps are injectable for tests. The WebSocket
  *  upgrader (for `/v1/voice`) is supplied by the Bun server; tests omit it. */
@@ -26,8 +26,8 @@ export function createApp(deps: Partial<NeroDeps> = {}, upgradeWebSocket?: Upgra
     app.route(
         '/',
         neroRoutes({
-            startDispatch: deps.startDispatch ?? startDispatch,
-            cancelActive: deps.cancelActive ?? cancelActive,
+            startDispatch: deps.startDispatch ?? Dispatcher.start,
+            cancelActive: deps.cancelActive ?? Dispatcher.cancelActive,
         }),
     );
     app.route('/', fileRoutes());
