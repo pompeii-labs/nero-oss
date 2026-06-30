@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
     plugins: [svelte()],
     resolve: {
-        alias: { $lib: fileURLToPath(new URL('./src/lib', import.meta.url)) },
+        alias: {
+            $lib: fileURLToPath(new URL('./src/lib', import.meta.url)),
+            '$env/dynamic/public': fileURLToPath(new URL('./vitest-env.ts', import.meta.url)),
+        },
         conditions: ['browser'],
     },
     test: {
