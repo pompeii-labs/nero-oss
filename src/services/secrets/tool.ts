@@ -19,8 +19,8 @@ export class SecretsUtility {
         return all
             .map(
                 (s) =>
-                    `${s.key}${s.isPlaceholder ? ' (NOT SET — staged, waiting on the user)' : ' (set)'}${
-                        s.description ? ` — ${s.description}` : ''
+                    `${s.key}${s.isPlaceholder ? ' (NOT SET - staged, waiting on the user)' : ' (set)'}${
+                        s.description ? ` - ${s.description}` : ''
                     }`,
             )
             .join('\n');

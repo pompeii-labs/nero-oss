@@ -16,13 +16,13 @@ export class BrowserOpenUtility {
     @tool({
         name: 'open_url',
         description:
-            "Open a URL in the user's own browser (fire-and-forget). Use when they want to actually WATCH or use something that can't be embedded — streaming (Hulu, Netflix, YouTube fullscreen), logged-in or paywalled sites, or anything DRM. Be precise: open the DIRECT url for the specific thing (the exact episode, article, PR, doc), never just a homepage. If you don't know the direct url, search for it first, then open it.",
+            "Open a URL in the user's own browser (fire-and-forget). Use when they want to actually WATCH or use something that can't be embedded - streaming (Hulu, Netflix, YouTube fullscreen), logged-in or paywalled sites, or anything DRM. Be precise: open the DIRECT url for the specific thing (the exact episode, article, PR, doc), never just a homepage. If you don't know the direct url, search for it first, then open it.",
     })
     @toolparam({
         key: 'url',
         type: 'string',
         required: true,
-        description: 'The full https URL to open — the specific page/episode, not a homepage.',
+        description: 'The full https URL to open - the specific page/episode, not a homepage.',
     })
     async open_url(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
         const a = new Args(call);
@@ -40,13 +40,13 @@ export class BrowserOpenUtility {
     @tool({
         name: 'open_browser',
         description:
-            'Open a live, interactive web page inside a panel on the Field — a real browser you (and the user) can see and click. Use to SHOW or operate the web: a dashboard, docs, a site, search results, a logged-in page. The user can click/scroll/type in it. Open the DIRECT url for what they want. NOTE: DRM video (Hulu/Netflix) will not play here (blank) — for actually watching, use open_url instead.',
+            'Open a live, interactive web page inside a panel on the Field - a real browser you (and the user) can see and click. Use to SHOW or operate the web: a dashboard, docs, a site, search results, a logged-in page. The user can click/scroll/type in it. Open the DIRECT url for what they want. NOTE: DRM video (Hulu/Netflix) will not play here (blank) - for actually watching, use open_url instead.',
     })
     @toolparam({
         key: 'url',
         type: 'string',
         required: true,
-        description: 'The full https URL to load — the specific page, not a homepage.',
+        description: 'The full https URL to load - the specific page, not a homepage.',
     })
     @toolparam({
         key: 'title',
@@ -78,6 +78,6 @@ export class BrowserOpenUtility {
         // read_page / browser_click / browser_type / browser_fill_secret.
         await new Promise((r) => setTimeout(r, 1300));
         const snap = await session.snapshot();
-        return `Opened ${url} (browser session ${session.id}). The user can interact with it, and so can you: read_page/browser_* with this session id.\n\nPAGE: ${snap.title} — ${snap.url}\n${snap.count} interactive elements ready. Call read_page to see them.`;
+        return `Opened ${url} (browser session ${session.id}). The user can interact with it, and so can you: read_page/browser_* with this session id.\n\nPAGE: ${snap.title} - ${snap.url}\n${snap.count} interactive elements ready. Call read_page to see them.`;
     }
 }

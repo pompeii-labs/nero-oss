@@ -53,7 +53,7 @@ export class McpConnectUtility {
             .map((c) => {
                 const connected = client.isConnected(c.name);
                 const tools = client.getTools().filter((t) => t.server === c.name).length;
-                return `- ${c.name} (${c.url ?? c.transport}) — ${connected ? `connected, ${tools} tools` : 'not connected'}`;
+                return `- ${c.name} (${c.url ?? c.transport}) - ${connected ? `connected, ${tools} tools` : 'not connected'}`;
             })
             .join('\n');
     }

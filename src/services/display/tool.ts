@@ -30,7 +30,7 @@ FUNCTIONS (the panel's little API) is a JSON object of name -> a function spec. 
 - {"kind":"shell","cmd":"<bash>"} -> runs a command; parses stdout.
 - {"kind":"http","url":"https://...","method":"GET","headers":{...}} -> fetches a URL; parses the JSON response.
 - {"kind":"js","code":"const r = await fetch(url); const d = await r.json(); return { temp: d.temp };"} -> your own async JS. "fetch" and "secrets" are in scope; return an object to merge into state. This is how you write real integrations.
-LIVE / AUTO-REFRESH: add "everyMs": <ms> (>=1000) to any function and it re-runs on that interval on its own while the panel is open — no button needed. This is how you build self-updating dashboards (e.g. poll system stats every 2000ms and feed a chart).
+LIVE / AUTO-REFRESH: add "everyMs": <ms> (>=1000) to any function and it re-runs on that interval on its own while the panel is open - no button needed. This is how you build self-updating dashboards (e.g. poll system stats every 2000ms and feed a chart).
 SECRETS: never hardcode API keys. Reference the user's secret pool by name: secrets.NAME in js, \${NAME} in http url/headers/body, $NAME in shell. Call list_secrets to see what's available; if you need one that isn't set, call request_secret to stage it and tell the user.
 Example: functions {"sys":{"kind":"shell","cmd":"echo '{\\"cpu\\":42}'","everyMs":2000}}, with a metric bound to {"bind":"cpu"} and a chart {"value":{"bind":"cpu"}}.
 

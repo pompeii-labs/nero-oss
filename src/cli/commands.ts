@@ -18,7 +18,7 @@ export function start(opts: StartOpts = {}): void {
     const env = readEnv();
     if (!env.OPENROUTER_API_KEY) {
         warn(
-            `OPENROUTER_API_KEY not set in ${c.cyan('~/.nero/.env')} — Nero can't think until it is.`,
+            `OPENROUTER_API_KEY not set in ${c.cyan('~/.nero/.env')} - Nero can't think until it is.`,
         );
     }
     if (added.length) info(`Generated ${added.join(', ')} in ~/.nero/.env`);
@@ -139,7 +139,7 @@ export async function model(slug?: string): Promise<void> {
 
 export function config(): void {
     const cfg = loadConfig();
-    line(c.bold('Nero config') + c.dim('  (resolved from ~/.nero/.env — secrets hidden)'));
+    line(c.bold('Nero config') + c.dim('  (resolved from ~/.nero/.env - secrets hidden)'));
     kv('model', cfg.model);
     kv('embed model', cfg.embedModel);
     kv('port', String(cfg.port));

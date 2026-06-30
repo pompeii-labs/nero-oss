@@ -1,6 +1,6 @@
 /** In-memory registry of projects whose plan is awaiting the user's go-ahead. The
  *  `plan_project` tool registers a waiter; the approve route (same process) resolves
- *  it. Lives only in the running service — a restart drops waiters, and the boot
+ *  it. Lives only in the running service - a restart drops waiters, and the boot
  *  reconciler cancels any project still `awaiting_approval`. */
 
 export type ApprovalResult =

@@ -4,7 +4,7 @@ import { connectCDP, type CDPClient } from './cdp';
 
 // A real headful-rendered Chrome (headless=new) driven over CDP, with a persistent
 // profile so the user's logins stick. One Chrome, one page per session. Note: DRM
-// video (Widevine) won't render in a screencast — that's what open_url is for.
+// video (Widevine) won't render in a screencast - that's what open_url is for.
 const PORT = Number(process.env.NERO_CDP_PORT) || 9322;
 const PROFILE = process.env.NERO_BROWSER_PROFILE || `${process.env.HOME}/.nero/browser`;
 const CHROME =

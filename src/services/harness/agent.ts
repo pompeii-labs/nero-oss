@@ -190,7 +190,7 @@ export class NeroAgent extends MagmaAgent {
         });
         const context =
             `Right now it is ${human} (${cfg.timezone}). ` +
-            `The current year is ${now.getFullYear()} — use today's real date for anything ` +
+            `The current year is ${now.getFullYear()} - use today's real date for anything ` +
             `time-sensitive (web searches, "latest"/"recent" queries, scheduling). Do not assume ` +
             `an earlier year from your training. ISO: ${now.toISOString()}.`;
 

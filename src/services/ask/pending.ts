@@ -1,6 +1,6 @@
 /** In-memory registry of questions Nero is currently blocked on. The `ask` tool
  *  registers a waiter; the answer route (same process) resolves it. Lives only in
- *  the running service — a restart drops waiters (and the dispatches awaiting them
+ *  the running service - a restart drops waiters (and the dispatches awaiting them
  *  are cancelled by orphan cleanup), so questions don't survive a restart. */
 
 export type AskResult =

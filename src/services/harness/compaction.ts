@@ -31,12 +31,12 @@ You already have a separate long-term memory for durable facts about the user (t
 
 Think first in <scratch></scratch> (discarded), then write the note in <summary></summary>. Keep it tight. Favor short plain narrative over bullet lists, and skip any heading that doesn't apply rather than writing "none".
 
-**Where we are** — 2-4 sentences: what you and the user are actually doing right now, and why. The thread of intent, not a status table.
-**What the user wants** — the current goal in their words; quote their most recent real request verbatim so intent doesn't drift; note constraints they set for this task.
-**What's happened** — what's done, what was tried that didn't work (so you don't repeat it), and decisions made and why. Only what affects continuing.
-**Open threads** — unfinished work, questions you owe them, things you said you'd do, anything you're waiting on. Most recent first.
-**Live details** — only conversation-specific things that are annoying or risky to re-derive: a path, id, value, link, or tool result. Skip anything already in long-term memory. Preserve any "don't do X" instruction the user gave, verbatim.
-**Resume by** — one sentence: the single next thing to do, in line with their most recent request. If the last task was finished, say so; don't invent new work.`;
+**Where we are** - 2-4 sentences: what you and the user are actually doing right now, and why. The thread of intent, not a status table.
+**What the user wants** - the current goal in their words; quote their most recent real request verbatim so intent doesn't drift; note constraints they set for this task.
+**What's happened** - what's done, what was tried that didn't work (so you don't repeat it), and decisions made and why. Only what affects continuing.
+**Open threads** - unfinished work, questions you owe them, things you said you'd do, anything you're waiting on. Most recent first.
+**Live details** - only conversation-specific things that are annoying or risky to re-derive: a path, id, value, link, or tool result. Skip anything already in long-term memory. Preserve any "don't do X" instruction the user gave, verbatim.
+**Resume by** - one sentence: the single next thing to do, in line with their most recent request. If the last task was finished, say so; don't invent new work.`;
 
 /** Token weight of a row. Tool rows count their args+result payload; everything
  *  else counts its text. */

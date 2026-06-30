@@ -48,7 +48,7 @@ function parseTasks(raw: unknown): PlanTask[] | string {
         if (out[i].dependsOn.some((d) => d >= out.length))
             return `Task ${i} depends on a task index that does not exist.`;
         if (out[i].dependsOn.some((d) => d >= i))
-            return `Task ${i} depends on a later task — dependencies must point to earlier tasks only.`;
+            return `Task ${i} depends on a later task - dependencies must point to earlier tasks only.`;
     }
     return out;
 }
@@ -59,7 +59,7 @@ export class ProjectUtility {
     @tool({
         name: 'plan_project',
         description:
-            "Take on a substantial, multi-step goal as a background PROJECT instead of doing it inline. Break it into a DAG of tasks (each run by its own agent, in parallel where possible); this presents the plan + an estimated budget to the user and BLOCKS until they approve. Nothing runs or spends until they hit Run. On approval the project executes in the background and you're notified when done — so use this for work that's too big for one turn (research + synthesis, multi-part builds, anything you'd 'go off and work on'), not for quick answers. After it returns, relay the outcome (running / needs changes / cancelled).",
+            "Take on a substantial, multi-step goal as a background PROJECT instead of doing it inline. Break it into a DAG of tasks (each run by its own agent, in parallel where possible); this presents the plan + an estimated budget to the user and BLOCKS until they approve. Nothing runs or spends until they hit Run. On approval the project executes in the background and you're notified when done - so use this for work that's too big for one turn (research + synthesis, multi-part builds, anything you'd 'go off and work on'), not for quick answers. After it returns, relay the outcome (running / needs changes / cancelled).",
     })
     @toolparam({
         key: 'title',
@@ -130,7 +130,7 @@ export class ProjectUtility {
     @tool({
         name: 'project_status',
         description:
-            'Check on background projects — their status, progress, and spend. Pass a project id for one, or omit it to list active projects.',
+            'Check on background projects - their status, progress, and spend. Pass a project id for one, or omit it to list active projects.',
     })
     @toolparam({
         key: 'id',

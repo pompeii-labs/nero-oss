@@ -1,4 +1,4 @@
-/** Tiny ANSI helpers. No dependency — the CLI stays lean. */
+/** Tiny ANSI helpers. No dependency - the CLI stays lean. */
 const useColor = process.stdout.isTTY && process.env.NO_COLOR === undefined;
 const wrap = (code: string) => (s: string | number) =>
     useColor ? `\x1b[${code}m${s}\x1b[0m` : `${s}`;

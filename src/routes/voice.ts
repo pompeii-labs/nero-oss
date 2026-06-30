@@ -151,7 +151,7 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                     });
                     flux.onSpeechDetected = () => {
                         // Mere sound onset (incl. Nero's own voice echoing into the
-                        // mic) does NOT barge — only actual transcribed words do.
+                        // mic) does NOT barge - only actual transcribed words do.
                         if (!isBusy())
                             ws.send(JSON.stringify({ type: 'turn', state: 'listening' }));
                     };

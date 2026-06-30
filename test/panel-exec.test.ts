@@ -14,7 +14,7 @@ function stubFetch(impl: (url: string, init?: RequestInit) => Response | Promise
         Promise.resolve(impl(String(url), init))) as typeof fetch;
 }
 
-describe('runPanelFunction — shell', () => {
+describe('runPanelFunction - shell', () => {
     test('merges a JSON object from stdout into state', async () => {
         const fn: PanelFn = { kind: 'shell', cmd: `echo '{"cpu":42,"mem":"3GB"}'` };
         expect(await runPanelFunction(fn, NO_SECRETS)).toEqual({ cpu: 42, mem: '3GB' });
@@ -36,7 +36,7 @@ describe('runPanelFunction — shell', () => {
     });
 });
 
-describe('runPanelFunction — http', () => {
+describe('runPanelFunction - http', () => {
     test('parses a JSON object response and merges it', async () => {
         stubFetch(() => new Response(JSON.stringify({ price: 100 }), { status: 200 }));
         const fn: PanelFn = { kind: 'http', url: 'https://api.test/x' };
@@ -81,7 +81,7 @@ describe('runPanelFunction — http', () => {
     });
 });
 
-describe('runPanelFunction — js', () => {
+describe('runPanelFunction - js', () => {
     test('returns an object that merges into state', async () => {
         const fn: PanelFn = { kind: 'js', code: 'return { a: 1, b: 2 };' };
         expect(await runPanelFunction(fn, NO_SECRETS)).toEqual({ a: 1, b: 2 });

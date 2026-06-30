@@ -45,7 +45,7 @@ export function buildUtilities(opts: BuildUtilitiesOpts = {}): MagmaUtilities[] 
 }
 
 /** A focused tool set for project worker agents: act on the world (web, files,
- *  shell, browser, memory) but NOT the orchestration tools — no display/ask/notify,
+ *  shell, browser, memory) but NOT the orchestration tools - no display/ask/notify,
  *  no spawning sub-projects, no MCP bloat. */
 export function buildWorkerUtilities(): MagmaUtilities[] {
     const cfg = loadConfig();

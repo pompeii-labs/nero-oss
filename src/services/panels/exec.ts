@@ -39,7 +39,7 @@ function parseMaybeJson(text: string): unknown {
  *  - http:  fetch a URL, parse the response (JSON merged, else raw text).
  *  - js:    run Nero-authored async JS (with `fetch` in scope) that returns a value.
  * In this single-user/local trust model js runs with the same trust as shell (it is
- * not a hardened sandbox) — both let Nero act on the machine on the user's behalf.
+ * not a hardened sandbox) - both let Nero act on the machine on the user's behalf.
  */
 export async function runPanelFunction(
     fn: PanelFn,

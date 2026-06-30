@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { loadConfig } from '../../config';
 
 // Embeddings via OpenRouter's OpenAI-compatible /embeddings endpoint (verified
-// to work with the platform OPENROUTER_API_KEY — no separate OpenAI key).
+// to work with the platform OPENROUTER_API_KEY - no separate OpenAI key).
 // text-embedding-3-small is 1536-dim and cheap. Returns null when no key is
 // configured so memory degrades to a no-op rather than throwing.
 const MAX_INPUT_CHARS = 8_000;

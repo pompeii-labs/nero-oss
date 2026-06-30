@@ -46,7 +46,7 @@ d('memory recall (live: OpenRouter embeddings + Lux vectors)', () => {
         // Live dependency: if the embedding provider is unavailable this run, skip
         // the assertions rather than fail (same spirit as the Lux-gated skip above).
         if (first.status === 'skipped') {
-            console.warn('[memory.test] embeddings unavailable — skipping live assertions');
+            console.warn('[memory.test] embeddings unavailable - skipping live assertions');
             return;
         }
         expect(first.status).toBe('added');

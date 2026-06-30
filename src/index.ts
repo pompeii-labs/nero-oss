@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * The `nero` CLI — a thin host-side manager for the Nero stack (docker compose
+ * The `nero` CLI - a thin host-side manager for the Nero stack (docker compose
  * in ~/.nero), modeled on the Lux CLI. The server itself runs in a container
  * from `service/entrypoint.ts`; this binary never serves anything.
  */
@@ -9,7 +9,7 @@ import * as cmd from './cli/commands';
 import { c, line } from './cli/term';
 import pkg from '../package.json';
 
-const HELP = `${c.bold('nero')} ${c.dim('— your self-hosted AI companion')}
+const HELP = `${c.bold('nero')} ${c.dim('- your self-hosted AI companion')}
 
 ${c.dim('Usage:')} nero <command> [options]
 
@@ -33,7 +33,7 @@ ${c.bold('Config')}
 
   ${c.dim('-v, --version    -h, --help')}
 
-${c.dim('Config lives in ~/.nero/.env (sacred — the CLI only ever adds missing keys).')}`;
+${c.dim('Config lives in ~/.nero/.env (sacred - the CLI only ever adds missing keys).')}`;
 
 /** Minimal arg parser: --flag value, -f bool, positionals. */
 function parse(args: string[]): { pos: string[]; flags: Record<string, string | true> } {

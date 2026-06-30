@@ -11,7 +11,7 @@ function resolve(idArg: unknown): BrowserSession | string {
     const all = listSessions();
     if (all.length === 1) return all[0];
     if (all.length === 0) return 'No browser is open. Use open_browser first.';
-    return `Multiple browsers open — pass session. Open: ${all.map((s) => s.id).join(', ')}.`;
+    return `Multiple browsers open - pass session. Open: ${all.map((s) => s.id).join(', ')}.`;
 }
 
 function fmt(s: PageSnapshot): string {
@@ -20,7 +20,7 @@ function fmt(s: PageSnapshot): string {
         (e) => `[${e.ref}] ${e.role}${e.typeable ? '(input)' : ''} ${JSON.stringify(e.name)}`,
     );
     const more = s.count > shown.length ? `\n…(${s.count} interactive elements total)` : '';
-    return `PAGE: ${s.title || '(untitled)'} — ${s.url}\nELEMENTS (act by ref number):\n${lines.join('\n')}${more}\n\nTEXT:\n${s.text}`;
+    return `PAGE: ${s.title || '(untitled)'} - ${s.url}\nELEMENTS (act by ref number):\n${lines.join('\n')}${more}\n\nTEXT:\n${s.text}`;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -33,7 +33,7 @@ export class BrowserAgentUtility {
     @tool({
         name: 'read_page',
         description:
-            'Read the current page of an open browser panel as a numbered list of interactive elements (links, buttons, inputs) plus the page text. Call this before acting, and note that refs are only valid for THIS snapshot — they change after any click/navigation, so re-read.',
+            'Read the current page of an open browser panel as a numbered list of interactive elements (links, buttons, inputs) plus the page text. Call this before acting, and note that refs are only valid for THIS snapshot - they change after any click/navigation, so re-read.',
     })
     @toolparam({
         key: 'session',
@@ -87,7 +87,7 @@ export class BrowserAgentUtility {
     @tool({
         name: 'browser_type',
         description:
-            'Type text into an input element by ref (from the latest read_page). For passwords or any credential, DO NOT use this — use browser_fill_secret. Returns the new snapshot.',
+            'Type text into an input element by ref (from the latest read_page). For passwords or any credential, DO NOT use this - use browser_fill_secret. Returns the new snapshot.',
     })
     @toolparam({ key: 'ref', type: 'number', required: true })
     @toolparam({
