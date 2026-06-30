@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
-import { rowTokens, foldBoundary } from '../src/harness/compaction';
-import { countTokens } from '../src/harness/tokens';
+import { rowTokens, foldBoundary } from '../src/services/harness/compaction';
+import { countTokens } from '../src/services/harness/tokens';
 import type { Message } from '../src/models/message';
 
 function textRow(id: number, content: string): Message {

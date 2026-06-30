@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { chunkOnWhitespace } from '../src/voice/tts';
+import { chunkOnWhitespace } from '../src/services/voice/tts';
 
 describe('chunkOnWhitespace', () => {
     it('holds a partial word until a boundary forms', () => {

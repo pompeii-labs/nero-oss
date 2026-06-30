@@ -1,5 +1,5 @@
 import { describe, test, expect, afterAll } from 'bun:test';
-import { Dispatcher, type RunnableAgent } from '../src/harness/dispatch';
+import { Dispatcher, type RunnableAgent } from '../src/services/harness/dispatch';
 import { Dispatch } from '../src/models/dispatch';
 import { getLux } from '../src/lib/lux';
 import type { Messages } from '../src/lux/types';

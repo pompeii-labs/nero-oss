@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { createServer } from '../src/service';
-import type { DispatchHandle } from '../src/harness/dispatch';
+import type { DispatchHandle } from '../src/services/harness/dispatch';
 
 let server: ReturnType<typeof createServer>;
 let lastInput: { text: string } | null = null;

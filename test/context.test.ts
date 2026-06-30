@@ -1,5 +1,9 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { getContextWindow, DEFAULT_CONTEXT, __resetContextCache } from '../src/harness/context';
+import {
+    getContextWindow,
+    DEFAULT_CONTEXT,
+    __resetContextCache,
+} from '../src/services/harness/context';
 
 const realFetch = globalThis.fetch;
 

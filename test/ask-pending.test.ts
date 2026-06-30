@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { waitForAnswer, deliverAnswer } from '../src/ask/pending';
+import { waitForAnswer, deliverAnswer } from '../src/services/ask/pending';
 
 describe('ask pending registry', () => {
     test('deliverAnswer resolves the waiter with the choices', async () => {

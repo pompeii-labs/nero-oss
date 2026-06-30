@@ -1,19 +1,19 @@
 import { loadUtilities } from '@pompeii-labs/magma';
 import type { MagmaUtilities } from '@pompeii-labs/magma/types';
 import { loadConfig } from '../config';
-import { MemoryUtility } from '../memory/tool';
+import { MemoryUtility } from '../services/memory/tool';
 import { FileUtility } from './files';
 import { BashUtility } from './bash';
 import { WebUtility } from './web';
-import { McpConnectUtility } from '../mcp/tool';
-import { mcpUtilities } from '../mcp/bridge';
-import { DisplayUtility } from '../display/tool';
-import { SecretsUtility } from '../secrets/tool';
-import { AskUtility } from '../ask/tool';
-import { NotifyUtility } from '../mediums/tool';
-import { BrowserOpenUtility } from '../browser/tool';
-import { BrowserAgentUtility } from '../browser/agent-tool';
-import { ProjectUtility } from '../projects/tool';
+import { McpConnectUtility } from '../services/mcp/tool';
+import { mcpUtilities } from '../services/mcp/bridge';
+import { DisplayUtility } from '../services/display/tool';
+import { SecretsUtility } from '../services/secrets/tool';
+import { AskUtility } from '../services/ask/tool';
+import { NotifyUtility } from '../services/mediums/tool';
+import { BrowserOpenUtility } from '../services/browser/tool';
+import { BrowserAgentUtility } from '../services/browser/agent-tool';
+import { ProjectUtility } from '../services/projects/tool';
 
 export interface BuildUtilitiesOpts {
     /** Bridge every connected MCP server's tools (138+ schemas). Off for voice,

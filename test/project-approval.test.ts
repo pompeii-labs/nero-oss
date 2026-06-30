@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
-import { waitForApproval, deliverApproval } from '../src/projects/approval';
-import { Pricing } from '../src/projects/pricing';
+import { waitForApproval, deliverApproval } from '../src/services/projects/approval';
+import { Pricing } from '../src/services/projects/pricing';
 
 describe('project approval registry', () => {
     test('deliverApproval resolves the waiter with run + budget', async () => {

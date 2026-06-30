@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { countTokens } from '../src/harness/tokens';
+import { countTokens } from '../src/services/harness/tokens';
 
 describe('countTokens', () => {
     test('empty string is zero', () => {

@@ -1,7 +1,7 @@
 import { createBunWebSocket } from 'hono/bun';
 import { loadConfig } from '../config';
 import { createApp } from './app';
-import type { NeroDeps } from './routes/nero';
+import type { NeroDeps } from '../routes/nero';
 
 export interface ServeOpts {
     port?: number;

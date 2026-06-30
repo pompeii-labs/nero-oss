@@ -1,6 +1,6 @@
 import { DataModel } from './datamodel';
 import { getLux, unwrap } from '../lib/lux';
-import { embed } from '../memory/embed';
+import { embed } from '../services/memory/embed';
 import type { Memories } from '../lux/types';
 
 const DUPLICATE_SIMILARITY = 0.95; // >= this = same fact, don't re-insert

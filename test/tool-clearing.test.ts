@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
 import OpenAI from 'openai';
-import { NeroAgent } from '../src/harness/agent';
+import { NeroAgent } from '../src/services/harness/agent';
 import type { MagmaMessage } from '@pompeii-labs/magma/types';
 
 const stubClient = new OpenAI({ apiKey: 'test-key', baseURL: 'http://localhost:1' });

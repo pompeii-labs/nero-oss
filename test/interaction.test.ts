@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { formatInteraction } from '../src/panels/interaction';
+import { formatInteraction } from '../src/services/panels/interaction';
 import type { Panel } from '../src/models/panel';
 
 const panel = { title: 'Dashboard' } as Panel;

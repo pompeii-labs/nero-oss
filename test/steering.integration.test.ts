@@ -1,7 +1,7 @@
 import { describe, test, expect, afterAll } from 'bun:test';
 import OpenAI from 'openai';
-import { NeroAgent } from '../src/harness/agent';
-import { Dispatcher, type RunnableAgent } from '../src/harness/dispatch';
+import { NeroAgent } from '../src/services/harness/agent';
+import { Dispatcher, type RunnableAgent } from '../src/services/harness/dispatch';
 import { Dispatch } from '../src/models/dispatch';
 import { getLux } from '../src/lib/lux';
 import type { MagmaToolResult } from '@pompeii-labs/magma/types';

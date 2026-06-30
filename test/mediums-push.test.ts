@@ -1,5 +1,5 @@
 import { describe, test, expect, afterEach } from 'bun:test';
-import { pushMedium } from '../src/mediums/push';
+import { pushMedium } from '../src/services/mediums/push';
 
 const realFetch = globalThis.fetch;
 afterEach(() => {

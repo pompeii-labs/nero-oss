@@ -1,7 +1,7 @@
 import { DataModel } from './datamodel';
 import { getLux, unwrap } from '../lib/lux';
 import type { McpConnections } from '../lux/types';
-import type { StoredOAuthData } from '../mcp/oauth';
+import type { StoredOAuthData } from '../services/mcp/oauth';
 
 export type McpTransport = 'http' | 'sse' | 'stdio';
 

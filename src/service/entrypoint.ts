@@ -1,10 +1,10 @@
 import { loadConfig } from '../config';
 import { isLuxConnected, ensureAnonGrants } from '../lib/lux';
 import { Logger } from '../lib/logger';
-import { getMcpClient } from '../mcp/client';
+import { getMcpClient } from '../services/mcp/client';
 import { Dispatch } from '../models/dispatch';
 import { Question } from '../models/question';
-import { resumeProjects } from '../projects/runner';
+import { resumeProjects } from '../services/projects/runner';
 import { createServer } from './index';
 
 const log = new Logger('nero');

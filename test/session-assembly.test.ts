@@ -4,7 +4,7 @@ import {
     coalesce,
     trimToBudget,
     messageToText,
-} from '../src/harness/session';
+} from '../src/services/harness/session';
 import type { Message } from '../src/models/message';
 import type { MagmaMessageType } from '@pompeii-labs/magma/types';
 
