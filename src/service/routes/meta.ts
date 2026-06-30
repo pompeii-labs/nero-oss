@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { loadConfig } from '../../config';
-import { isLuxConnected } from '../../lux/client';
+import { isLuxConnected } from '../../lib/lux';
 
 /** Health + browser bootstrap (Lux url + publishable key for direct .live()). */
 export function metaRoutes(): Hono {

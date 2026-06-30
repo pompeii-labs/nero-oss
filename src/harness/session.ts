@@ -1,10 +1,10 @@
 import type { MagmaMessageType, MagmaImage } from '@pompeii-labs/magma/types';
-import type { MessageRow, AttachmentRef } from '../data/messages';
+import { Message } from '../models/message';
+import type { AttachmentRef } from '../models/message';
 import { countTokens } from './tokens';
 import { getContextWindow } from './context';
-import { resolveModel } from '../data/settings';
-import * as messagesData from '../data/messages';
-import * as compactionData from '../data/compaction';
+import { Settings } from '../models/settings';
+import { Compaction } from '../models/compaction';
 
 type Magma = MagmaMessageType;
 
@@ -101,7 +101,7 @@ export function coalesce(messages: Magma[]): Magma[] {
  * turns; each tool_call becomes a paired assistant `tool_call` + user
  * `tool_result` (same id) so Magma keeps the pair.
  */
-export function rowsToSessionMessages(rows: MessageRow[], opts: RowMapOpts = {}): Magma[] {
+export function rowsToSessionMessages(rows: Message[], opts: RowMapOpts = {}): Magma[] {
     const messages: Magma[] = [];
 
     for (const row of rows) {
@@ -263,8 +263,8 @@ export async function buildSessionMessages(
         tailLimit?: number;
     } = {},
 ): Promise<Magma[]> {
-    const comp = await compactionData.getLatest();
-    const rows = await messagesData.getSessionHistory({
+    const comp = await Compaction.getLatest();
+    const rows = await Message.getSessionHistory({
         since: opts.tailLimit ? undefined : comp?.through_at,
         limit: opts.tailLimit ?? (comp ? undefined : COLD_START_WINDOW),
     });
@@ -301,7 +301,7 @@ export async function buildSessionMessages(
           ]
         : mapped;
 
-    const window = await getContextWindow(await resolveModel());
+    const window = await getContextWindow(await Settings.resolveModel());
     const budget = window * EMERGENCY_RATIO;
     const tokens = out.reduce((sum, m) => sum + countTokens(messageToText(m)), 0);
     if (tokens <= budget) return out;

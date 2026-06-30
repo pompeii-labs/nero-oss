@@ -69,8 +69,8 @@ export function logs(tail: string | undefined, follow: boolean): void {
 // ---- mcp (declarative: writes desired state to Lux) ----
 
 export async function mcpList(): Promise<void> {
-    const mcp = await import('../data/mcp');
-    const rows = await mcp.list();
+    const { McpConnection } = await import('../models/mcp-connection');
+    const rows = await McpConnection.listAll();
     if (!rows.length) {
         line(c.dim('No MCP connections. Add one with `nero mcp add <name> <url>`.'));
         return;
@@ -94,8 +94,8 @@ export interface McpAddOpts {
 export async function mcpAdd(name: string, url: string, opts: McpAddOpts): Promise<void> {
     if (!name || !url)
         die('Usage: nero mcp add <name> <url> [--transport http|sse|stdio] [--key <token>]');
-    const mcp = await import('../data/mcp');
-    await mcp.upsert({
+    const { McpConnection } = await import('../models/mcp-connection');
+    await McpConnection.upsert({
         name,
         url,
         transport: opts.transport ?? 'http',
@@ -108,30 +108,30 @@ export async function mcpAdd(name: string, url: string, opts: McpAddOpts): Promi
 
 export async function mcpRemove(name: string): Promise<void> {
     if (!name) die('Usage: nero mcp remove <name>');
-    const mcp = await import('../data/mcp');
-    await mcp.remove(name);
+    const { McpConnection } = await import('../models/mcp-connection');
+    await McpConnection.removeByName(name);
     ok(`Removed ${c.bold(name)}.`);
 }
 
 export async function mcpReconnect(name: string): Promise<void> {
     if (!name) die('Usage: nero mcp reconnect <name>');
-    const mcp = await import('../data/mcp');
-    const conn = await mcp.getByName(name);
+    const { McpConnection } = await import('../models/mcp-connection');
+    const conn = await McpConnection.getByName(name);
     if (!conn) die(`No MCP connection named ${c.bold(name)}.`);
-    await mcp.upsert({ name, disabled: false });
+    await McpConnection.upsert({ name, disabled: false });
     ok(`Flagged ${c.bold(name)} for reconnect.`);
 }
 
 // ---- model ----
 
 export async function model(slug?: string): Promise<void> {
-    const settings = await import('../data/settings');
+    const { Settings } = await import('../models/settings');
     if (!slug) {
-        const current = (await settings.getModel().catch(() => null)) ?? loadConfig().model;
+        const current = (await Settings.getModel().catch(() => null)) ?? loadConfig().model;
         kv('model', current);
         return;
     }
-    await settings.setModel(slug);
+    await Settings.setModel(slug);
     ok(`Model set to ${c.bold(slug)}. Takes effect on the next message.`);
 }
 
@@ -167,7 +167,7 @@ export async function doctor(): Promise<void> {
 
     let luxReachable = false;
     try {
-        const { getLux } = await import('../lux/client');
+        const { getLux } = await import('../lib/lux');
         await getLux().table('mcp_connections').select().limit(1);
         luxReachable = true;
     } catch {

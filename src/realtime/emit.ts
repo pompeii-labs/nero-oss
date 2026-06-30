@@ -1,5 +1,5 @@
-import * as dispatches from '../data/dispatches';
-import type { DispatchActivity, DispatchStatus } from '../data/dispatches';
+import { Dispatch } from '../models/dispatch';
+import type { DispatchActivity, DispatchStatus } from '../models/dispatch';
 import type { AgentActivity } from '../harness/activity';
 
 /**
@@ -39,9 +39,10 @@ export function createEmitter(dispatchId: string, opts: { flushMs?: number } = {
     async function flush(): Promise<void> {
         if (!dirty || stopped) return;
         dirty = false;
-        await dispatches
-            .update(dispatchId, { streaming_text: text, activities: [...activities.values()] })
-            .catch((e) => console.error('[emit] flush failed:', e));
+        await Dispatch.update(dispatchId, {
+            streaming_text: text,
+            activities: [...activities.values()],
+        }).catch((e) => console.error('[emit] flush failed:', e));
     }
 
     const timer = setInterval(() => void flush(), opts.flushMs ?? FLUSH_MS);
@@ -57,13 +58,11 @@ export function createEmitter(dispatchId: string, opts: { flushMs?: number } = {
             dirty = true;
         },
         async status(s) {
-            await dispatches
-                .update(dispatchId, {
-                    status: s,
-                    streaming_text: text,
-                    activities: [...activities.values()],
-                })
-                .catch((e) => console.error('[emit] status failed:', e));
+            await Dispatch.update(dispatchId, {
+                status: s,
+                streaming_text: text,
+                activities: [...activities.values()],
+            }).catch((e) => console.error('[emit] status failed:', e));
         },
         setFullText(t) {
             text = t;

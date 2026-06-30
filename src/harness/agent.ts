@@ -17,7 +17,7 @@ import { countTokens } from './tokens';
 import { truncateToolResult } from './truncate';
 import type { AgentActivity } from './activity';
 import { buildUtilities } from '../tools';
-import * as messagesData from '../data/messages';
+import { Message } from '../models/message';
 
 /** Keep recent tool output verbatim up to this fraction of the window; clear
  *  older results (block + id preserved so call/result pairing holds). */
@@ -268,18 +268,16 @@ export class NeroAgent extends MagmaAgent {
         });
 
         if (this.currentDispatchId) {
-            await messagesData
-                .insertToolCall(
-                    {
-                        tool_id: result.id,
-                        fn_name: result.fn_name,
-                        args: result.call.fn_args,
-                        result: result.result,
-                        status: result.error ? 'error' : 'success',
-                    },
-                    this.currentDispatchId,
-                )
-                .catch((e) => console.error('[nero] persist tool row failed:', e));
+            await Message.insertToolCall(
+                {
+                    tool_id: result.id,
+                    fn_name: result.fn_name,
+                    args: result.call.fn_args,
+                    result: result.result,
+                    status: result.error ? 'error' : 'success',
+                },
+                this.currentDispatchId,
+            ).catch((e) => console.error('[nero] persist tool row failed:', e));
         }
 
         // Fold in any steering messages queued during this tool run.

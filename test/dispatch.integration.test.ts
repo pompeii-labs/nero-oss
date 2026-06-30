@@ -1,7 +1,7 @@
 import { describe, test, expect, afterAll } from 'bun:test';
 import { startDispatch, isActive, type RunnableAgent } from '../src/harness/dispatch';
-import * as dispatches from '../src/data/dispatches';
-import { getLux } from '../src/lux/client';
+import { Dispatch } from '../src/models/dispatch';
+import { getLux } from '../src/lib/lux';
 import type { Messages } from '../src/lux/types';
 
 const HAS_LUX = Boolean(process.env.LUX_SECRET_KEY && process.env.LUX_URL);
@@ -66,7 +66,7 @@ d('dispatch round-trip', () => {
         await handle.done;
         expect(isActive()).toBe(false);
 
-        const row = await dispatches.get(handle.dispatchId);
+        const row = await Dispatch.get(handle.dispatchId);
         expect(row!.status).toBe('done');
         const act = row!.activities.find((a) => a.id === 'act1');
         expect(act?.status).toBe('success');

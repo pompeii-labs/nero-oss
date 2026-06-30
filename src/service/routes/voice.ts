@@ -5,7 +5,7 @@ import { loadConfig } from '../../config';
 import { runVoiceTurn } from '../../voice/turn';
 import { StreamingTTS, type VoiceTTS } from '../../voice/tts';
 import { HumeStreamingTTS } from '../../voice/hume';
-import * as panelsData from '../../data/panels';
+import { Panel } from '../../models/panel';
 import { formatInteraction } from '../../panels/interaction';
 
 let nextPeer = 1;
@@ -253,7 +253,7 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                             value: msg.value,
                         };
                         void (async () => {
-                            const panel = await panelsData.get(pid);
+                            const panel = await Panel.get(pid);
                             if (panel) {
                                 void runTurn(formatInteraction(panel, payload), ws, {
                                     interaction: true,

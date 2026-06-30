@@ -1,5 +1,5 @@
 import { loadConfig } from '../config';
-import * as mcpData from '../data/mcp';
+import { McpConnection } from '../models/mcp-connection';
 import { getMcpClient } from './client';
 import {
     discoverOAuthMetadata,
@@ -29,7 +29,7 @@ function callbackUri(): string {
 }
 
 async function connectStored(name: string): Promise<{ ok: boolean; message: string }> {
-    const conn = await mcpData.getByName(name);
+    const conn = await McpConnection.getByName(name);
     if (!conn) return { ok: false, message: `Connection ${name} not found.` };
     try {
         await getMcpClient().connectOne(conn);
@@ -56,7 +56,7 @@ export async function startConnect(input: {
     apiKey?: string;
 }): Promise<StartConnectResult> {
     if (input.apiKey) {
-        await mcpData.upsert({
+        await McpConnection.upsert({
             name: input.name,
             url: input.url,
             transport: 'http',
@@ -69,7 +69,7 @@ export async function startConnect(input: {
     const meta = await discoverOAuthMetadata(input.url);
     if (!meta?.authServer) {
         // No OAuth advertised: try connecting as an open server.
-        await mcpData.upsert({ name: input.name, url: input.url, transport: 'http' });
+        await McpConnection.upsert({ name: input.name, url: input.url, transport: 'http' });
         const r = await connectStored(input.name);
         return { status: r.ok ? 'connected' : 'error', message: r.message };
     }
@@ -100,7 +100,7 @@ export async function startConnect(input: {
         authServer: meta.authServer,
         registration,
     });
-    await mcpData.upsert({ name: input.name, url: input.url, transport: 'http' });
+    await McpConnection.upsert({ name: input.name, url: input.url, transport: 'http' });
 
     return {
         status: 'auth_required',
@@ -133,7 +133,7 @@ export async function completeConnect(
         tokens,
         authServerMetadata: p.authServer,
     };
-    await mcpData.updateAuth(p.name, { oauth });
+    await McpConnection.updateAuth(p.name, { oauth });
     const r = await connectStored(p.name);
     return { ok: r.ok, name: p.name, message: r.message };
 }
@@ -145,6 +145,6 @@ export async function reconnect(name: string): Promise<{ ok: boolean; message: s
 
 export async function disconnect(name: string): Promise<string> {
     await getMcpClient().disconnect(name);
-    await mcpData.remove(name);
+    await McpConnection.removeByName(name);
     return `Disconnected ${name}.`;
 }

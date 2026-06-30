@@ -5,10 +5,10 @@ import {
     trimToBudget,
     messageToText,
 } from '../src/harness/session';
-import type { MessageRow } from '../src/data/messages';
+import type { Message } from '../src/models/message';
 import type { MagmaMessageType } from '@pompeii-labs/magma/types';
 
-function row(partial: Partial<MessageRow> & { id: number }): MessageRow {
+function row(partial: Partial<Message> & { id: number }): Message {
     return {
         id: partial.id,
         role: partial.role ?? 'user',
@@ -19,7 +19,7 @@ function row(partial: Partial<MessageRow> & { id: number }): MessageRow {
         medium: 'web',
         dispatch_id: null,
         created_at: partial.id,
-    };
+    } as Message;
 }
 
 describe('rowsToSessionMessages', () => {

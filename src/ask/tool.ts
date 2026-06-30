@@ -1,7 +1,7 @@
 import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
-import * as questions from '../data/questions';
+import { Question, type AskItem, type AskOption } from '../models/question';
 import { waitForAnswer } from './pending';
 
 const ASK_TIMEOUT_MS = 5 * 60 * 1000;
@@ -24,7 +24,7 @@ export class AskUtility {
             'JSON array of 1-4 questions. Each: {"question":"...", "header":"<=12 char chip", "options":[{"label":"short choice","description":"the tradeoff"}], "multi":false}. 2-4 options per question; description optional; multi allows picking several.',
     })
     async ask(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        let items: questions.AskItem[];
+        let items: AskItem[];
         try {
             const parsed = JSON.parse(String(call.fn_args.questions ?? '[]'));
             if (!Array.isArray(parsed)) return 'questions must be a JSON array.';
@@ -38,7 +38,7 @@ export class AskUtility {
                             label: String(o?.label ?? '').trim(),
                             description: o?.description ? String(o.description) : undefined,
                         }))
-                        .filter((o: questions.AskOption) => o.label),
+                        .filter((o: AskOption) => o.label),
                 }))
                 .filter((q) => q.question && q.options.length >= 2);
         } catch {
@@ -49,11 +49,11 @@ export class AskUtility {
         }
         if (items.length > 4) items = items.slice(0, 4);
 
-        const set = await questions.create({ items });
+        const set = await Question.create({ items });
         const res = await waitForAnswer(set.id, ASK_TIMEOUT_MS);
 
         if (res.kind === 'timeout') {
-            await questions.resolve(set.id, 'timeout', null);
+            await Question.resolve(set.id, 'timeout', null);
             return 'The user did not answer in time. Use your best judgment or raise it again later.';
         }
         if (res.kind === 'cancelled') {

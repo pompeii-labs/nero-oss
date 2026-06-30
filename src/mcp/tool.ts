@@ -3,7 +3,7 @@ import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
 import { startConnect, disconnect } from './connect';
 import { getMcpClient } from './client';
-import * as mcpData from '../data/mcp';
+import { McpConnection } from '../models/mcp-connection';
 
 /** Chat-native integration management: connect an MCP server (OAuth or API key),
  *  list connected integrations + their tools, disconnect. */
@@ -44,7 +44,7 @@ export class McpConnectUtility {
             'List configured integrations and which are currently connected, with their tool counts.',
     })
     async list_integrations(_call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const conns = await mcpData.list();
+        const conns = await McpConnection.listAll();
         if (conns.length === 0) return 'No integrations configured yet.';
         const client = getMcpClient();
         return conns

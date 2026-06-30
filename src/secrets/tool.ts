@@ -1,7 +1,7 @@
 import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
-import * as secrets from '../data/secrets';
+import { Secret } from '../models/secret';
 
 /** Nero's awareness of the secret pool. He can see what's available and stage the
  *  ones he needs, but never reads a value: secrets are injected into panel
@@ -13,7 +13,7 @@ export class SecretsUtility {
             'List the secrets available to your panel functions (names and notes only, never the values). Use this before writing a function that needs an API key, so you reference the right name. Names you can use in functions as secrets.NAME (js), ${NAME} (http), or $NAME (shell).',
     })
     async list_secrets(_call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const all = await secrets.listMeta();
+        const all = await Secret.listMeta();
         if (!all.length) return 'No secrets set yet. Use request_secret to ask the user for one.';
         return all
             .map(
@@ -49,7 +49,7 @@ export class SecretsUtility {
             .replace(/[^A-Z0-9_]/g, '_');
         const description = String(call.fn_args.description ?? '').trim();
         if (!key) return 'Provide a key name.';
-        const r = await secrets.stage(key, description);
+        const r = await Secret.stage(key, description);
         return r === 'exists'
             ? `${key} already exists. Ask the user to set its value if it isn't yet.`
             : `Staged ${key}. Now tell the user you need them to set it: they can set it in the Workshop or via the secrets endpoint.`;

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import * as projects from '../../data/projects';
+import { Project } from '../../models/project';
 import { deliverApproval } from '../../projects/approval';
 import { scheduleReady } from '../../projects/runner';
 
@@ -16,7 +16,7 @@ export function projectRoutes(): Hono {
             note?: string;
         };
 
-        const p = await projects.get(id);
+        const p = await Project.get(id);
         if (!p) return c.json({ ok: false, error: 'not found' }, 404);
 
         if (b.action === 'run') {
@@ -33,31 +33,31 @@ export function projectRoutes(): Hono {
     });
 
     app.post('/v1/projects/:id/pause', async (c) => {
-        const p = await projects.get(c.req.param('id'));
+        const p = await Project.get(c.req.param('id'));
         if (!p) return c.json({ ok: false, error: 'not found' }, 404);
-        if (p.status === 'running') await projects.update(p.id, { status: 'paused' });
+        if (p.status === 'running') await Project.update(p.id, { status: 'paused' });
         return c.json({ ok: true });
     });
 
     app.post('/v1/projects/:id/resume', async (c) => {
-        const p = await projects.get(c.req.param('id'));
+        const p = await Project.get(c.req.param('id'));
         if (!p) return c.json({ ok: false, error: 'not found' }, 404);
         if (p.status !== 'paused') return c.json({ ok: true });
         const b = (await c.req.json().catch(() => ({}))) as { budgetUsd?: number };
         const raise = Number(b.budgetUsd);
-        await projects.update(p.id, {
+        await Project.update(p.id, {
             status: 'running',
-            ...(Number.isFinite(raise) && raise > p.budgetUsd ? { budgetUsd: raise } : {}),
+            ...(Number.isFinite(raise) && raise > p.budget_usd ? { budget_usd: raise } : {}),
         });
         await scheduleReady(p.id);
         return c.json({ ok: true });
     });
 
     app.post('/v1/projects/:id/cancel', async (c) => {
-        const p = await projects.get(c.req.param('id'));
+        const p = await Project.get(c.req.param('id'));
         if (!p) return c.json({ ok: false, error: 'not found' }, 404);
         if (p.status !== 'done' && p.status !== 'cancelled')
-            await projects.update(p.id, { status: 'cancelled' });
+            await Project.update(p.id, { status: 'cancelled' });
         return c.json({ ok: true });
     });
 

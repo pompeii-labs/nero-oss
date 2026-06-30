@@ -1,7 +1,7 @@
 import { describe, test, expect, afterAll } from 'bun:test';
-import { getLux } from '../src/lux/client';
-import * as messages from '../src/data/messages';
-import * as compaction from '../src/data/compaction';
+import { getLux } from '../src/lib/lux';
+import { Message } from '../src/models/message';
+import { Compaction } from '../src/models/compaction';
 
 const HAS_LUX = Boolean(process.env.LUX_SECRET_KEY && process.env.LUX_URL);
 const d = HAS_LUX ? describe : describe.skip;
@@ -16,18 +16,18 @@ d('data layer (Lux)', () => {
     });
 
     test('messages insert + ordered session history', async () => {
-        const u = await messages.insertUser('hello nero', { dispatchId: DISPATCH });
-        const tc = await messages.insertToolCall(
+        const u = await Message.insertUser('hello nero', { dispatch_id: DISPATCH });
+        const tc = await Message.insertToolCall(
             { tool_id: 't1', fn_name: 'search', args: { q: 'x' }, result: 'ok', status: 'success' },
             DISPATCH,
         );
-        const a = await messages.insertAgentText('hi there', DISPATCH);
+        const a = await Message.insertAgentText('hi there', DISPATCH);
 
         expect(typeof u.id).toBe('number');
         expect(tc.id).toBeGreaterThan(u.id);
         expect(a.id).toBeGreaterThan(tc.id);
 
-        const hist = (await messages.getSessionHistory({ since: u.id - 1 })).filter(
+        const hist = (await Message.getSessionHistory({ since: u.id - 1 })).filter(
             (m) => m.dispatch_id === DISPATCH,
         );
         const ids = hist.map((m) => m.id);
@@ -39,11 +39,11 @@ d('data layer (Lux)', () => {
     });
 
     test('getHumanSince returns only user messages after the watermark', async () => {
-        const first = await messages.insertUser('first', { dispatchId: DISPATCH });
-        await messages.insertAgentText('assistant reply', DISPATCH);
-        const second = await messages.insertUser('second', { dispatchId: DISPATCH });
+        const first = await Message.insertUser('first', { dispatch_id: DISPATCH });
+        await Message.insertAgentText('assistant reply', DISPATCH);
+        const second = await Message.insertUser('second', { dispatch_id: DISPATCH });
 
-        const humans = (await messages.getHumanSince(first.id)).filter(
+        const humans = (await Message.getHumanSince(first.id)).filter(
             (m) => m.dispatch_id === DISPATCH,
         );
         expect(humans.every((m) => m.role === 'user' && m.type === 'message')).toBe(true);
@@ -52,9 +52,9 @@ d('data layer (Lux)', () => {
     });
 
     test('compaction create + getLatest', async () => {
-        const created = await compaction.create({ summary: `__test_${DISPATCH}`, throughAt: 42 });
+        const created = await Compaction.create({ summary: `__test_${DISPATCH}`, through_at: 42 });
         expect(created.through_at).toBe(42);
-        const latest = await compaction.getLatest();
+        const latest = await Compaction.getLatest();
         expect(latest).not.toBeNull();
         expect(latest!.created_at).toBeGreaterThanOrEqual(created.created_at);
     });

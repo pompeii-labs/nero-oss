@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { startConnect, completeConnect, disconnect, reconnect } from '../../mcp/connect';
 import { getMcpClient } from '../../mcp/client';
-import * as mcpData from '../../data/mcp';
+import { McpConnection } from '../../models/mcp-connection';
 
 function page(title: string, msg: string, ok: boolean): string {
     return `<!doctype html><html><head><meta charset="utf-8"><title>Nero</title></head><body style="font-family:system-ui,sans-serif;background:#080a0d;color:#e0e5ed;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center;max-width:32rem;padding:2rem"><h2 style="color:${ok ? '#33ccff' : '#ff8080'}">${title}</h2><p>${msg}</p><p style="opacity:.5;font-size:.9rem">You can close this tab and head back to Nero.</p></div></body></html>`;
@@ -25,7 +25,7 @@ export function mcpRoutes(): Hono {
 
     // Sanitized list for the web (never returns tokens).
     app.get('/v1/mcp/list', async (c) => {
-        const conns = await mcpData.list();
+        const conns = await McpConnection.listAll();
         const client = getMcpClient();
         return c.json({
             integrations: conns.map((co) => ({

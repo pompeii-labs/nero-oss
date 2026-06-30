@@ -2,8 +2,8 @@ import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
 import { loadConfig } from '../config';
-import * as projects from '../data/projects';
-import * as tasks from '../data/project-tasks';
+import { Project } from '../models/project';
+import { ProjectTask } from '../models/project-task';
 import { waitForApproval } from './approval';
 import { launchProject } from './runner';
 
@@ -87,21 +87,23 @@ export class ProjectUtility {
         if (typeof parsed === 'string') return parsed;
 
         const estTotal = parsed.reduce((s, t) => s + t.estCostUsd, 0);
-        const project = await projects.create({
+        const project = await Project.create({
             title,
             goal,
             model: workerModel(),
-            estCostUsd: estTotal,
+            est_cost_usd: estTotal,
+            status: 'awaiting_approval',
         });
         for (let i = 0; i < parsed.length; i++) {
             const t = parsed[i];
-            await tasks.create({
-                projectId: project.id,
+            await ProjectTask.create({
+                project_id: project.id,
                 idx: i,
                 title: t.title,
                 description: t.description,
-                dependsOn: t.dependsOn,
+                depends_on: t.dependsOn,
                 tools: t.tools,
+                status: 'pending',
             });
         }
 
@@ -112,14 +114,14 @@ export class ProjectUtility {
             return `Approved. "${title}" is running in the background (${parsed.length} tasks, budget $${res.budgetUsd.toFixed(2)}). I'll let you know when it's done.`;
         }
         if (res.kind === 'tweak') {
-            await projects.update(project.id, { status: 'cancelled' });
+            await Project.update(project.id, { status: 'cancelled' });
             return `The user wants changes before running: "${res.note}". Revise the plan accordingly and call plan_project again.`;
         }
         if (res.kind === 'timeout') {
-            await projects.update(project.id, { status: 'cancelled' });
+            await Project.update(project.id, { status: 'cancelled' });
             return 'The user did not approve the plan in time. Hold off; mention they can ask again when ready.';
         }
-        await projects.update(project.id, { status: 'cancelled' });
+        await Project.update(project.id, { status: 'cancelled' });
         return 'The user cancelled the project. Do not run it.';
     }
 
@@ -137,21 +139,21 @@ export class ProjectUtility {
     async project_status(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
         const id = String(call.fn_args.id ?? '').trim();
         if (id) {
-            const p = await projects.get(id);
+            const p = await Project.get(id);
             if (!p) return 'No project with that id.';
-            const ts = await tasks.listByProject(id);
+            const ts = await ProjectTask.listByProject(id);
             const lines = ts.map(
                 (t) =>
-                    `  ${t.idx}. [${t.status}] ${t.title}${t.costUsd ? ` ($${t.costUsd.toFixed(3)})` : ''}`,
+                    `  ${t.idx}. [${t.status}] ${t.title}${t.cost_usd ? ` ($${t.cost_usd.toFixed(3)})` : ''}`,
             );
-            return `${p.title} — ${p.status}, spent $${p.spentUsd.toFixed(3)}${p.budgetUsd ? `/$${p.budgetUsd.toFixed(2)}` : ''}\n${lines.join('\n')}${p.result ? `\n\nResult:\n${p.result}` : ''}`;
+            return `${p.title}: ${p.status}, spent $${p.spent_usd.toFixed(3)}${p.budget_usd ? `/$${p.budget_usd.toFixed(2)}` : ''}\n${lines.join('\n')}${p.result ? `\n\nResult:\n${p.result}` : ''}`;
         }
-        const active = await projects.listByStatus('awaiting_approval', 'running', 'paused');
+        const active = await Project.listByStatus('awaiting_approval', 'running', 'paused');
         if (active.length === 0) return 'No active projects.';
         return active
             .map(
                 (p) =>
-                    `- ${p.title} (${p.id.slice(0, 8)}) — ${p.status}, spent $${p.spentUsd.toFixed(3)}${p.budgetUsd ? `/$${p.budgetUsd.toFixed(2)}` : ''}`,
+                    `- ${p.title} (${p.id.slice(0, 8)}): ${p.status}, spent $${p.spent_usd.toFixed(3)}${p.budget_usd ? `/$${p.budget_usd.toFixed(2)}` : ''}`,
             )
             .join('\n');
     }
@@ -168,11 +170,11 @@ export class ProjectUtility {
     })
     async cancel_project(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
         const id = String(call.fn_args.id ?? '').trim();
-        const p = await projects.get(id);
+        const p = await Project.get(id);
         if (!p) return 'No project with that id.';
         if (p.status === 'done' || p.status === 'cancelled')
             return `Project is already ${p.status}.`;
-        await projects.update(id, { status: 'cancelled' });
+        await Project.update(id, { status: 'cancelled' });
         return `Cancelled "${p.title}".`;
     }
 }

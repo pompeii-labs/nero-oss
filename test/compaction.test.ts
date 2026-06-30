@@ -1,9 +1,9 @@
 import { describe, test, expect } from 'bun:test';
 import { rowTokens, foldBoundary } from '../src/harness/compaction';
 import { countTokens } from '../src/harness/tokens';
-import type { MessageRow } from '../src/data/messages';
+import type { Message } from '../src/models/message';
 
-function textRow(id: number, content: string): MessageRow {
+function textRow(id: number, content: string): Message {
     return {
         id,
         role: 'user',
@@ -14,10 +14,10 @@ function textRow(id: number, content: string): MessageRow {
         medium: 'web',
         dispatch_id: null,
         created_at: id,
-    };
+    } as Message;
 }
 
-function toolRow(id: number, args: unknown, result: unknown): MessageRow {
+function toolRow(id: number, args: unknown, result: unknown): Message {
     return {
         id,
         role: 'assistant',
@@ -28,7 +28,7 @@ function toolRow(id: number, args: unknown, result: unknown): MessageRow {
         medium: 'web',
         dispatch_id: null,
         created_at: id,
-    };
+    } as unknown as Message;
 }
 
 describe('rowTokens', () => {
@@ -44,7 +44,7 @@ describe('rowTokens', () => {
 });
 
 describe('foldBoundary', () => {
-    const rows: MessageRow[] = Array.from({ length: 10 }, (_, i) =>
+    const rows: Message[] = Array.from({ length: 10 }, (_, i) =>
         textRow(i + 1, `message number ${i + 1} ` + 'filler '.repeat(10)),
     );
     const perRow = rowTokens(rows[0]);
@@ -75,7 +75,7 @@ describe('foldBoundary', () => {
     });
 
     test('boundary lands on whole rows, never splitting a tool_call', () => {
-        const mixed: MessageRow[] = [
+        const mixed: Message[] = [
             textRow(1, 'a '.repeat(50)),
             toolRow(2, { big: 'x '.repeat(50) }, 'y '.repeat(50)),
             textRow(3, 'newest'),

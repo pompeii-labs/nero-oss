@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import * as questions from '../../data/questions';
+import { Question } from '../../models/question';
 import { deliverAnswer } from '../../ask/pending';
 
 /** The user answering (or dismissing) a question Nero is blocked on. Persists the
@@ -18,8 +18,8 @@ export function askRoutes(): Hono {
             : [];
         const dismissed = b.dismiss === true || answers.length === 0;
 
-        if (await questions.get(id)) {
-            await questions.resolve(
+        if (await Question.get(id)) {
+            await Question.resolve(
                 id,
                 dismissed ? 'cancelled' : 'answered',
                 dismissed ? null : answers,

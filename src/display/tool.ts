@@ -1,9 +1,9 @@
 import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
-import * as devices from '../data/devices';
-import * as presence from '../data/presence';
-import * as panels from '../data/panels';
+import { Device } from '../models/device';
+import { Presence } from '../models/presence';
+import { Panel, type PanelFn, type PanelData } from '../models/panel';
 
 const PANEL_SCHEMA = `Components is a JSON array of nodes. Node types:
 - {"type":"text","text":"...","variant":"title|heading|body|caption|mono"}
@@ -35,11 +35,11 @@ Example: functions {"sys":{"kind":"shell","cmd":"echo '{\\"cpu\\":42}'","everyMs
 
 Panels are draggable and dismissable by the user; geometry stays in sync and you can read it with list_panels.`;
 
-async function resolveDevice(ref: string): Promise<devices.Device | null> {
+async function resolveDevice(ref: string): Promise<Device | null> {
     const t = ref.trim();
-    const ds = await devices.listOnline();
+    const ds = await Device.listOnline();
     if (!t) {
-        const here = await presence.get();
+        const here = await Presence.get();
         return ds.find((d) => d.id === here) ?? null;
     }
     return ds.find((d) => d.id === t || d.name.toLowerCase() === t.toLowerCase()) ?? null;
@@ -56,12 +56,12 @@ export class DisplayUtility {
             'List the screens on the network you can move to or throw panels onto: their names, ids, sizes, online status, and which one you are currently on.',
     })
     async list_devices(_call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const ds = await devices.listOnline();
+        const ds = await Device.listOnline();
         if (!ds.length) return 'No devices connected right now.';
-        const here = await presence.get();
+        const here = await Presence.get();
         const lines = ds.map(
             (d) =>
-                `${d.id === here ? '> ' : '  '}${d.name} [${d.id}] ${d.screenW}x${d.screenH} ${d.connected ? 'online' : 'offline'}`,
+                `${d.id === here ? '> ' : '  '}${d.name} [${d.id}] ${d.screen_w}x${d.screen_h} ${d.connected ? 'online' : 'offline'}`,
         );
         return `${lines.join('\n')}\n(> = where you are now)`;
     }
@@ -79,12 +79,12 @@ export class DisplayUtility {
     })
     async move_to(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
         const target = String(call.fn_args.device ?? '').trim();
-        const ds = await devices.listOnline();
+        const ds = await Device.listOnline();
         const match = ds.find(
             (d) => d.id === target || d.name.toLowerCase() === target.toLowerCase(),
         );
         if (!match) return `No device matching "${target}". Use list_devices to see options.`;
-        await presence.set(match.id);
+        await Presence.set(match.id);
         return `Moved to ${match.name}.`;
     }
 
@@ -136,7 +136,7 @@ export class DisplayUtility {
         }
         if (!Array.isArray(components)) return 'components must be a JSON array.';
         let state: Record<string, unknown> | undefined;
-        let functions: Record<string, panels.PanelFn> | undefined;
+        let functions: Record<string, PanelFn> | undefined;
         try {
             if (a.state != null) state = JSON.parse(String(a.state));
             if (a.functions != null) functions = JSON.parse(String(a.functions));
@@ -145,8 +145,8 @@ export class DisplayUtility {
         }
         const device = await resolveDevice(String(a.device ?? ''));
         if (!device) return 'No target screen. Run list_devices, or move somewhere first.';
-        const p = await panels.create({
-            deviceId: device.id,
+        const p = await Panel.open({
+            device_id: device.id,
             title: String(a.title ?? 'Panel'),
             components,
             state,
@@ -198,9 +198,9 @@ export class DisplayUtility {
     async update_panel(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
         const a = call.fn_args;
         const id = String(a.id ?? '');
-        const existing = await panels.get(id);
+        const existing = await Panel.get(id);
         if (!existing) return `No panel ${id}.`;
-        const patch: panels.PanelPatch = {};
+        const patch: Partial<PanelData> = {};
         if (a.title != null) patch.title = String(a.title);
         if (a.x != null) patch.x = Number(a.x);
         if (a.y != null) patch.y = Number(a.y);
@@ -226,9 +226,9 @@ export class DisplayUtility {
         if (a.device != null) {
             const d = await resolveDevice(String(a.device));
             if (!d) return `No screen matching "${a.device}".`;
-            patch.deviceId = d.id;
+            patch.device_id = d.id;
         }
-        await panels.update(id, patch);
+        await Panel.update(id, patch);
         return 'Panel updated.';
     }
 
@@ -236,8 +236,8 @@ export class DisplayUtility {
     @toolparam({ key: 'id', type: 'string', required: true, description: 'Panel id.' })
     async close_panel(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
         const id = String(call.fn_args.id ?? '');
-        if (!(await panels.get(id))) return `No panel ${id}.`;
-        await panels.close(id);
+        if (!(await Panel.get(id))) return `No panel ${id}.`;
+        await Panel.close(id);
         return 'Closed.';
     }
 
@@ -247,14 +247,14 @@ export class DisplayUtility {
             'List the panels currently open, with their ids, titles, screens, and geometry.',
     })
     async list_panels(_call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const open = await panels.listOpen();
+        const open = await Panel.listOpen();
         if (!open.length) return 'No panels open.';
-        const ds = await devices.listOnline();
+        const ds = await Device.listOnline();
         const nameOf = (id: string | null) => ds.find((d) => d.id === id)?.name ?? id ?? '?';
         return open
             .map(
                 (p) =>
-                    `${p.id} "${p.title}" on ${nameOf(p.deviceId)} at ${p.x},${p.y} ${p.w}x${p.h}${p.maximized ? ' [maximized]' : ''}`,
+                    `${p.id} "${p.title}" on ${nameOf(p.device_id)} at ${p.x},${p.y} ${p.w}x${p.h}${p.maximized ? ' [maximized]' : ''}`,
             )
             .join('\n');
     }

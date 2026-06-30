@@ -2,7 +2,7 @@ import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
 import { getSession, listSessions, type BrowserSession, type PageSnapshot } from './session';
-import { loadMap } from '../data/secrets';
+import { Secret } from '../models/secret';
 
 function resolve(idArg: unknown): BrowserSession | string {
     const id = String(idArg ?? '').trim();
@@ -138,7 +138,7 @@ export class BrowserAgentUtility {
         const name = String(call.fn_args.secret ?? '')
             .trim()
             .toUpperCase();
-        const value = (await loadMap())[name];
+        const value = (await Secret.loadMap())[name];
         if (!value)
             return `Secret "${name}" isn't set. Stage it with request_secret and ask the user to fill it.`;
         try {

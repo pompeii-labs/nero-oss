@@ -5,9 +5,9 @@ import { foldThread } from '../harness/compaction';
 import { recallForPrompt } from '../memory/memory';
 import { buildUtilities } from '../tools';
 import type { AgentActivity } from '../harness/activity';
-import * as messagesData from '../data/messages';
-import * as dispatches from '../data/dispatches';
-import * as settingsData from '../data/settings';
+import { Message } from '../models/message';
+import { Dispatch } from '../models/dispatch';
+import { Settings } from '../models/settings';
 
 /** Recent-message window carried into a voice turn. Bounds prefill so
  *  time-to-first-token stays low; recency over completeness for spoken context. */
@@ -39,15 +39,15 @@ export async function runVoiceTurn(
     opts: { interaction?: boolean } = {},
 ): Promise<string> {
     const t0 = Date.now();
-    const dispatch = await dispatches.create();
-    if (opts.interaction) await messagesData.insertInteraction(transcript, dispatch.id);
-    else await messagesData.insertUser(transcript, { dispatchId: dispatch.id });
+    const dispatch = await Dispatch.start();
+    if (opts.interaction) await Message.insertInteraction(transcript, dispatch.id);
+    else await Message.insertUser(transcript, { dispatch_id: dispatch.id });
 
     // Kick recall off immediately; it's an embedding round-trip we overlap with
     // agent setup + session assembly.
     const recall = recallForPrompt(transcript).catch(() => '');
 
-    const model = (await settingsData.getModel().catch(() => null)) ?? undefined;
+    const model = (await Settings.getModel().catch(() => null)) ?? undefined;
     const agent = new NeroAgent({
         model,
         voice: true,
@@ -78,10 +78,10 @@ export async function runVoiceTurn(
     );
     const content = final?.content ?? '';
 
-    if (content) await messagesData.insertAgentText(content, dispatch.id);
-    await dispatches
-        .update(dispatch.id, { status: signal?.aborted ? 'cancelled' : 'done' })
-        .catch(() => {});
+    if (content) await Message.insertAgentText(content, dispatch.id);
+    await Dispatch.update(dispatch.id, { status: signal?.aborted ? 'cancelled' : 'done' }).catch(
+        () => {},
+    );
     if (!signal?.aborted) await foldThread().catch(() => {});
     agent.endRun();
 

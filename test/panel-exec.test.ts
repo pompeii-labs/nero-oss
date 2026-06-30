@@ -1,6 +1,6 @@
 import { describe, test, expect, afterEach } from 'bun:test';
 import { runPanelFunction } from '../src/panels/exec';
-import type { PanelFn } from '../src/data/panels';
+import type { PanelFn } from '../src/models/panel';
 
 const NO_SECRETS: Record<string, string> = {};
 

@@ -1,6 +1,5 @@
 import { embed } from './embed';
-import * as memoriesData from '../data/memories';
-import type { MemoryRow } from '../data/memories';
+import { Memory } from '../models/memory';
 
 const DUPLICATE_SIMILARITY = 0.95; // >= this = same fact, don't re-insert
 const RECALL_SIMILARITY_FLOOR = 0.35; // below this = not relevant, abstain
@@ -22,10 +21,10 @@ export async function rememberFact(
     const embedding = await embed(body);
     if (!embedding) return { status: 'skipped', reason: 'no embedding provider' };
 
-    const dupes = await memoriesData.search(embedding, { k: 1, threshold: DUPLICATE_SIMILARITY });
+    const dupes = await Memory.search(embedding, { k: 1, threshold: DUPLICATE_SIMILARITY });
     if (dupes.length > 0) return { status: 'duplicate', id: dupes[0].id };
 
-    const mem = await memoriesData.create({
+    const mem = await Memory.add({
         body,
         embedding,
         category: opts.category ?? null,
@@ -35,14 +34,14 @@ export async function rememberFact(
 }
 
 /** Top-K relevant memories for a query; abstains on weak matches. */
-export async function recallMemories(query: string, k = 5): Promise<MemoryRow[]> {
+export async function recallMemories(query: string, k = 5): Promise<Memory[]> {
     const embedding = await embed(query);
     if (!embedding) return [];
-    return memoriesData.search(embedding, { k, threshold: RECALL_SIMILARITY_FLOOR });
+    return Memory.search(embedding, { k, threshold: RECALL_SIMILARITY_FLOOR });
 }
 
 /** Render recalled memories as a system-prompt block. Framed as fallible notes. */
-export function formatMemoriesForPrompt(rows: MemoryRow[]): string {
+export function formatMemoriesForPrompt(rows: Memory[]): string {
     if (rows.length === 0) return '';
     const lines = rows.map((m) => `- (${m.type}) ${m.body}`);
     return (

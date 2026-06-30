@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { loadConfig } from '../../config';
-import * as settings from '../../data/settings';
+import { Settings } from '../../models/settings';
 import { foldThread, MANUAL_KEEP_TOKENS } from '../../harness/compaction';
-import * as compactionData from '../../data/compaction';
+import { Compaction } from '../../models/compaction';
 
 /** Runtime settings (single-user). GET resolves the effective values; POST sets. */
 export function settingsRoutes(): Hono {
@@ -15,12 +15,12 @@ export function settingsRoutes(): Hono {
         const compacted = await foldThread({ force: true, keepTokens: MANUAL_KEEP_TOKENS }).catch(
             () => false,
         );
-        const latest = await compactionData.getLatest().catch(() => null);
+        const latest = await Compaction.getLatest().catch(() => null);
         return c.json({ compacted, summary: latest?.summary ?? '' });
     });
 
     app.get('/v1/settings', async (c) => {
-        const model = (await settings.getModel().catch(() => null)) ?? loadConfig().model;
+        const model = (await Settings.getModel().catch(() => null)) ?? loadConfig().model;
         return c.json({ model });
     });
 
@@ -32,16 +32,16 @@ export function settingsRoutes(): Hono {
         };
         let touched = false;
         if (typeof body.model === 'string' && body.model.trim()) {
-            await settings.setModel(body.model.trim());
+            await Settings.setModel(body.model.trim());
             touched = true;
         }
         // Field theme + day/night are shared across all of Nero's screens.
         if (typeof body.theme === 'string' && body.theme.trim()) {
-            await settings.set('field_theme', body.theme.trim());
+            await Settings.set('field_theme', body.theme.trim());
             touched = true;
         }
         if (typeof body.mode === 'string' && body.mode.trim()) {
-            await settings.set('field_mode', body.mode.trim());
+            await Settings.set('field_mode', body.mode.trim());
             touched = true;
         }
         if (!touched) return c.json({ error: 'nothing to set' }, 400);

@@ -1,7 +1,7 @@
 import { runShell } from '../tools/shell';
-import { loadMap } from '../data/secrets';
+import { Secret } from '../models/secret';
 import { interpolate } from '../util/interpolate';
-import type { PanelFn } from '../data/panels';
+import type { PanelFn } from '../models/panel';
 
 const TIMEOUT_MS = 15_000;
 
@@ -45,7 +45,7 @@ export async function runPanelFunction(
     fn: PanelFn,
     secretsOverride?: Record<string, string>,
 ): Promise<Record<string, unknown>> {
-    const secrets = secretsOverride ?? (await loadMap());
+    const secrets = secretsOverride ?? (await Secret.loadMap());
 
     if (fn.kind === 'shell') {
         // Secrets exposed as env vars ($NAME) for the command.

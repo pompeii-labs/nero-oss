@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { createServer } from '../src/service';
-import { getLux } from '../src/lux/client';
-import * as panels from '../src/data/panels';
+import { getLux } from '../src/lib/lux';
+import { Panel, type PanelFn } from '../src/models/panel';
 
 const HAS_LUX = Boolean(process.env.LUX_SECRET_KEY && process.env.LUX_URL);
 const d = HAS_LUX ? describe : describe.skip;
@@ -21,9 +21,9 @@ afterAll(async () => {
     server.stop(true);
 });
 
-async function panelWith(fn: panels.PanelFn) {
-    const p = await panels.create({
-        deviceId: `rt-${Date.now()}`,
+async function panelWith(fn: PanelFn) {
+    const p = await Panel.open({
+        device_id: `rt-${Date.now()}`,
         title: 'RT',
         components: [{ type: 'metric', label: 'N', value: { bind: 'n' } }],
         functions: { go: fn },
@@ -41,7 +41,7 @@ d('panel + secret routes (Lux)', () => {
             body: JSON.stringify({ fn: 'go' }),
         });
         expect(res.status).toBe(200);
-        expect((await panels.get(p.id))?.state.n).toBe(7);
+        expect((await Panel.get(p.id))?.state.n).toBe(7);
     });
 
     test('POST /call with a failing function writes an error, not a 500', async () => {
@@ -52,7 +52,7 @@ d('panel + secret routes (Lux)', () => {
             body: JSON.stringify({ fn: 'go' }),
         });
         expect(res.status).toBe(200);
-        expect((await panels.get(p.id))?.state.error).toContain('kaboom');
+        expect((await Panel.get(p.id))?.state.error).toContain('kaboom');
     });
 
     test('POST /maximize toggles the flag', async () => {
@@ -62,7 +62,7 @@ d('panel + secret routes (Lux)', () => {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ on: true }),
         });
-        expect((await panels.get(p.id))?.maximized).toBe(true);
+        expect((await Panel.get(p.id))?.maximized).toBe(true);
     });
 
     test('POST /geometry persists position', async () => {
@@ -72,7 +72,7 @@ d('panel + secret routes (Lux)', () => {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ x: 12, y: 34 }),
         });
-        const got = await panels.get(p.id);
+        const got = await Panel.get(p.id);
         expect([got?.x, got?.y]).toEqual([12, 34]);
     });
 

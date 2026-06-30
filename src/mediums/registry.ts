@@ -1,5 +1,5 @@
-import { loadMap } from '../data/secrets';
-import * as activity from '../data/medium-activity';
+import { Secret } from '../models/secret';
+import { MediumActivity } from '../models/medium-activity';
 import { pushMedium } from './push';
 import type { Medium, Notification } from './types';
 
@@ -13,7 +13,7 @@ export interface MediumStatus {
 }
 
 export async function mediumStatuses(): Promise<MediumStatus[]> {
-    const secrets = await loadMap();
+    const secrets = await Secret.loadMap();
     return MEDIUMS.map((m) => ({
         name: m.name,
         displayName: m.displayName,
@@ -28,7 +28,7 @@ export interface NotifyResult {
 
 /** Send a notification through every available medium, auditing each attempt. */
 export async function notify(n: Notification): Promise<NotifyResult> {
-    const secrets = await loadMap();
+    const secrets = await Secret.loadMap();
     const delivered: string[] = [];
     const failed: { name: string; error: string }[] = [];
     const urgency = n.urgency ?? 'normal';
@@ -38,7 +38,7 @@ export async function notify(n: Notification): Promise<NotifyResult> {
         try {
             await m.send(n, secrets);
             delivered.push(m.name);
-            await activity.log({
+            await MediumActivity.log({
                 medium: m.name,
                 title: n.title,
                 body: n.body,
@@ -48,7 +48,7 @@ export async function notify(n: Notification): Promise<NotifyResult> {
         } catch (e) {
             const error = e instanceof Error ? e.message : String(e);
             failed.push({ name: m.name, error });
-            await activity.log({
+            await MediumActivity.log({
                 medium: m.name,
                 title: n.title,
                 body: n.body,

@@ -2,8 +2,8 @@ import { describe, test, expect, afterAll } from 'bun:test';
 import OpenAI from 'openai';
 import { NeroAgent } from '../src/harness/agent';
 import { startDispatch, cancelActive, type RunnableAgent } from '../src/harness/dispatch';
-import * as dispatches from '../src/data/dispatches';
-import { getLux } from '../src/lux/client';
+import { Dispatch } from '../src/models/dispatch';
+import { getLux } from '../src/lib/lux';
 import type { MagmaToolResult } from '@pompeii-labs/magma/types';
 
 const HAS_LUX = Boolean(process.env.LUX_SECRET_KEY && process.env.LUX_URL);
@@ -74,7 +74,7 @@ d('cancellation', () => {
         expect(cancelledId).toBe(handle.dispatchId);
 
         await handle.done;
-        const row = await dispatches.get(handle.dispatchId);
+        const row = await Dispatch.get(handle.dispatchId);
         expect(row?.status).toBe('cancelled');
     });
 });

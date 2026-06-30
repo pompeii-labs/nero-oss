@@ -1,8 +1,8 @@
 import { loadConfig } from '../config';
-import { isLuxConnected, ensureAnonGrants } from '../lux/client';
+import { isLuxConnected, ensureAnonGrants } from '../lib/lux';
 import { getMcpClient } from '../mcp/client';
-import { cancelOrphans } from '../data/dispatches';
-import { cancelOrphans as cancelQuestionOrphans } from '../data/questions';
+import { Dispatch } from '../models/dispatch';
+import { Question } from '../models/question';
 import { resumeProjects } from '../projects/runner';
 import { createServer } from './index';
 
@@ -17,10 +17,10 @@ if (!cfg.openrouter.apiKey) {
 
 if (isLuxConnected()) {
     await ensureAnonGrants().catch((e) => console.error('[nero] grant setup failed:', e));
-    await cancelOrphans()
+    await Dispatch.cancelOrphans()
         .then((n) => n && console.log(`[nero] cleared ${n} orphaned dispatch(es)`))
         .catch((e) => console.error('[nero] orphan cleanup failed:', e));
-    await cancelQuestionOrphans()
+    await Question.cancelOrphans()
         .then((n) => n && console.log(`[nero] cleared ${n} orphaned question(s)`))
         .catch((e) => console.error('[nero] question cleanup failed:', e));
     await resumeProjects()

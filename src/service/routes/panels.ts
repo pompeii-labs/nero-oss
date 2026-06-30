@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import * as panels from '../../data/panels';
+import { Panel, type PanelData } from '../../models/panel';
 import { runPanelFunction } from '../../panels/exec';
 import { startDispatch } from '../../harness/dispatch';
 
@@ -11,25 +11,25 @@ export function panelRoutes(): Hono {
 
     app.post('/v1/panels/:id/close', async (c) => {
         const id = c.req.param('id');
-        if (await panels.get(id)) await panels.close(id);
+        if (await Panel.get(id)) await Panel.close(id);
         return c.json({ ok: true });
     });
 
     app.post('/v1/panels/:id/geometry', async (c) => {
         const id = c.req.param('id');
         const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-        const patch: panels.PanelPatch = {};
+        const patch: Partial<PanelData> = {};
         for (const k of ['x', 'y', 'w', 'h'] as const) {
             if (typeof b[k] === 'number') patch[k] = Math.round(b[k] as number);
         }
-        if (Object.keys(patch).length && (await panels.get(id))) await panels.update(id, patch);
+        if (Object.keys(patch).length && (await Panel.get(id))) await Panel.update(id, patch);
         return c.json({ ok: true });
     });
 
     app.post('/v1/panels/:id/maximize', async (c) => {
         const id = c.req.param('id');
         const b = (await c.req.json().catch(() => ({}))) as { on?: boolean };
-        if (await panels.get(id)) await panels.update(id, { maximized: b.on !== false });
+        if (await Panel.get(id)) await Panel.update(id, { maximized: b.on !== false });
         return c.json({ ok: true });
     });
 
@@ -38,7 +38,7 @@ export function panelRoutes(): Hono {
     app.post('/v1/panels/:id/call', async (c) => {
         const id = c.req.param('id');
         const b = (await c.req.json().catch(() => ({}))) as { fn?: string };
-        const p = await panels.get(id);
+        const p = await Panel.get(id);
         if (!p) return c.json({ error: 'no such panel' }, 404);
         const fn = b.fn ? p.functions[b.fn] : undefined;
         if (!fn) return c.json({ error: `no function "${b.fn}"` }, 400);
@@ -48,7 +48,7 @@ export function panelRoutes(): Hono {
         } catch (e) {
             patch = { error: e instanceof Error ? e.message : String(e) };
         }
-        await panels.update(id, { state: { ...p.state, ...patch } });
+        await Panel.update(id, { state: { ...p.state, ...patch } });
         return c.json({ ok: true });
     });
 
@@ -59,7 +59,7 @@ export function panelRoutes(): Hono {
             intent?: string;
             value?: unknown;
         };
-        const p = await panels.get(id);
+        const p = await Panel.get(id);
         if (!p) return c.json({ error: 'no such panel' }, 404);
         const control = String(b.control ?? 'a control');
         const value = b.value != null ? ` Value: ${JSON.stringify(b.value)}.` : '';

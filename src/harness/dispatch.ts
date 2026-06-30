@@ -6,10 +6,10 @@ import { foldThread } from './compaction';
 import { recallForPrompt } from '../memory/memory';
 import { createEmitter, type Emitter } from '../realtime/emit';
 import { fileBase64 } from '../files/store';
-import * as dispatches from '../data/dispatches';
-import * as messagesData from '../data/messages';
-import * as settingsData from '../data/settings';
-import type { AttachmentRef } from '../data/messages';
+import { Dispatch } from '../models/dispatch';
+import { Message } from '../models/message';
+import { Settings } from '../models/settings';
+import type { AttachmentRef } from '../models/message';
 import type { AgentActivity } from './activity';
 
 /** Minimal surface the dispatcher drives; NeroAgent satisfies it structurally,
@@ -96,19 +96,19 @@ export async function startDispatch(
         return { dispatchId: active.id, steered: true, done: Promise.resolve() };
     }
 
-    const dispatch = await dispatches.create();
+    const dispatch = await Dispatch.start();
     if (input.interaction) {
-        await messagesData.insertInteraction(input.text, dispatch.id);
+        await Message.insertInteraction(input.text, dispatch.id);
     } else {
-        await messagesData.insertUser(input.text, {
-            dispatchId: dispatch.id,
+        await Message.insertUser(input.text, {
+            dispatch_id: dispatch.id,
             attachments: input.attachments ?? null,
         });
     }
 
     // Resolve the model fresh each run: a Lux `/model` override wins, else the
     // env default. Takes effect on the very next message, no restart.
-    const model = (await settingsData.getModel().catch(() => null)) ?? undefined;
+    const model = (await Settings.getModel().catch(() => null)) ?? undefined;
     const agent: RunnableAgent = opts.agentFactory
         ? opts.agentFactory()
         : new NeroAgent({ client: opts.client, model });
@@ -135,7 +135,7 @@ async function drainSteering(entry: ActiveDispatch, agent: RunnableAgent): Promi
     if (entry.pendingSteering.length === 0) return false;
     const texts = entry.pendingSteering.splice(0);
     for (const text of texts) {
-        await messagesData.insertUser(text, { dispatchId: entry.id });
+        await Message.insertUser(text, { dispatch_id: entry.id });
         agent.addMessage({
             role: 'user',
             content: `[Sent while you were working]\n${text}`,
@@ -172,7 +172,7 @@ async function runToCompletion(
         for (let i = 0; i < 5; i++) {
             if (entry.cancelled) break;
             const content = final?.content ?? '';
-            if (content) await messagesData.insertAgentText(content, dispatchId);
+            if (content) await Message.insertAgentText(content, dispatchId);
             emitter.setFullText(content);
 
             const folded = await drainSteering(entry, agent);

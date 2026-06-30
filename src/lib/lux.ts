@@ -1,5 +1,5 @@
 import { createClient, type LuxProjectClient } from '@luxdb/sdk';
-import type { Database } from './types';
+import type { Database } from '../lux/types';
 import { loadConfig } from '../config';
 
 let client: LuxProjectClient<Database> | null = null;

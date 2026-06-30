@@ -1,7 +1,7 @@
 import { describe, test, expect, afterAll } from 'bun:test';
 import { formatMemoriesForPrompt, rememberFact, recallMemories } from '../src/memory/memory';
-import type { MemoryRow } from '../src/data/memories';
-import { getLux } from '../src/lux/client';
+import type { Memory } from '../src/models/memory';
+import { getLux } from '../src/lib/lux';
 
 describe('formatMemoriesForPrompt', () => {
     test('empty -> empty string', () => {
@@ -18,7 +18,7 @@ describe('formatMemoriesForPrompt', () => {
                 use_count: 0,
                 created_at: 0,
             },
-        ] as MemoryRow[];
+        ] as Memory[];
         const out = formatMemoriesForPrompt(rows);
         expect(out).toContain('Relevant memories');
         expect(out).toContain('verify before relying');

@@ -2,8 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import * as mcpData from '../data/mcp';
-import type { McpConnection } from '../data/mcp';
+import { McpConnection } from '../models/mcp-connection';
 import { isTokenExpired, refreshAccessToken } from './oauth';
 
 export interface McpTool {
@@ -29,7 +28,7 @@ export class McpClient {
     private servers = new Map<string, ConnectedServer>();
 
     async connectAll(): Promise<void> {
-        const conns = (await mcpData.list()).filter((c) => !c.disabled);
+        const conns = (await McpConnection.listAll()).filter((c) => !c.disabled);
         await Promise.allSettled(
             conns.map((c) =>
                 this.connectOne(c).catch((e) =>
@@ -63,7 +62,7 @@ export class McpClient {
                     if (refreshed) {
                         tokens = refreshed;
                         conn.auth.oauth.tokens = tokens;
-                        await mcpData.updateAuth(conn.name, conn.auth);
+                        await McpConnection.updateAuth(conn.name, conn.auth);
                     }
                 }
                 headers['Authorization'] = `Bearer ${tokens.access_token}`;

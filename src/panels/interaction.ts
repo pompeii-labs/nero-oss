@@ -1,4 +1,4 @@
-import type { Panel } from '../data/panels';
+import type { Panel } from '../models/panel';
 
 export interface InteractionPayload {
     control?: string;

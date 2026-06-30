@@ -1,12 +1,11 @@
 import OpenAI from 'openai';
-import type { MessageRow } from '../data/messages';
+import { Message } from '../models/message';
 import { rowsToSessionMessages, messageToText } from './session';
 import { countTokens } from './tokens';
 import { getContextWindow } from './context';
 import { loadConfig } from '../config';
-import { resolveModel } from '../data/settings';
-import * as messagesData from '../data/messages';
-import * as compactionData from '../data/compaction';
+import { Settings } from '../models/settings';
+import { Compaction } from '../models/compaction';
 
 // Budgets are fractions of the model window, so a 1M and a 128k model both keep a
 // sensible live tail. Auto-compaction fires at ~75% of the window. Invariant:
@@ -41,7 +40,7 @@ Think first in <scratch></scratch> (discarded), then write the note in <summary>
 
 /** Token weight of a row. Tool rows count their args+result payload; everything
  *  else counts its text. */
-export function rowTokens(row: MessageRow): number {
+export function rowTokens(row: Message): number {
     if (row.type === 'tool_call') {
         const meta = (row.metadata ?? {}) as Record<string, unknown>;
         return countTokens(JSON.stringify({ a: meta.args, r: meta.result }));
@@ -55,7 +54,7 @@ export function rowTokens(row: MessageRow): number {
  * rows, so a boundary never bisects a tool_call/result pair. Returns the count
  * of leading rows to fold (rows.slice(0, n)).
  */
-export function foldBoundary(rows: MessageRow[], keepTokens: number): number {
+export function foldBoundary(rows: Message[], keepTokens: number): number {
     let acc = 0;
     for (let i = rows.length - 1; i >= 0; i--) {
         acc += rowTokens(rows[i]);
@@ -102,12 +101,12 @@ export async function foldThread(opts?: {
     keepRatio?: number;
     keepTokens?: number;
 }): Promise<boolean> {
-    const window = await getContextWindow(await resolveModel());
+    const window = await getContextWindow(await Settings.resolveModel());
     const trigger = window * COMPACT_TRIGGER_RATIO;
     const keep = opts?.keepTokens ?? window * (opts?.keepRatio ?? KEEP_TAIL_RATIO);
 
-    const prev = await compactionData.getLatest();
-    const rows = await messagesData.getSessionHistory({
+    const prev = await Compaction.getLatest();
+    const rows = await Message.getSessionHistory({
         since: prev?.through_at,
         limit: FETCH_CAP,
     });
@@ -130,6 +129,6 @@ export async function foldThread(opts?: {
     if (!summary) return false;
 
     const last = folded[folded.length - 1];
-    await compactionData.create({ summary, throughAt: last.id });
+    await Compaction.create({ summary, through_at: last.id });
     return true;
 }

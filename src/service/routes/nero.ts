@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { saveUpload } from '../../files/store';
-import type { AttachmentRef } from '../../data/messages';
+import type { AttachmentRef } from '../../models/message';
 import type { startDispatch, cancelActive } from '../../harness/dispatch';
 
 export interface NeroDeps {
