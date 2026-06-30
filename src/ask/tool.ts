@@ -3,6 +3,7 @@ import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
 import { Question, type AskItem, type AskOption } from '../models/question';
 import { waitForAnswer } from './pending';
+import { Args } from '../util/args';
 
 const ASK_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -24,9 +25,10 @@ export class AskUtility {
             'JSON array of 1-4 questions. Each: {"question":"...", "header":"<=12 char chip", "options":[{"label":"short choice","description":"the tradeoff"}], "multi":false}. 2-4 options per question; description optional; multi allows picking several.',
     })
     async ask(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
+        const a = new Args(call);
         let items: AskItem[];
         try {
-            const parsed = JSON.parse(String(call.fn_args.questions ?? '[]'));
+            const parsed = JSON.parse(a.str('questions', '[]'));
             if (!Array.isArray(parsed)) return 'questions must be a JSON array.';
             items = parsed
                 .map((q) => ({

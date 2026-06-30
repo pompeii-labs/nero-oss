@@ -4,6 +4,7 @@ import type { MagmaAgent } from '@pompeii-labs/magma';
 import { readFile, writeFile, mkdir, readdir } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
 import { runShell, expandPath } from './shell';
+import { Args } from '../util/args';
 
 function shellQuote(s: string): string {
     return `'${s.replace(/'/g, `'\\''`)}'`;
@@ -21,7 +22,8 @@ export class FileUtility {
         description: 'Absolute or relative file path.',
     })
     async read_file(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const path = String(call.fn_args.path ?? '');
+        const a = new Args(call);
+        const path = a.str('path');
         try {
             return await readFile(resolve(expandPath(path)), 'utf-8');
         } catch (e) {
@@ -42,8 +44,9 @@ export class FileUtility {
         description: 'Full file contents.',
     })
     async write_file(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const path = String(call.fn_args.path ?? '');
-        const content = String(call.fn_args.content ?? '');
+        const a = new Args(call);
+        const path = a.str('path');
+        const content = a.str('content');
         try {
             const abs = resolve(expandPath(path));
             await mkdir(dirname(abs), { recursive: true });
@@ -73,9 +76,10 @@ export class FileUtility {
         description: 'Replacement text.',
     })
     async edit_file(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const path = String(call.fn_args.path ?? '');
-        const oldStr = String(call.fn_args.old_string ?? '');
-        const newStr = String(call.fn_args.new_string ?? '');
+        const a = new Args(call);
+        const path = a.str('path');
+        const oldStr = a.str('old_string');
+        const newStr = a.str('new_string');
         try {
             const abs = resolve(expandPath(path));
             const content = await readFile(abs, 'utf-8');
@@ -127,7 +131,8 @@ export class FileUtility {
         description: 'Base directory (defaults to cwd).',
     })
     async glob(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const pattern = String(call.fn_args.pattern ?? '');
+        const a = new Args(call);
+        const pattern = a.str('pattern');
         const cwd = call.fn_args.cwd ? expandPath(String(call.fn_args.cwd)) : process.cwd();
         try {
             const matches: string[] = [];
@@ -160,7 +165,8 @@ export class FileUtility {
         description: 'Directory or file to search (defaults to cwd).',
     })
     async grep_search(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const pattern = String(call.fn_args.pattern ?? '');
+        const a = new Args(call);
+        const pattern = a.str('pattern');
         const path = call.fn_args.path ? expandPath(String(call.fn_args.path)) : '.';
         // Prefer ripgrep, fall back to grep.
         const rg = `rg -n --no-heading -e ${shellQuote(pattern)} ${shellQuote(path)} 2>/dev/null | head -200`;

@@ -3,6 +3,7 @@ import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
 import { getSession, listSessions, type BrowserSession, type PageSnapshot } from './session';
 import { Secret } from '../models/secret';
+import { Args } from '../util/args';
 
 function resolve(idArg: unknown): BrowserSession | string {
     const id = String(idArg ?? '').trim();
@@ -53,9 +54,10 @@ export class BrowserAgentUtility {
     @toolparam({ key: 'url', type: 'string', required: true, description: 'Full https URL.' })
     @toolparam({ key: 'session', type: 'string', required: false })
     async browser_navigate(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
+        const a = new Args(call);
         const s = resolve(call.fn_args.session);
         if (typeof s === 'string') return s;
-        const url = String(call.fn_args.url ?? '').trim();
+        const url = a.text('url');
         if (!/^https?:\/\//i.test(url)) return 'Provide a full http(s) URL.';
         await s.navigate(url);
         await sleep(1200);
@@ -70,10 +72,11 @@ export class BrowserAgentUtility {
     @toolparam({ key: 'ref', type: 'number', required: true, description: 'Element ref number.' })
     @toolparam({ key: 'session', type: 'string', required: false })
     async browser_click(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
+        const a = new Args(call);
         const s = resolve(call.fn_args.session);
         if (typeof s === 'string') return s;
         try {
-            await s.clickRef(Number(call.fn_args.ref));
+            await s.clickRef(a.num('ref'));
         } catch (e) {
             return e instanceof Error ? e.message : String(e);
         }
@@ -101,10 +104,11 @@ export class BrowserAgentUtility {
     })
     @toolparam({ key: 'session', type: 'string', required: false })
     async browser_type(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
+        const a = new Args(call);
         const s = resolve(call.fn_args.session);
         if (typeof s === 'string') return s;
         try {
-            await s.typeRef(Number(call.fn_args.ref), String(call.fn_args.text ?? ''));
+            await s.typeRef(a.num('ref'), a.str('text'));
             if (call.fn_args.submit) await s.pressKey('Enter');
         } catch (e) {
             return e instanceof Error ? e.message : String(e);
@@ -133,16 +137,15 @@ export class BrowserAgentUtility {
     })
     @toolparam({ key: 'session', type: 'string', required: false })
     async browser_fill_secret(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
+        const a = new Args(call);
         const s = resolve(call.fn_args.session);
         if (typeof s === 'string') return s;
-        const name = String(call.fn_args.secret ?? '')
-            .trim()
-            .toUpperCase();
+        const name = a.text('secret').toUpperCase();
         const value = (await Secret.loadMap())[name];
         if (!value)
             return `Secret "${name}" isn't set. Stage it with request_secret and ask the user to fill it.`;
         try {
-            await s.fillSecret(Number(call.fn_args.ref), value);
+            await s.fillSecret(a.num('ref'), value);
             if (call.fn_args.submit) await s.pressKey('Enter');
         } catch (e) {
             return e instanceof Error ? e.message : String(e);
@@ -163,9 +166,10 @@ export class BrowserAgentUtility {
     })
     @toolparam({ key: 'session', type: 'string', required: false })
     async browser_scroll(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
+        const a = new Args(call);
         const s = resolve(call.fn_args.session);
         if (typeof s === 'string') return s;
-        const amt = call.fn_args.amount != null ? Number(call.fn_args.amount) : 600;
+        const amt = call.fn_args.amount != null ? a.num('amount') : 600;
         await s.scroll(640, 400, amt);
         await sleep(400);
         return fmt(await s.snapshot());

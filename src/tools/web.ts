@@ -1,6 +1,7 @@
 import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
+import { Args } from '../util/args';
 
 export class WebUtility {
     constructor(private tavilyApiKey: string) {}
@@ -11,7 +12,8 @@ export class WebUtility {
     })
     @toolparam({ key: 'query', type: 'string', required: true, description: 'The search query.' })
     async web_search(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const query = String(call.fn_args.query ?? '');
+        const a = new Args(call);
+        const query = a.str('query');
         if (!this.tavilyApiKey) return 'Web search unavailable: TAVILY_API_KEY not set.';
         try {
             const res = await fetch('https://api.tavily.com/search', {
@@ -50,7 +52,8 @@ export class WebUtility {
     })
     @toolparam({ key: 'url', type: 'string', required: true, description: 'The URL to fetch.' })
     async fetch_url(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
-        const url = String(call.fn_args.url ?? '');
+        const a = new Args(call);
+        const url = a.str('url');
         try {
             const res = await fetch(url, {
                 headers: {

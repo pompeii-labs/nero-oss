@@ -4,6 +4,7 @@ import type { MagmaAgent } from '@pompeii-labs/magma';
 import { Device } from '../models/device';
 import { Presence } from '../models/presence';
 import { Panel, type PanelFn, type PanelData } from '../models/panel';
+import { Args } from '../util/args';
 
 const PANEL_SCHEMA = `Components is a JSON array of nodes. Node types:
 - {"type":"text","text":"...","variant":"title|heading|body|caption|mono"}
@@ -78,7 +79,8 @@ export class DisplayUtility {
         description: 'The device id or name to move to.',
     })
     async move_to(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const target = String(call.fn_args.device ?? '').trim();
+        const args = new Args(call);
+        const target = args.text('device');
         const ds = await Device.listOnline();
         const match = ds.find(
             (d) => d.id === target || d.name.toLowerCase() === target.toLowerCase(),
@@ -128,9 +130,10 @@ export class DisplayUtility {
     })
     async create_panel(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
         const a = call.fn_args;
+        const args = new Args(call);
         let components: unknown[];
         try {
-            components = JSON.parse(String(a.components ?? '[]'));
+            components = JSON.parse(args.str('components', '[]'));
         } catch {
             return 'components must be valid JSON.';
         }
@@ -138,23 +141,23 @@ export class DisplayUtility {
         let state: Record<string, unknown> | undefined;
         let functions: Record<string, PanelFn> | undefined;
         try {
-            if (a.state != null) state = JSON.parse(String(a.state));
-            if (a.functions != null) functions = JSON.parse(String(a.functions));
+            if (a.state != null) state = JSON.parse(args.str('state'));
+            if (a.functions != null) functions = JSON.parse(args.str('functions'));
         } catch {
             return 'state/functions must be valid JSON.';
         }
-        const device = await resolveDevice(String(a.device ?? ''));
+        const device = await resolveDevice(args.str('device'));
         if (!device) return 'No target screen. Run list_devices, or move somewhere first.';
         const p = await Panel.open({
             device_id: device.id,
-            title: String(a.title ?? 'Panel'),
+            title: args.str('title', 'Panel'),
             components,
             state,
             functions,
-            x: a.x != null ? Number(a.x) : undefined,
-            y: a.y != null ? Number(a.y) : undefined,
-            w: a.w != null ? Number(a.w) : undefined,
-            h: a.h != null ? Number(a.h) : undefined,
+            x: a.x != null ? args.num('x') : undefined,
+            y: a.y != null ? args.num('y') : undefined,
+            w: a.w != null ? args.num('w') : undefined,
+            h: a.h != null ? args.num('h') : undefined,
         });
         return `Panel "${p.title}" opened on ${device.name} (id ${p.id}).`;
     }
@@ -197,26 +200,27 @@ export class DisplayUtility {
     })
     async update_panel(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
         const a = call.fn_args;
-        const id = String(a.id ?? '');
+        const args = new Args(call);
+        const id = args.str('id');
         const existing = await Panel.get(id);
         if (!existing) return `No panel ${id}.`;
         const patch: Partial<PanelData> = {};
-        if (a.title != null) patch.title = String(a.title);
-        if (a.x != null) patch.x = Number(a.x);
-        if (a.y != null) patch.y = Number(a.y);
-        if (a.w != null) patch.w = Number(a.w);
-        if (a.h != null) patch.h = Number(a.h);
-        if (a.maximized != null) patch.maximized = Boolean(a.maximized);
+        if (a.title != null) patch.title = args.str('title');
+        if (a.x != null) patch.x = args.num('x');
+        if (a.y != null) patch.y = args.num('y');
+        if (a.w != null) patch.w = args.num('w');
+        if (a.h != null) patch.h = args.num('h');
+        if (a.maximized != null) patch.maximized = args.bool('maximized');
         try {
             if (a.state != null)
-                patch.state = { ...existing.state, ...JSON.parse(String(a.state)) };
-            if (a.functions != null) patch.functions = JSON.parse(String(a.functions));
+                patch.state = { ...existing.state, ...JSON.parse(args.str('state')) };
+            if (a.functions != null) patch.functions = JSON.parse(args.str('functions'));
         } catch {
             return 'state/functions must be valid JSON.';
         }
         if (a.components != null) {
             try {
-                const c = JSON.parse(String(a.components));
+                const c = JSON.parse(args.str('components'));
                 if (!Array.isArray(c)) return 'components must be a JSON array.';
                 patch.components = c;
             } catch {
@@ -224,7 +228,7 @@ export class DisplayUtility {
             }
         }
         if (a.device != null) {
-            const d = await resolveDevice(String(a.device));
+            const d = await resolveDevice(args.str('device'));
             if (!d) return `No screen matching "${a.device}".`;
             patch.device_id = d.id;
         }
@@ -235,7 +239,8 @@ export class DisplayUtility {
     @tool({ name: 'close_panel', description: 'Close (remove) an open panel.' })
     @toolparam({ key: 'id', type: 'string', required: true, description: 'Panel id.' })
     async close_panel(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const id = String(call.fn_args.id ?? '');
+        const args = new Args(call);
+        const id = args.str('id');
         if (!(await Panel.get(id))) return `No panel ${id}.`;
         await Panel.close(id);
         return 'Closed.';

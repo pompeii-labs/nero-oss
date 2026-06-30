@@ -6,6 +6,7 @@ import { createSession } from './session';
 import { Panel } from '../models/panel';
 import { Presence } from '../models/presence';
 import { Device } from '../models/device';
+import { Args } from '../util/args';
 
 /** Nero opening things in the user's REAL browser, where their logins and DRM work
  *  (streaming, paywalled sites). Fire-and-forget; for actually watching/using a
@@ -24,7 +25,8 @@ export class BrowserOpenUtility {
         description: 'The full https URL to open — the specific page/episode, not a homepage.',
     })
     async open_url(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const url = String(call.fn_args.url ?? '').trim();
+        const a = new Args(call);
+        const url = a.text('url');
         if (!/^https?:\/\//i.test(url)) return 'Provide a full http(s) URL.';
 
         const opener = process.platform === 'darwin' ? 'open' : 'xdg-open';
@@ -53,7 +55,8 @@ export class BrowserOpenUtility {
         description: 'Panel title (defaults to "Browser").',
     })
     async open_browser(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const url = String(call.fn_args.url ?? '').trim();
+        const a = new Args(call);
+        const url = a.text('url');
         if (!/^https?:\/\//i.test(url)) return 'Provide a full http(s) URL.';
 
         const here = await Presence.get();
@@ -64,7 +67,7 @@ export class BrowserOpenUtility {
         const session = await createSession(url);
         await Panel.open({
             device_id: deviceId,
-            title: String(call.fn_args.title ?? 'Browser'),
+            title: a.str('title', 'Browser'),
             components: [{ type: 'browser', session: session.id, url }],
             x: 80,
             y: 80,

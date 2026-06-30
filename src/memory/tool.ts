@@ -2,6 +2,7 @@ import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
 import { Memory } from '../models/memory';
+import { Args } from '../util/args';
 
 /** Durable memory tools exposed to Nero: explicitly save a fact, or search for
  *  relevant ones. Recall also happens automatically each turn (JIT), so this is
@@ -19,7 +20,8 @@ export class MemoryUtility {
         description: 'The fact to remember, as a concise standalone statement.',
     })
     async remember(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const content = String(call.fn_args.content ?? '');
+        const a = new Args(call);
+        const content = a.str('content');
         const res = await Memory.remember(content);
         if (res.status === 'added') return 'Saved.';
         if (res.status === 'duplicate') return 'Already knew that.';
@@ -32,7 +34,8 @@ export class MemoryUtility {
     })
     @toolparam({ key: 'query', type: 'string', required: true, description: 'What to look for.' })
     async search_memory(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const rows = await Memory.recall(String(call.fn_args.query ?? ''), 5);
+        const a = new Args(call);
+        const rows = await Memory.recall(a.str('query'), 5);
         return rows.length ? Memory.format(rows) : 'No relevant memories.';
     }
 }

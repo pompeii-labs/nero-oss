@@ -2,6 +2,7 @@ import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
 import { Secret } from '../models/secret';
+import { Args } from '../util/args';
 
 /** Nero's awareness of the secret pool. He can see what's available and stage the
  *  ones he needs, but never reads a value: secrets are injected into panel
@@ -43,11 +44,12 @@ export class SecretsUtility {
         description: 'What this secret is and where the user can get it.',
     })
     async request_secret(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const key = String(call.fn_args.key ?? '')
-            .trim()
+        const a = new Args(call);
+        const key = a
+            .text('key')
             .toUpperCase()
             .replace(/[^A-Z0-9_]/g, '_');
-        const description = String(call.fn_args.description ?? '').trim();
+        const description = a.text('description');
         if (!key) return 'Provide a key name.';
         const r = await Secret.stage(key, description);
         return r === 'exists'

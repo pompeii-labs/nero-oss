@@ -4,6 +4,7 @@ import type { MagmaAgent } from '@pompeii-labs/magma';
 import { McpConnect } from './connect';
 import { getMcpClient } from './client';
 import { McpConnection } from '../models/mcp-connection';
+import { Args } from '../util/args';
 
 /** Chat-native integration management: connect an MCP server (OAuth or API key),
  *  list connected integrations + their tools, disconnect. */
@@ -27,8 +28,9 @@ export class McpConnectUtility {
         description: 'A direct API token, if the user supplies one instead of OAuth.',
     })
     async connect_integration(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const name = String(call.fn_args.name ?? '').trim();
-        const url = String(call.fn_args.url ?? '').trim();
+        const a = new Args(call);
+        const name = a.text('name');
+        const url = a.text('url');
         if (!name || !url) return 'name and url are required.';
         const apiKey = call.fn_args.api_key ? String(call.fn_args.api_key) : undefined;
         const r = await McpConnect.start({ name, url, apiKey });
@@ -67,6 +69,7 @@ export class McpConnectUtility {
         description: 'The integration id to remove.',
     })
     async disconnect_integration(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        return McpConnect.disconnect(String(call.fn_args.name ?? '').trim());
+        const a = new Args(call);
+        return McpConnect.disconnect(a.text('name'));
     }
 }

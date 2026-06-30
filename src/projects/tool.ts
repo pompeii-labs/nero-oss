@@ -6,6 +6,7 @@ import { Project } from '../models/project';
 import { ProjectTask } from '../models/project-task';
 import { waitForApproval } from './approval';
 import { launchProject } from './runner';
+import { Args } from '../util/args';
 
 const APPROVAL_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -80,8 +81,9 @@ export class ProjectUtility {
             'JSON array of tasks, in dependency order. Each: {"title":"...", "description":"full instructions for the agent doing this task", "depends_on":[earlier task indices], "tools":["optional hints"], "est_cost_usd":0.20}. depends_on must reference EARLIER indices only (it is a DAG). Independent tasks run in parallel. The final task should synthesize/assemble if needed.',
     })
     async plan_project(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const title = String(call.fn_args.title ?? '').trim() || 'Untitled project';
-        const goal = String(call.fn_args.goal ?? '').trim();
+        const a = new Args(call);
+        const title = a.text('title') || 'Untitled project';
+        const goal = a.text('goal');
         if (!goal) return 'Provide a goal for the project.';
         const parsed = parseTasks(call.fn_args.tasks);
         if (typeof parsed === 'string') return parsed;
@@ -137,7 +139,8 @@ export class ProjectUtility {
         description: 'A project id to inspect. Omit to list running/paused/awaiting projects.',
     })
     async project_status(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const id = String(call.fn_args.id ?? '').trim();
+        const a = new Args(call);
+        const id = a.text('id');
         if (id) {
             const p = await Project.get(id);
             if (!p) return 'No project with that id.';
@@ -169,7 +172,8 @@ export class ProjectUtility {
         description: 'The project id to cancel.',
     })
     async cancel_project(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
-        const id = String(call.fn_args.id ?? '').trim();
+        const a = new Args(call);
+        const id = a.text('id');
         const p = await Project.get(id);
         if (!p) return 'No project with that id.';
         if (p.status === 'done' || p.status === 'cancelled')
