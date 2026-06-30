@@ -162,6 +162,7 @@ export class NeroAgent extends MagmaAgent {
 
     private loadPromptTemplate(): string {
         const paths = [
+            resolve(import.meta.dir, '..', '..', '..', 'prompts', 'system.txt'),
             resolve(import.meta.dir, '..', '..', 'prompts', 'system.txt'),
             resolve(import.meta.dir, '..', 'prompts', 'system.txt'),
         ];
