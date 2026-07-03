@@ -37,8 +37,10 @@ export interface NeroAgentOpts {
 
 /** Appended to the system prompt on voice turns. The response is read aloud by
  *  TTS, so it must be spoken language, not displayed text. */
-const VOICE_STYLE = `## You are speaking out loud
-Your reply is read aloud by text-to-speech right now, not shown as text. Write exactly what should be HEARD, as natural spoken language.
+const VOICE_STYLE = `## You are on a live voice call
+You and the user are talking out loud, in real time. Their message is a transcription of what they just SAID to you (you hear them through their microphone), and your reply is spoken back by text-to-speech (they hear your voice). This is a call, not texting. So if they ask whether you can hear them: yes, you can, you're on a call together right now.
+
+Your reply is read aloud right now, not shown as text. Write exactly what should be HEARD, as natural spoken language.
 - No markdown: no bullet or numbered lists, no tables, no headings, no bold/italic, no code blocks, no links. Just flowing sentences, the way you'd actually talk.
 - Be short and conversational. Don't narrate a structured document; say the gist like you're talking to someone.
 - Numbers: speak them naturally. A quantity like 4,857 is "four thousand eight hundred fifty seven"; a bare digit sequence or code like 4857 is "four eight five seven"; phone numbers digit by digit.

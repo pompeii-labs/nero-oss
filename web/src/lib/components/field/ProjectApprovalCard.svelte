@@ -158,12 +158,15 @@
         pointer-events: none;
         display: flex;
     }
+    /* A plan + budget is a real decision, so center it like a modal (not anchored to
+     *  the composer) with a subtle focus dim. */
     .pa.composer {
-        left: 0;
-        right: 0;
-        bottom: 22px;
+        inset: 0;
+        align-items: center;
         justify-content: center;
-        padding: 0 16px;
+        padding: 24px;
+        background: rgb(4 5 8 / 0.5);
+        backdrop-filter: blur(2px);
     }
     .pa.rail {
         top: 0;

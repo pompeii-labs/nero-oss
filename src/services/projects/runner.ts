@@ -227,11 +227,32 @@ async function finalizeProject(projectId: string, all: ProjectTask[]): Promise<v
     // it lands in his transcript so he can talk about it. The full doc opens from the
     // link; he can also pull details on demand with project_status.
     const n = all.length;
-    await Message.insert({
-        role: 'assistant',
-        type: 'agent_text',
-        content: `Wrapped up **${project.title}** — ${n} ${n === 1 ? 'task' : 'tasks'}, about $${(project.spent_usd ?? 0).toFixed(2)}. The full write-up is ready: [open it →](/projects/${projectId})`,
-    }).catch(() => {});
+    const link = `The full write-up is ready: [open it →](/projects/${projectId})`;
+    // Canned fallback; upgraded below to a short takeaway in Nero's voice (best-effort,
+    // after the project is already marked done so this can never wedge it).
+    let content = `Wrapped up **${project.title}** — ${n} ${n === 1 ? 'task' : 'tasks'}, about $${(project.spent_usd ?? 0).toFixed(2)}. ${link}`;
+    try {
+        const model = process.env.NERO_ANNOUNCE_MODEL || 'anthropic/claude-haiku-4.5';
+        const agent = new NeroAgent({ model, utilities: [] });
+        await agent.setup();
+        const usage = { input: 0, output: 0 };
+        agent.onUsage = (u) => {
+            usage.input += u.input;
+            usage.output += u.output;
+        };
+        agent.addMessage({
+            role: 'user',
+            content: `A background project you ran just finished. Write a SHORT message to the user in your own voice (2-3 sentences, no preamble, no "here's a message") telling them it's done and the single most useful takeaway from the deliverable. Then, on a new line, add exactly this and nothing else: ${link}\n\nPROJECT: ${project.title}\nGOAL: ${project.goal}\n\nDELIVERABLE:\n${result.slice(0, 12000)}`,
+        });
+        const res = await withTimeout(agent.main(), 45_000, 'announce timed out');
+        agent.endRun();
+        const text = res?.content?.trim();
+        if (text) content = text;
+        await Project.addSpend(projectId, await Pricing.costUsd(model, usage.input, usage.output));
+    } catch {
+        /* keep the canned fallback */
+    }
+    await Message.insert({ role: 'assistant', type: 'agent_text', content }).catch(() => {});
 }
 
 /** Approve + launch: set running, ensure the worker + queue, schedule ready tasks. */
