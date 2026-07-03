@@ -107,6 +107,7 @@ export interface ProjectRow {
     est_cost_usd: number | null;
     model: string | null;
     result: string | null;
+    summary: string | null;
     error: string | null;
     dismissed?: boolean | null;
     created_at?: number | null;

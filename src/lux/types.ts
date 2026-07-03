@@ -142,6 +142,7 @@ export interface Projects {
     result: string | null;
     spent_usd: number | null;
     status: string | null;
+    summary: string | null;
     title: string | null;
     updated_at: number | null;
 }

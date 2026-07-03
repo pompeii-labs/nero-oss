@@ -21,6 +21,8 @@ export interface ProjectData {
     device_id: string | null;
     parent_dispatch_id: string | null;
     result: string | null;
+    /** Short synthesis in Nero's voice (the overview headline); set on finalize. */
+    summary: string | null;
     error: string | null;
     dismissed: boolean;
     created_at: number;
@@ -41,6 +43,7 @@ export class Project extends DataModel<ProjectData> {
     device_id!: string | null;
     parent_dispatch_id!: string | null;
     result!: string | null;
+    summary!: string | null;
     error!: string | null;
     dismissed!: boolean;
     created_at!: number;

@@ -254,6 +254,13 @@ async function finalizeProject(projectId: string, all: ProjectTask[]): Promise<v
         /* keep the canned fallback */
     }
     await Message.insert({ role: 'assistant', type: 'agent_text', content }).catch(() => {});
+    // The takeaway (minus the link line) doubles as the project's overview synthesis.
+    const summary = content
+        .split('\n')
+        .filter((l) => !l.includes('/projects/'))
+        .join('\n')
+        .trim();
+    await Project.update(projectId, { summary }).catch(() => {});
 }
 
 /** Approve + launch: set running, ensure the worker + queue, schedule ready tasks. */

@@ -21,11 +21,17 @@
     let taskMap = $state<Record<string, ProjectTaskRow>>({});
     let unsubP: (() => void) | null = null;
     let unsubT: (() => void) | null = null;
-    // 'deliverable' is a virtual step; otherwise a task id.
-    let selectedId = $state<string | null>(null);
-    // The activity whose full input/result is open in the right slideover.
+
+    // Right pane: 'overview' (the briefing) or a task id (its agent trajectory).
+    let view = $state<string>('overview');
+    // Slideover contents: the deliverable, a task's output, or one tool call.
     type Act = NonNullable<ProjectTaskRow['activities']>[number];
-    let openAct = $state<Act | null>(null);
+    type Slide =
+        | { kind: 'deliverable' }
+        | { kind: 'output'; task: ProjectTaskRow }
+        | { kind: 'tool'; act: Act }
+        | null;
+    let slide = $state<Slide>(null);
 
     const project = $derived(projectId ? (projectMap[projectId] ?? null) : null);
     const tasks = $derived(
@@ -34,32 +40,24 @@
             .sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0)),
     );
     const hasDeliverable = $derived(!!project?.result?.trim());
-    const selected = $derived(
-        selectedId && selectedId !== 'deliverable' ? (taskMap[selectedId] ?? null) : null,
-    );
+    const current = $derived(view !== 'overview' ? (taskMap[view] ?? null) : null);
+    const outputs = $derived(tasks.filter((t) => t.result?.trim()));
 
-    // Default view: the deliverable if the project is done, else the running task.
+    // If a selected task vanishes, fall back to the overview.
     $effect(() => {
-        if (selectedId && (selectedId === 'deliverable' ? hasDeliverable : taskMap[selectedId]))
-            return;
-        if (hasDeliverable) selectedId = 'deliverable';
-        else {
-            const pick = tasks.find((t) => t.status === 'running') ?? tasks[0];
-            if (pick) selectedId = pick.id;
-        }
+        if (view !== 'overview' && !taskMap[view]) view = 'overview';
+    });
+    // Close the slideover when the main view changes.
+    $effect(() => {
+        view;
+        slide = null;
     });
 
-    // Auto-scroll the live stream while a task is running.
+    // Auto-scroll a running task's live stream.
     let streamEl = $state<HTMLElement>();
     $effect(() => {
-        selected?.streaming_text;
-        if (selected?.status === 'running' && streamEl) streamEl.scrollTop = streamEl.scrollHeight;
-    });
-
-    // Close the slideover when switching steps.
-    $effect(() => {
-        selectedId;
-        openAct = null;
+        current?.streaming_text;
+        if (current?.status === 'running' && streamEl) streamEl.scrollTop = streamEl.scrollHeight;
     });
 
     onMount(async () => {
@@ -99,6 +97,9 @@
     const budget = $derived(project?.budget_usd ?? 0);
     const pct = $derived(budget > 0 ? Math.min(100, (spent / budget) * 100) : 0);
     const doneCount = $derived(tasks.filter((t) => t.status === 'done').length);
+    const actionCount = $derived(
+        tasks.reduce((n, t) => n + (t.activities ?? []).length, 0),
+    );
 
     const dot: Record<string, string> = {
         pending: '○',
@@ -113,6 +114,31 @@
         const d = t.depends_on ?? [];
         return d.length ? `after ${d.map((i) => `#${i + 1}`).join(', ')}` : 'starts now';
     }
+
+    // One-line summary of what a tool was called with (the query, url, path...).
+    function argSummary(a: Act): string {
+        const args = a.args as Record<string, unknown> | undefined;
+        if (!args) return '';
+        for (const k of ['query', 'url', 'path', 'q', 'command', 'name', 'goal', 'title']) {
+            const v = args[k];
+            if (typeof v === 'string' && v.trim()) return v.trim();
+        }
+        const first = Object.values(args).find((v) => typeof v === 'string' && v.trim());
+        return typeof first === 'string' ? first : '';
+    }
+
+    // First readable paragraph of the deliverable (overview synthesis fallback for
+    // projects finalized before the summary column existed).
+    function snippet(text?: string | null): string {
+        if (!text) return '';
+        const paras = text
+            .replace(/```[\s\S]*?```/g, '')
+            .split(/\n\s*\n/)
+            .map((p) => p.replace(/^#+.*$/gm, '').replace(/[*_`>#]/g, '').trim())
+            .filter((p) => p.length > 40);
+        return (paras[0] ?? '').slice(0, 340);
+    }
+    const synthesis = $derived(project?.summary?.trim() || snippet(project?.result));
 </script>
 
 <div class="pd" data-theme={fieldTheme.dataTheme}>
@@ -136,120 +162,206 @@
         </div>
         <div class="pd-controls">
             {#if project?.status === 'running'}
-                <button class="pd-ctl" onclick={() => project && pauseProject(project.id)}>Pause</button>
-                <button class="pd-ctl danger" onclick={() => project && cancelProject(project.id)}>Stop</button>
+                <button class="pd-ctl" onclick={() => project && pauseProject(project.id)}
+                    >Pause</button
+                >
+                <button class="pd-ctl danger" onclick={() => project && cancelProject(project.id)}
+                    >Stop</button
+                >
             {:else if project?.status === 'paused'}
-                <button class="pd-ctl primary" onclick={() => project && resumeProject(project.id)}>Resume</button>
-                <button class="pd-ctl danger" onclick={() => project && cancelProject(project.id)}>Stop</button>
+                <button class="pd-ctl primary" onclick={() => project && resumeProject(project.id)}
+                    >Resume</button
+                >
+                <button class="pd-ctl danger" onclick={() => project && cancelProject(project.id)}
+                    >Stop</button
+                >
             {/if}
         </div>
     </header>
 
     <div class="pd-body">
-        <aside class="pd-steps">
-            {#if hasDeliverable}
-                <button
-                    class="pd-step pd-deliv"
-                    class:sel={selectedId === 'deliverable'}
-                    onclick={() => (selectedId = 'deliverable')}
-                >
-                    <span class="pd-sdot">★</span>
-                    <span class="pd-sbody">
-                        <span class="pd-stitle">Deliverable</span>
-                        <span class="pd-sdep">the finished output</span>
-                    </span>
-                </button>
-            {/if}
+        <aside class="pd-nav">
+            <button
+                class="pd-navitem"
+                class:sel={view === 'overview'}
+                onclick={() => (view = 'overview')}
+            >
+                <span class="pd-navdot pd-ov">◆</span>
+                <span class="pd-navtitle">Overview</span>
+            </button>
             {#each tasks as t, i (t.id)}
                 <button
-                    class="pd-step pd-s-{t.status}"
-                    class:sel={selectedId === t.id}
-                    onclick={() => (selectedId = t.id)}
+                    class="pd-navitem pd-s-{t.status}"
+                    class:sel={view === t.id}
+                    onclick={() => (view = t.id)}
                 >
-                    <span class="pd-sdot">{dot[t.status ?? 'pending'] ?? '○'}</span>
-                    <span class="pd-sbody">
-                        <span class="pd-snum">#{i + 1}</span>
-                        <span class="pd-stitle">{t.title}</span>
-                        <span class="pd-sdep">{depLabel(t)}</span>
+                    <span class="pd-navdot">{dot[t.status ?? 'pending'] ?? '○'}</span>
+                    <span class="pd-navbody">
+                        <span class="pd-navnum">#{i + 1}</span>
+                        <span class="pd-navtitle">{t.title}</span>
                     </span>
-                    {#if (t.cost_usd ?? 0) > 0}<span class="pd-scost">${t.cost_usd?.toFixed(3)}</span>{/if}
+                    {#if (t.cost_usd ?? 0) > 0}<span class="pd-navcost"
+                            >${t.cost_usd?.toFixed(3)}</span
+                        >{/if}
                 </button>
             {/each}
         </aside>
 
-        <main class="pd-detail">
-            {#if selectedId === 'deliverable'}
-                <div class="pd-dhead">
-                    <span class="pd-ddot pd-deliv-dot">★</span>
-                    <h2 class="pd-dtitle">Deliverable</h2>
-                    <span class="pd-dmeta">{tasks.length} tasks · ${spent.toFixed(2)}</span>
-                </div>
-                <div class="pd-out prose">{@html md(project?.result)}</div>
-            {:else if !selected}
-                <div class="pd-empty">Pick a step to watch it work.</div>
-            {:else}
-                {@const s = selected}
+        <main class="pd-main">
+            {#if view === 'overview'}
+                {#if synthesis}
+                    <section class="pd-sec">
+                        <div class="pd-label">Synthesis</div>
+                        <p class="pd-synth">{synthesis}</p>
+                    </section>
+                {/if}
+
+                <section class="pd-sec">
+                    <div class="pd-label">
+                        How it was built · {tasks.length}
+                        {tasks.length === 1 ? 'step' : 'steps'}
+                        {#if actionCount > 0}· {actionCount} actions{/if}
+                    </div>
+                    <ol class="pd-flow">
+                        {#each tasks as t, i (t.id)}
+                            <li class="pd-flownode pd-s-{t.status}">
+                                <button class="pd-flowbtn" onclick={() => (view = t.id)}>
+                                    <span class="pd-flownum">{i + 1}</span>
+                                    <span class="pd-flowbody">
+                                        <span class="pd-flowtitle">{t.title}</span>
+                                        <span class="pd-flowmeta">
+                                            {depLabel(t)}{(t.activities ?? []).length
+                                                ? ` · ${(t.activities ?? []).length} actions`
+                                                : ''}{(t.cost_usd ?? 0) > 0
+                                                ? ` · $${t.cost_usd?.toFixed(3)}`
+                                                : ''}
+                                        </span>
+                                    </span>
+                                    <span class="pd-flowarrow">→</span>
+                                </button>
+                            </li>
+                        {/each}
+                    </ol>
+                </section>
+
+                {#if hasDeliverable || outputs.length}
+                    <section class="pd-sec">
+                        <div class="pd-label">Artifacts</div>
+                        <div class="pd-chips">
+                            {#if hasDeliverable}
+                                <button
+                                    class="pd-chip pd-chip-star"
+                                    onclick={() => (slide = { kind: 'deliverable' })}
+                                >
+                                    <span class="pd-chipstar">★</span> Full write-up
+                                </button>
+                            {/if}
+                            {#each outputs as t (t.id)}
+                                <button
+                                    class="pd-chip"
+                                    onclick={() => (slide = { kind: 'output', task: t })}
+                                >
+                                    <span class="pd-chipnum">#{(t.idx ?? 0) + 1}</span>
+                                    {t.title}
+                                </button>
+                            {/each}
+                        </div>
+                    </section>
+                {/if}
+            {:else if current}
+                {@const s = current}
                 <div class="pd-dhead">
                     <span class="pd-ddot pd-s-{s.status}">{dot[s.status ?? 'pending'] ?? '○'}</span>
                     <h2 class="pd-dtitle">{s.title}</h2>
                     <span class="pd-dmeta">
                         {s.status}{(s.cost_usd ?? 0) > 0 ? ` · $${s.cost_usd?.toFixed(3)}` : ''}
                     </span>
+                    {#if s.result?.trim()}
+                        <button
+                            class="pd-outbtn"
+                            onclick={() => (slide = { kind: 'output', task: s })}
+                        >
+                            View output →
+                        </button>
+                    {/if}
                 </div>
 
                 {#if s.description}
                     <p class="pd-desc">{s.description}</p>
                 {/if}
 
-                {#if (s.activities ?? []).length}
-                    <div class="pd-label">Activity · {(s.activities ?? []).length}</div>
-                    <div class="pd-chips">
-                        {#each s.activities ?? [] as a (a.id)}
-                            <button
-                                class="pd-chip pd-a-{a.status}"
-                                onclick={() => (openAct = a)}
-                                title="Open details"
-                            >
-                                <span class="pd-chipdot"></span>
-                                <span class="pd-chipname">{a.displayName ?? a.tool}</span>
-                            </button>
-                        {/each}
-                    </div>
-                {/if}
-
                 <div class="pd-label">
-                    {s.status === 'done' ? 'Output' : 'Live output'}
+                    Trajectory{(s.activities ?? []).length
+                        ? ` · ${(s.activities ?? []).length}`
+                        : ''}
                     {#if s.status === 'running'}<i class="pd-livedot"></i>{/if}
                 </div>
-                {#if s.status === 'done' && s.result}
-                    <div class="pd-out prose">{@html md(s.result)}</div>
-                {:else if (s.streaming_text ?? '').trim()}
-                    <pre class="pd-out pd-stream" bind:this={streamEl}>{s.streaming_text}</pre>
+                {#if (s.activities ?? []).length}
+                    <ol class="pd-traj">
+                        {#each s.activities ?? [] as a (a.id)}
+                            <li class="pd-trow pd-a-{a.status}">
+                                <button
+                                    class="pd-trowbtn"
+                                    onclick={() => (slide = { kind: 'tool', act: a })}
+                                >
+                                    <span class="pd-tdot"></span>
+                                    <span class="pd-tname">{a.displayName ?? a.tool}</span>
+                                    {#if argSummary(a)}<span class="pd-targ">{argSummary(a)}</span
+                                        >{/if}
+                                    <span class="pd-topen">open</span>
+                                </button>
+                            </li>
+                        {/each}
+                    </ol>
+                {:else if s.status === 'running' && (s.streaming_text ?? '').trim()}
+                    <pre class="pd-stream" bind:this={streamEl}>{s.streaming_text}</pre>
                 {:else if s.status === 'pending'}
                     <div class="pd-waiting">Waiting on its dependencies…</div>
                 {:else}
-                    <div class="pd-waiting">Starting…</div>
+                    <div class="pd-waiting">No activity recorded for this step.</div>
                 {/if}
+            {:else}
+                <div class="pd-empty">Pick a step.</div>
             {/if}
         </main>
     </div>
 
-    {#if openAct}
-        {@const a = openAct}
-        <button class="pd-scrim" onclick={() => (openAct = null)} aria-label="Close details"></button>
-        <aside class="pd-slide">
-            <div class="pd-slide-head">
-                <span class="pd-adot pd-a-{a.status}"></span>
-                <span class="pd-slide-name">{a.displayName ?? a.tool}</span>
-                <span class="pd-slide-status">{a.status}</span>
-                <button class="pd-slide-x" onclick={() => (openAct = null)} title="Close">×</button>
-            </div>
-            {#if a.args && Object.keys(a.args).length}
-                <div class="pd-label">Input</div>
-                <pre class="pd-slide-args">{JSON.stringify(a.args, null, 2)}</pre>
+    {#if slide}
+        {@const sl = slide}
+        <button class="pd-scrim" onclick={() => (slide = null)} aria-label="Close"></button>
+        <aside class="pd-slide" class:wide={sl.kind !== 'tool'}>
+            {#if sl.kind === 'deliverable'}
+                <div class="pd-slide-head">
+                    <span class="pd-slide-star">★</span>
+                    <span class="pd-slide-name">Deliverable</span>
+                    <button class="pd-slide-x" onclick={() => (slide = null)} title="Close">×</button
+                    >
+                </div>
+                <div class="pd-slide-doc prose">{@html md(project?.result)}</div>
+            {:else if sl.kind === 'output'}
+                <div class="pd-slide-head">
+                    <span class="pd-adot pd-a-success"></span>
+                    <span class="pd-slide-name">{sl.task.title}</span>
+                    <button class="pd-slide-x" onclick={() => (slide = null)} title="Close">×</button
+                    >
+                </div>
+                <div class="pd-slide-doc prose">{@html md(sl.task.result)}</div>
+            {:else}
+                {@const a = sl.act}
+                <div class="pd-slide-head">
+                    <span class="pd-adot pd-a-{a.status}"></span>
+                    <span class="pd-slide-name">{a.displayName ?? a.tool}</span>
+                    <span class="pd-slide-status">{a.status}</span>
+                    <button class="pd-slide-x" onclick={() => (slide = null)} title="Close">×</button
+                    >
+                </div>
+                {#if a.args && Object.keys(a.args).length}
+                    <div class="pd-label">Input</div>
+                    <pre class="pd-slide-args">{JSON.stringify(a.args, null, 2)}</pre>
+                {/if}
+                <div class="pd-label">Result</div>
+                <div class="pd-slide-res">{a.result ?? '(no result captured)'}</div>
             {/if}
-            <div class="pd-label">Result</div>
-            <div class="pd-slide-res">{a.result ?? '(no result captured)'}</div>
         </aside>
     {/if}
 </div>
@@ -398,27 +510,29 @@
     .pd-body {
         flex: 1;
         display: grid;
-        grid-template-columns: 300px 1fr;
-        gap: 16px;
+        grid-template-columns: 262px 1fr;
+        gap: 20px;
         min-height: 0;
     }
-    .pd-steps {
+
+    /* Left nav rail */
+    .pd-nav {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 4px;
         overflow-y: auto;
         padding-right: 4px;
         min-height: 0;
     }
-    .pd-step {
+    .pd-navitem {
         display: flex;
-        align-items: flex-start;
-        gap: 10px;
+        align-items: center;
+        gap: 9px;
         text-align: left;
-        padding: 11px 12px;
-        border-radius: 10px;
-        border: 1px solid rgb(var(--holo) / 0.16);
-        background: rgb(var(--holo) / 0.03);
+        padding: 9px 11px;
+        border-radius: 9px;
+        border: 1px solid transparent;
+        background: none;
         color: var(--text);
         cursor: pointer;
         flex-shrink: 0;
@@ -426,90 +540,73 @@
             background 0.12s,
             border-color 0.12s;
     }
-    .pd-step:hover {
-        background: rgb(var(--holo) / 0.08);
+    .pd-navitem:hover {
+        background: rgb(var(--holo) / 0.06);
     }
-    .pd-step.sel {
-        border-color: rgb(var(--holo) / 0.6);
-        background: rgb(var(--holo) / 0.13);
+    .pd-navitem.sel {
+        border-color: rgb(var(--holo) / 0.5);
+        background: rgb(var(--holo) / 0.12);
     }
-    .pd-deliv {
-        border-color: rgb(var(--holo) / 0.4);
-        background: rgb(var(--holo) / 0.08);
-    }
-    .pd-sdot {
+    .pd-navdot {
         flex-shrink: 0;
-        font-size: 13px;
-        line-height: 1.5;
-        color: var(--text-faint);
         width: 14px;
+        font-size: 12px;
         text-align: center;
+        color: var(--text-faint);
     }
-    .pd-deliv .pd-sdot {
+    .pd-navdot.pd-ov {
         color: rgb(var(--holo));
     }
-    .pd-s-running .pd-sdot {
+    .pd-s-running .pd-navdot {
         color: rgb(var(--holo));
-        animation: pd-pulse 1.4s ease-in-out infinite;
     }
-    .pd-s-done .pd-sdot {
+    .pd-s-done .pd-navdot {
         color: #4ae08a;
     }
-    .pd-s-failed .pd-sdot {
+    .pd-s-failed .pd-navdot {
         color: #e7674a;
     }
-    @keyframes pd-pulse {
-        0%,
-        100% {
-            opacity: 1;
-        }
-        50% {
-            opacity: 0.35;
-        }
-    }
-    .pd-sbody {
+    .pd-navbody {
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 1px;
         min-width: 0;
         flex: 1;
     }
-    .pd-snum {
+    .pd-navnum {
+        font-family: var(--font-mono);
+        font-size: 9px;
+        color: var(--text-faint);
+    }
+    .pd-navtitle {
+        font-size: 12.5px;
+        color: var(--text);
+        line-height: 1.3;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+    .pd-s-pending .pd-navtitle {
+        color: var(--text-dim);
+    }
+    .pd-navcost {
+        flex-shrink: 0;
+        align-self: flex-start;
         font-family: var(--font-mono);
         font-size: 9.5px;
         color: var(--text-faint);
     }
-    .pd-stitle {
-        font-size: 13px;
-        color: var(--text);
-        line-height: 1.3;
-    }
-    .pd-s-pending .pd-stitle {
-        color: var(--text-dim);
-    }
-    .pd-sdep {
-        font-family: var(--font-mono);
-        font-size: 9px;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--text-faint);
-    }
-    .pd-scost {
-        flex-shrink: 0;
-        font-family: var(--font-mono);
-        font-size: 10px;
-        color: var(--text-faint);
-    }
 
-    /* No box around the content: the detail pane is just a clean reading column
-     *  so the markdown breathes instead of sitting in a nested card. */
-    .pd-detail {
+    /* Main pane: a clean full-width column, no box. */
+    .pd-main {
+        min-height: 0;
+        overflow-y: auto;
         display: flex;
         flex-direction: column;
-        gap: 12px;
-        min-height: 0;
-        padding: 2px 6px 0;
-        overflow: hidden;
+        gap: 22px;
+        padding: 2px 2px 40px;
     }
     .pd-empty {
         margin: auto;
@@ -517,39 +614,12 @@
         font-family: var(--font-mono);
         font-size: 13px;
     }
-    .pd-dhead {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-shrink: 0;
-    }
-    .pd-ddot {
-        font-size: 14px;
-        color: var(--text-faint);
-    }
-    .pd-deliv-dot {
-        color: rgb(var(--holo));
-    }
-    .pd-dtitle {
-        margin: 0;
-        font-family: var(--font-display);
-        font-size: 17px;
-        font-weight: 600;
-        color: var(--text);
-    }
-    .pd-dmeta {
-        margin-left: auto;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        color: var(--text-dim);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
     .pd-label {
         display: flex;
         align-items: center;
         gap: 7px;
         flex-shrink: 0;
+        margin-bottom: 10px;
         font-family: var(--font-mono);
         font-size: 9.5px;
         letter-spacing: 0.12em;
@@ -564,86 +634,320 @@
         box-shadow: 0 0 8px rgb(var(--holo));
         animation: pd-pulse 1.2s ease-in-out infinite;
     }
-    .pd-desc {
-        margin: 0;
+    @keyframes pd-pulse {
+        0%,
+        100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.35;
+        }
+    }
+
+    /* Overview: synthesis */
+    .pd-sec {
         flex-shrink: 0;
-        font-size: 13px;
-        line-height: 1.5;
+    }
+    .pd-synth {
+        margin: 0;
+        max-width: 78ch;
+        font-size: 17px;
+        line-height: 1.6;
+        color: var(--text);
+        white-space: pre-line;
+    }
+
+    /* Overview: trajectory flow */
+    .pd-flow {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .pd-flownode {
+        position: relative;
+    }
+    .pd-flownode:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        left: 25px;
+        top: 100%;
+        height: 8px;
+        width: 1px;
+        background: rgb(var(--holo) / 0.2);
+    }
+    .pd-flowbtn {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        text-align: left;
+        padding: 13px 15px;
+        border-radius: 11px;
+        border: 1px solid rgb(var(--holo) / 0.14);
+        background: rgb(var(--holo) / 0.03);
+        color: var(--text);
+        cursor: pointer;
+        transition:
+            background 0.12s,
+            border-color 0.12s;
+    }
+    .pd-flowbtn:hover {
+        background: rgb(var(--holo) / 0.08);
+        border-color: rgb(var(--holo) / 0.3);
+    }
+    .pd-flownum {
+        flex-shrink: 0;
+        width: 24px;
+        height: 24px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        border: 1px solid rgb(var(--holo) / 0.35);
+        font-family: var(--font-mono);
+        font-size: 11px;
         color: var(--text-dim);
     }
-    /* Activity as clickable chips; the full input/result opens in the slideover. */
+    .pd-s-done .pd-flownum {
+        border-color: #4ae08a66;
+        color: #4ae08a;
+    }
+    .pd-s-running .pd-flownum {
+        border-color: rgb(var(--holo));
+        color: rgb(var(--holo));
+        animation: pd-pulse 1.4s ease-in-out infinite;
+    }
+    .pd-s-failed .pd-flownum {
+        border-color: #e7674a66;
+        color: #e7674a;
+    }
+    .pd-flowbody {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        min-width: 0;
+        flex: 1;
+    }
+    .pd-flowtitle {
+        font-size: 14px;
+        color: var(--text);
+        line-height: 1.3;
+    }
+    .pd-flowmeta {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+    }
+    .pd-flowarrow {
+        flex-shrink: 0;
+        color: var(--text-faint);
+        font-size: 15px;
+    }
+    .pd-flowbtn:hover .pd-flowarrow {
+        color: rgb(var(--holo));
+    }
+
+    /* Chips (artifacts + step output) */
     .pd-chips {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
-        flex-shrink: 0;
+        gap: 8px;
     }
     .pd-chip {
         display: inline-flex;
         align-items: center;
         gap: 7px;
-        padding: 5px 11px;
-        border-radius: 999px;
-        border: 1px solid rgb(var(--holo) / 0.18);
+        padding: 8px 13px;
+        border-radius: 9px;
+        border: 1px solid rgb(var(--holo) / 0.2);
         background: rgb(var(--holo) / 0.05);
-        color: var(--text-dim);
-        font-size: 11.5px;
+        color: var(--text);
+        font-size: 12.5px;
         cursor: pointer;
         transition:
             background 0.12s,
-            color 0.12s,
             border-color 0.12s;
     }
     .pd-chip:hover {
         background: rgb(var(--holo) / 0.12);
-        color: var(--text);
-        border-color: rgb(var(--holo) / 0.35);
+        border-color: rgb(var(--holo) / 0.4);
     }
-    .pd-chipdot {
+    .pd-chip-star {
+        border-color: rgb(var(--holo) / 0.45);
+        background: rgb(var(--holo) / 0.1);
+        font-weight: 600;
+    }
+    .pd-chipstar {
+        color: rgb(var(--holo));
+    }
+    .pd-chipnum {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--text-faint);
+    }
+
+    /* Step header */
+    .pd-dhead {
+        display: flex;
+        align-items: center;
+        gap: 10px;
         flex-shrink: 0;
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: var(--text-faint);
+        margin-bottom: 2px;
     }
-    .pd-chip.pd-a-running .pd-chipdot {
-        background: rgb(var(--holo));
+    .pd-ddot {
+        font-size: 14px;
+        color: var(--text-faint);
     }
-    .pd-chip.pd-a-success .pd-chipdot {
-        background: #4ae08a;
+    .pd-s-running .pd-ddot {
+        color: rgb(var(--holo));
     }
-    .pd-chip.pd-a-error .pd-chipdot {
-        background: #e7674a;
+    .pd-s-done .pd-ddot {
+        color: #4ae08a;
     }
-    .pd-chipname {
-        max-width: 220px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+    .pd-s-failed .pd-ddot {
+        color: #e7674a;
     }
-    .pd-adot {
+    .pd-dtitle {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text);
+    }
+    .pd-dmeta {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .pd-outbtn {
+        margin-left: auto;
+        padding: 7px 13px;
+        border-radius: 8px;
+        border: 1px solid rgb(var(--holo) / 0.35);
+        background: rgb(var(--holo) / 0.08);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        cursor: pointer;
+    }
+    .pd-outbtn:hover {
+        background: rgb(var(--holo) / 0.16);
+    }
+    .pd-desc {
+        margin: 0 0 6px;
+        flex-shrink: 0;
+        max-width: 90ch;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text-dim);
+    }
+
+    /* Step trajectory: one row per tool call, with its args. */
+    .pd-traj {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+    .pd-trowbtn {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        text-align: left;
+        padding: 9px 12px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        background: none;
+        color: var(--text);
+        cursor: pointer;
+        transition:
+            background 0.12s,
+            border-color 0.12s;
+    }
+    .pd-trowbtn:hover {
+        background: rgb(var(--holo) / 0.07);
+        border-color: rgb(var(--holo) / 0.22);
+    }
+    .pd-tdot {
         flex-shrink: 0;
         width: 7px;
         height: 7px;
         border-radius: 50%;
         background: var(--text-faint);
     }
-    .pd-adot.pd-a-running {
+    .pd-a-running .pd-tdot {
         background: rgb(var(--holo));
     }
-    .pd-adot.pd-a-success {
+    .pd-a-success .pd-tdot {
         background: #4ae08a;
     }
-    .pd-adot.pd-a-error {
+    .pd-a-error .pd-tdot {
         background: #e7674a;
     }
-    /* Right slideover: a tool call's full input + result, with real vertical room. */
+    .pd-tname {
+        flex-shrink: 0;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text);
+    }
+    .pd-targ {
+        min-width: 0;
+        flex: 1;
+        font-family: var(--font-mono);
+        font-size: 11.5px;
+        color: var(--text-dim);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .pd-topen {
+        flex-shrink: 0;
+        margin-left: auto;
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        opacity: 0;
+    }
+    .pd-trowbtn:hover .pd-topen {
+        opacity: 1;
+    }
+    .pd-stream {
+        flex: 1;
+        min-height: 0;
+        margin: 0;
+        overflow-y: auto;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--text);
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .pd-waiting {
+        color: var(--text-faint);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        padding: 6px 0;
+    }
+
+    /* Slideover: opaque, wide for docs. */
     .pd-scrim {
         position: fixed;
         inset: 0;
         z-index: 80;
         border: none;
-        background: rgb(0 0 0 / 0.45);
+        background: rgb(0 0 0 / 0.55);
         cursor: default;
         animation: pd-fade 0.15s ease;
     }
@@ -661,20 +965,26 @@
         right: 0;
         bottom: 0;
         z-index: 81;
-        width: min(480px, 94vw);
+        width: min(480px, 92vw);
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
-        gap: 11px;
-        padding: 20px;
-        background: var(--panel-bg, #0c0e12);
-        border-left: 1px solid rgb(var(--holo) / 0.22);
-        box-shadow: -40px 0 80px -30px rgb(0 0 0 / 0.9);
+        gap: 12px;
+        padding: 22px 24px;
+        /* Opaque: a faint holo tint composited over the solid page bg. */
+        background:
+            linear-gradient(rgb(var(--holo) / 0.05), rgb(var(--holo) / 0.05)),
+            var(--bg, #0a0b0e);
+        border-left: 1px solid rgb(var(--holo) / 0.25);
+        box-shadow: -50px 0 90px -30px rgb(0 0 0 / 0.95);
         animation: pd-slidein 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .pd-slide.wide {
+        width: min(800px, 94vw);
     }
     @keyframes pd-slidein {
         from {
-            transform: translateX(24px);
+            transform: translateX(28px);
             opacity: 0;
         }
         to {
@@ -685,14 +995,36 @@
     .pd-slide-head {
         display: flex;
         align-items: center;
-        gap: 9px;
+        gap: 10px;
         flex-shrink: 0;
+        padding-bottom: 4px;
+        border-bottom: 1px solid rgb(var(--holo) / 0.12);
+    }
+    .pd-slide-star {
+        color: rgb(var(--holo));
+        font-size: 14px;
+    }
+    .pd-adot {
+        flex-shrink: 0;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--text-faint);
+    }
+    .pd-adot.pd-a-running {
+        background: rgb(var(--holo));
+    }
+    .pd-adot.pd-a-success {
+        background: #4ae08a;
+    }
+    .pd-adot.pd-a-error {
+        background: #e7674a;
     }
     .pd-slide-name {
         flex: 1;
         min-width: 0;
         font-family: var(--font-display);
-        font-size: 15px;
+        font-size: 16px;
         font-weight: 600;
         color: var(--text);
         white-space: nowrap;
@@ -708,10 +1040,10 @@
     }
     .pd-slide-x {
         flex-shrink: 0;
-        width: 26px;
-        height: 26px;
+        width: 28px;
+        height: 28px;
         line-height: 1;
-        font-size: 18px;
+        font-size: 19px;
         border: none;
         background: none;
         color: var(--text-faint);
@@ -722,16 +1054,23 @@
         color: var(--text);
         background: rgb(var(--holo) / 0.12);
     }
+    .pd-slide-doc {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding-right: 6px;
+        padding-bottom: 24px;
+    }
     .pd-slide-args {
         flex-shrink: 0;
         max-height: 26vh;
         overflow-y: auto;
         margin: 0;
-        padding: 10px 12px;
+        padding: 11px 13px;
         border-radius: 8px;
-        background: rgb(var(--holo) / 0.05);
+        background: rgb(var(--holo) / 0.06);
         font-family: var(--font-mono);
-        font-size: 11px;
+        font-size: 11.5px;
         line-height: 1.5;
         color: var(--text-dim);
         white-space: pre-wrap;
@@ -741,33 +1080,12 @@
         flex: 1;
         min-height: 0;
         overflow-y: auto;
+        padding-right: 6px;
         font-family: var(--font-mono);
         font-size: 12px;
-        line-height: 1.6;
+        line-height: 1.65;
         color: var(--text);
         white-space: pre-wrap;
         word-break: break-word;
-    }
-    /* The one scroll region in the detail pane. No box: content flows on the page. */
-    .pd-out {
-        flex: 1;
-        min-height: 0;
-        margin: 0;
-        overflow-y: auto;
-        padding: 2px 2px 28px;
-    }
-    .pd-stream {
-        font-family: var(--font-mono);
-        font-size: 12px;
-        line-height: 1.6;
-        color: var(--text);
-        white-space: pre-wrap;
-        word-break: break-word;
-    }
-    .pd-waiting {
-        color: var(--text-faint);
-        font-family: var(--font-mono);
-        font-size: 12px;
-        padding: 12px 0;
     }
 </style>
