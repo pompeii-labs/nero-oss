@@ -10,6 +10,7 @@
         panels,
         onAction,
         onMove,
+        onResize,
         onClose,
         onMaximize,
         onPoll,
@@ -17,6 +18,7 @@
         panels: PanelRow[];
         onAction: (panelId: string, action: PanelAction, control: string) => void;
         onMove: (id: string, x: number, y: number) => void;
+        onResize: (id: string, w: number, h: number) => void;
         onClose: (id: string) => void;
         onMaximize: (id: string, on: boolean) => void;
         onPoll: (id: string, fn: string) => void;
@@ -86,6 +88,53 @@
             pinned = { ...pinned };
         }, 1500);
     }
+
+    // Resize state, mirroring the drag pattern: `liveWH` is the size while resizing,
+    // `pinnedWH` holds it briefly after release so it doesn't snap back before Lux
+    // propagates the write (which Nero reads via list_panels).
+    const MIN_W = 240;
+    const MIN_H = 140;
+    let resizeId = $state<string | null>(null);
+    let liveWH = $state<{ w: number; h: number }>({ w: 0, h: 0 });
+    let pinnedWH = $state<Record<string, { w: number; h: number }>>({});
+    let startPt = { x: 0, y: 0 };
+    let startWH = { w: 0, h: 0 };
+
+    function whOf(p: PanelRow): { w: number; h: number } {
+        if (resizeId === p.id) return liveWH;
+        return pinnedWH[p.id] ?? { w: p.w ?? 380, h: p.h ?? 300 };
+    }
+    function startResize(e: PointerEvent, p: PanelRow) {
+        if (e.button !== 0 || p.maximized) return;
+        const cur = pinnedWH[p.id] ?? { w: p.w ?? 380, h: p.h ?? 300 };
+        startWH = { ...cur };
+        liveWH = { ...cur };
+        startPt = { x: e.clientX, y: e.clientY };
+        resizeId = p.id;
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    function onResizeMove(e: PointerEvent) {
+        if (!resizeId) return;
+        liveWH = {
+            w: Math.max(MIN_W, startWH.w + (e.clientX - startPt.x)),
+            h: Math.max(MIN_H, startWH.h + (e.clientY - startPt.y)),
+        };
+    }
+    function endResize() {
+        if (!resizeId) return;
+        const id = resizeId;
+        const at = { w: Math.round(liveWH.w), h: Math.round(liveWH.h) };
+        pinnedWH[id] = at;
+        pinnedWH = { ...pinnedWH };
+        onResize(id, at.w, at.h);
+        resizeId = null;
+        setTimeout(() => {
+            delete pinnedWH[id];
+            pinnedWH = { ...pinnedWH };
+        }, 1500);
+    }
 </script>
 
 <div class="panel-layer">
@@ -98,7 +147,7 @@
                 ? `z-index:99;`
                 : `left:${pos.x}px; top:${pos.y}px; z-index:${(p.z ?? 0) + 1};`}
         >
-            <Panel width={p.maximized ? undefined : (p.w ?? 380)}>
+            <Panel width={p.maximized ? undefined : whOf(p).w}>
                 <header
                     class="phdr"
                     class:dragging={dragId === p.id}
@@ -123,7 +172,7 @@
                 </header>
                 <div
                     class="panel-body"
-                    style={p.maximized ? '' : p.h ? `max-height:${p.h}px;` : ''}
+                    style={p.maximized ? '' : `max-height:${whOf(p).h}px;`}
                 >
                     {#each p.components ?? [] as c, i (i)}
                         <PanelComponent
@@ -134,6 +183,16 @@
                     {/each}
                 </div>
             </Panel>
+            {#if !p.maximized}
+                <div
+                    class="presize"
+                    class:active={resizeId === p.id}
+                    title="Drag to resize"
+                    onpointerdown={(e) => startResize(e, p)}
+                    onpointermove={onResizeMove}
+                    onpointerup={endResize}
+                ></div>
+            {/if}
         </div>
     {/each}
 </div>
@@ -234,6 +293,32 @@
         flex-direction: column;
         gap: 12px;
         overflow-y: auto;
+    }
+    /* Corner resize grip. Persists w/h on release; Nero reads it via list_panels. */
+    .presize {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 18px;
+        height: 18px;
+        cursor: nwse-resize;
+        touch-action: none;
+        z-index: 3;
+    }
+    .presize::after {
+        content: '';
+        position: absolute;
+        right: 4px;
+        bottom: 4px;
+        width: 7px;
+        height: 7px;
+        border-right: 2px solid rgb(var(--holo) / 0.35);
+        border-bottom: 2px solid rgb(var(--holo) / 0.35);
+        transition: border-color 0.15s ease;
+    }
+    .panel-pos:hover .presize::after,
+    .presize.active::after {
+        border-color: rgb(var(--holo) / 0.75);
     }
     @keyframes panel-in {
         from {

@@ -703,6 +703,7 @@
         {panels}
         onAction={handlePanelAction}
         onMove={(id, x, y) => void movePanel(id, { x, y })}
+        onResize={(id, w, h) => void movePanel(id, { w, h })}
         onClose={(id) => void closePanel(id)}
         onMaximize={(id, on) => void maximizePanel(id, on)}
         onPoll={(id, fn) => void callPanel(id, fn)}
