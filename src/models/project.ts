@@ -22,6 +22,7 @@ export interface ProjectData {
     parent_dispatch_id: string | null;
     result: string | null;
     error: string | null;
+    dismissed: boolean;
     created_at: number;
     updated_at: number;
 }
@@ -41,6 +42,7 @@ export class Project extends DataModel<ProjectData> {
     parent_dispatch_id!: string | null;
     result!: string | null;
     error!: string | null;
+    dismissed!: boolean;
     created_at!: number;
     updated_at!: number;
 

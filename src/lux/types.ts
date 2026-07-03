@@ -132,6 +132,7 @@ export interface Projects {
     budget_usd: number | null;
     created_at: number | null;
     device_id: string | null;
+    dismissed: boolean | null;
     error: string | null;
     est_cost_usd: number | null;
     goal: string | null;

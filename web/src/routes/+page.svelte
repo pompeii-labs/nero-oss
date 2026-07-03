@@ -56,6 +56,7 @@
         pauseProject,
         resumeProject,
         cancelProject,
+        dismissProject as dismissProjectAction,
     } from '$lib/actions/projects';
     import { sendMessage, cancelDispatch, type AttachmentUpload } from '$lib/actions/nero';
     import {
@@ -177,12 +178,15 @@
             .filter(
                 (p) =>
                     ['running', 'paused', 'done', 'error'].includes(p.status ?? '') &&
+                    !p.dismissed &&
                     !dismissedProjects.has(p.id),
             )
             .sort((a, b) => (b.updated_at ?? 0) - (a.updated_at ?? 0)),
     );
+    // Optimistically hide now; persist so it stays gone across reloads.
     function dismissProject(id: string) {
         dismissedProjects = new Set([...dismissedProjects, id]);
+        void dismissProjectAction(id);
     }
 
     function handlePanelAction(panelId: string, action: PanelAction, control: string) {

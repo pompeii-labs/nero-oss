@@ -29,3 +29,8 @@ export function resumeProject(id: string, budgetUsd?: number): Promise<unknown> 
 export function cancelProject(id: string): Promise<unknown> {
     return post(`/v1/projects/${id}/cancel`);
 }
+
+/** Hide a finished project from the dashboard (persisted; stays gone on reload). */
+export function dismissProject(id: string): Promise<unknown> {
+    return post(`/v1/projects/${id}/dismiss`);
+}

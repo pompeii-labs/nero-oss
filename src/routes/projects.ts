@@ -78,5 +78,18 @@ export function projectRoutes(): Hono {
         }
     });
 
+    // Hide a finished project from the Field dashboard, persisted so it stays gone
+    // across reloads (dismissal used to be client-only session state).
+    app.post('/v1/projects/:id/dismiss', async (c) => {
+        try {
+            const p = await Project.get(c.req.param('id'));
+            if (!p) return error(c, 404);
+            await Project.update(p.id, { dismissed: true });
+            return c.json({ ok: true });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
     return app;
 }

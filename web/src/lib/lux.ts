@@ -108,6 +108,7 @@ export interface ProjectRow {
     model: string | null;
     result: string | null;
     error: string | null;
+    dismissed?: boolean | null;
     created_at?: number | null;
     updated_at?: number | null;
 }
@@ -126,6 +127,7 @@ export interface ProjectTaskRow {
         tool: string;
         displayName?: string;
         status: string;
+        args?: Record<string, unknown>;
         result?: string;
     }> | null;
     result: string | null;
