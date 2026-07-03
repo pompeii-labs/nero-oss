@@ -206,32 +206,19 @@ export async function scheduleReady(projectId: string): Promise<void> {
 /** Synthesize task results into the final deliverable, mark done, notify. */
 async function finalizeProject(projectId: string, all: ProjectTask[]): Promise<void> {
     const project = await Project.get(projectId);
-    if (!project) return;
-    const model = workerModel();
-    // Synthesis just composes the deliverable from task results into project.result
-    // (which the dashboard renders), no tools, so it returns text rather than
-    // wandering off to write a file.
-    const agent = new NeroAgent({ model, utilities: [] });
-    await agent.setup();
-    const usage = { input: 0, output: 0 };
-    agent.onUsage = (u) => {
-        usage.input += u.input;
-        usage.output += u.output;
-    };
-    const body = all.map((t) => `## ${t.title}\n${t.result ?? ''}`).join('\n\n');
-    agent.addMessage({
-        role: 'user',
-        content: `Assemble the final deliverable for this project from the completed task results below.\n\nPROJECT GOAL: ${project.goal}\n\nTASK RESULTS:\n${body}\n\nProduce the complete deliverable the user asked for, polished and self-contained.`,
-    });
-    const res = await agent.main();
-    agent.endRun();
-    const out = res?.content ?? '';
-    const cost = await Pricing.costUsd(model, usage.input, usage.output);
-    const spent = await Project.addSpend(projectId, cost);
-    await Project.update(projectId, { status: 'done', result: out });
+    if (!project || project.status !== 'running') return; // idempotent: only finalize once
+    // The deliverable is the final task's output. Nero's plans end with an
+    // assembly/synthesis task, so no extra LLM pass here, which keeps finalize
+    // instant (can't hang) and avoids double-spending on a redundant synthesis.
+    // Fallback (no clear final task): concatenate every task's result.
+    const ordered = [...all].sort((a, b) => a.idx - b.idx);
+    const last = ordered.at(-1);
+    const result =
+        last?.result?.trim() || ordered.map((t) => `## ${t.title}\n${t.result ?? ''}`).join('\n\n');
+    await Project.update(projectId, { status: 'done', result });
     await Mediums.notify({
         title: `Project done: ${project.title}`,
-        body: `${project.goal}. Finished (${all.length} tasks, ~$${spent.toFixed(2)}).`,
+        body: `${project.goal}. Finished (${all.length} tasks, ~$${(project.spent_usd ?? 0).toFixed(2)}).`,
         urgency: 'normal',
     }).catch(() => {});
 }
