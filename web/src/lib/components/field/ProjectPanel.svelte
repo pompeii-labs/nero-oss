@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { goto } from '$app/navigation';
     import type { ProjectRow, ProjectTaskRow } from '$lib/lux';
 
     let {
@@ -27,8 +28,6 @@
     );
     const near = $derived(pct >= 80);
 
-    let showResult = $state(false);
-
     function liveLine(t: ProjectTaskRow): string {
         if (t.status === 'done') return t.result?.split('\n')[0]?.slice(0, 80) ?? '';
         if (t.status === 'running') {
@@ -53,8 +52,13 @@
 <div class="pp" class:terminal>
     <header class="pp-head">
         <i class="pp-dot" class:run={project.status === 'running'}></i>
-        <span class="pp-title">{project.title}</span>
+        <button class="pp-title" title="Open project" onclick={() => goto(`/projects/${project.id}`)}
+            >{project.title}</button
+        >
         <span class="pp-status pp-{project.status}">{project.status}</span>
+        <button class="pp-open" title="Open full view" onclick={() => goto(`/projects/${project.id}`)}
+            >⤢</button
+        >
         <button class="pp-x" title="Hide" onclick={onDismiss}>×</button>
     </header>
 
@@ -87,10 +91,9 @@
     {/if}
 
     {#if terminal && project.result}
-        <button class="pp-result-toggle" onclick={() => (showResult = !showResult)}>
-            {showResult ? 'Hide' : 'View'} deliverable
+        <button class="pp-result-toggle" onclick={() => goto(`/projects/${project.id}`)}>
+            View deliverable →
         </button>
-        {#if showResult}<pre class="pp-result">{project.result}</pre>{/if}
     {/if}
 
     <div class="pp-actions">
@@ -161,6 +164,13 @@
         }
     }
     .pp-title {
+        flex: 1;
+        min-width: 0;
+        text-align: left;
+        border: none;
+        background: none;
+        padding: 0;
+        cursor: pointer;
         font-family: var(--font-display);
         font-size: 14px;
         font-weight: 600;
@@ -168,6 +178,24 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+    .pp-title:hover {
+        color: rgb(var(--holo));
+    }
+    .pp-open {
+        width: 20px;
+        height: 20px;
+        line-height: 1;
+        font-size: 13px;
+        border: none;
+        background: none;
+        color: var(--text-faint);
+        cursor: pointer;
+        border-radius: 5px;
+    }
+    .pp-open:hover {
+        color: var(--text);
+        background: rgb(var(--holo) / 0.12);
     }
     .pp-status {
         font-family: var(--font-mono);

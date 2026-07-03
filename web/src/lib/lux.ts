@@ -129,6 +129,8 @@ export interface ProjectTaskRow {
         result?: string;
     }> | null;
     result: string | null;
+    input_tokens: number | null;
+    output_tokens: number | null;
     cost_usd: number | null;
     created_at?: number | null;
     updated_at?: number | null;

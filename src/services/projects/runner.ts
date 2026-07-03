@@ -9,6 +9,7 @@ import { Pricing } from './pricing';
 import { Logger } from '../../lib/logger';
 import { Project } from '../../models/project';
 import { ProjectTask, type TaskActivity } from '../../models/project-task';
+import { Message } from '../../models/message';
 import type { AgentActivity } from '../harness/activity';
 
 const log = new Logger('projects');
@@ -220,6 +221,16 @@ async function finalizeProject(projectId: string, all: ProjectTask[]): Promise<v
         title: `Project done: ${project.title}`,
         body: `${project.goal}. Finished (${all.length} tasks, ~$${(project.spent_usd ?? 0).toFixed(2)}).`,
         urgency: 'normal',
+    }).catch(() => {});
+
+    // Surface it in the chat as a message from Nero (not a silent status flip), and
+    // it lands in his transcript so he can talk about it. The full doc opens from the
+    // link; he can also pull details on demand with project_status.
+    const n = all.length;
+    await Message.insert({
+        role: 'assistant',
+        type: 'agent_text',
+        content: `Wrapped up **${project.title}** — ${n} ${n === 1 ? 'task' : 'tasks'}, about $${(project.spent_usd ?? 0).toFixed(2)}. The full write-up is ready: [open it →](/projects/${projectId})`,
     }).catch(() => {});
 }
 
