@@ -19,6 +19,11 @@ const workerModel = () => process.env.NERO_WORKER_MODEL || loadConfig().model;
  *  instead of stalling the whole project forever. */
 const TASK_TIMEOUT_MS = Number(process.env.NERO_TASK_TIMEOUT_MS) || 8 * 60_000;
 
+/** On boot we only auto-resume a `running` project if it was touched recently. An
+ *  orphaned/stuck project (nothing wrote to it in this window) is marked errored
+ *  instead of re-run, so it can't silently re-spend on every restart. */
+const PROJECT_STALE_MS = Number(process.env.NERO_PROJECT_STALE_MS) || 30 * 60_000;
+
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
     return new Promise<T>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error(label)), ms);
@@ -249,8 +254,22 @@ export async function resumeProjects(): Promise<number> {
         n++;
     }
     const running = await Project.listByStatus('running');
-    if (running.length) startProjectWorker();
+    const fresh: typeof running = [];
     for (const p of running) {
+        if (Date.now() - p.updated_at > PROJECT_STALE_MS) {
+            // Orphaned/stuck: do NOT re-run (it would re-spend on every boot).
+            await Project.update(p.id, {
+                status: 'error',
+                error: 'stale on boot; not auto-resumed',
+            });
+            log.warn('skipped stale project on boot', { id: p.id, title: p.title });
+            n++;
+        } else {
+            fresh.push(p);
+        }
+    }
+    if (fresh.length) startProjectWorker();
+    for (const p of fresh) {
         // Tasks caught mid-run when we died restart cleanly.
         for (const t of await ProjectTask.listByProject(p.id)) {
             if (t.status === 'running') await ProjectTask.update(t.id, { status: 'pending' });
