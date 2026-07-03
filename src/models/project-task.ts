@@ -9,6 +9,8 @@ export interface TaskActivity {
     tool: string;
     displayName?: string;
     status: 'running' | 'success' | 'error';
+    /** What the tool was called with (rendered in the step-page slideover). */
+    args?: Record<string, unknown>;
     result?: string;
 }
 

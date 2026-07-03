@@ -23,6 +23,9 @@
     let unsubT: (() => void) | null = null;
     // 'deliverable' is a virtual step; otherwise a task id.
     let selectedId = $state<string | null>(null);
+    // The activity whose full input/result is open in the right slideover.
+    type Act = NonNullable<ProjectTaskRow['activities']>[number];
+    let openAct = $state<Act | null>(null);
 
     const project = $derived(projectId ? (projectMap[projectId] ?? null) : null);
     const tasks = $derived(
@@ -51,6 +54,12 @@
     $effect(() => {
         selected?.streaming_text;
         if (selected?.status === 'running' && streamEl) streamEl.scrollTop = streamEl.scrollHeight;
+    });
+
+    // Close the slideover when switching steps.
+    $effect(() => {
+        selectedId;
+        openAct = null;
     });
 
     onMount(async () => {
@@ -193,16 +202,19 @@
                 {/if}
 
                 {#if (s.activities ?? []).length}
-                    <div class="pd-label">Activity</div>
-                    <ul class="pd-acts">
+                    <div class="pd-label">Activity · {(s.activities ?? []).length}</div>
+                    <div class="pd-chips">
                         {#each s.activities ?? [] as a (a.id)}
-                            <li class="pd-act pd-a-{a.status}">
-                                <span class="pd-adot"></span>
-                                <span class="pd-aname">{a.displayName ?? a.tool}</span>
-                                {#if a.result}<span class="pd-ares">{a.result}</span>{/if}
-                            </li>
+                            <button
+                                class="pd-chip pd-a-{a.status}"
+                                onclick={() => (openAct = a)}
+                                title="Open details"
+                            >
+                                <span class="pd-chipdot"></span>
+                                <span class="pd-chipname">{a.displayName ?? a.tool}</span>
+                            </button>
                         {/each}
-                    </ul>
+                    </div>
                 {/if}
 
                 <div class="pd-label">
@@ -221,6 +233,25 @@
             {/if}
         </main>
     </div>
+
+    {#if openAct}
+        {@const a = openAct}
+        <button class="pd-scrim" onclick={() => (openAct = null)} aria-label="Close details"></button>
+        <aside class="pd-slide">
+            <div class="pd-slide-head">
+                <span class="pd-adot pd-a-{a.status}"></span>
+                <span class="pd-slide-name">{a.displayName ?? a.tool}</span>
+                <span class="pd-slide-status">{a.status}</span>
+                <button class="pd-slide-x" onclick={() => (openAct = null)} title="Close">×</button>
+            </div>
+            {#if a.args && Object.keys(a.args).length}
+                <div class="pd-label">Input</div>
+                <pre class="pd-slide-args">{JSON.stringify(a.args, null, 2)}</pre>
+            {/if}
+            <div class="pd-label">Result</div>
+            <div class="pd-slide-res">{a.result ?? '(no result captured)'}</div>
+        </aside>
+    {/if}
 </div>
 
 <style>
@@ -470,15 +501,14 @@
         color: var(--text-faint);
     }
 
+    /* No box around the content: the detail pane is just a clean reading column
+     *  so the markdown breathes instead of sitting in a nested card. */
     .pd-detail {
         display: flex;
         flex-direction: column;
         gap: 12px;
         min-height: 0;
-        border: 1px solid rgb(var(--holo) / 0.18);
-        border-radius: 13px;
-        background: var(--panel-bg);
-        padding: 16px 18px;
+        padding: 2px 6px 0;
         overflow: hidden;
     }
     .pd-empty {
@@ -541,62 +571,190 @@
         line-height: 1.5;
         color: var(--text-dim);
     }
-    .pd-acts {
-        list-style: none;
-        margin: 0;
-        padding: 0;
+    /* Activity as clickable chips; the full input/result opens in the slideover. */
+    .pd-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
         flex-shrink: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        max-height: 130px;
-        overflow-y: auto;
     }
-    .pd-act {
-        display: flex;
-        align-items: baseline;
-        gap: 8px;
-        font-size: 12px;
+    .pd-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 5px 11px;
+        border-radius: 999px;
+        border: 1px solid rgb(var(--holo) / 0.18);
+        background: rgb(var(--holo) / 0.05);
+        color: var(--text-dim);
+        font-size: 11.5px;
+        cursor: pointer;
+        transition:
+            background 0.12s,
+            color 0.12s,
+            border-color 0.12s;
     }
-    .pd-adot {
+    .pd-chip:hover {
+        background: rgb(var(--holo) / 0.12);
+        color: var(--text);
+        border-color: rgb(var(--holo) / 0.35);
+    }
+    .pd-chipdot {
         flex-shrink: 0;
         width: 6px;
         height: 6px;
         border-radius: 50%;
         background: var(--text-faint);
-        transform: translateY(-1px);
     }
-    .pd-a-running .pd-adot {
+    .pd-chip.pd-a-running .pd-chipdot {
         background: rgb(var(--holo));
     }
-    .pd-a-success .pd-adot {
+    .pd-chip.pd-a-success .pd-chipdot {
         background: #4ae08a;
     }
-    .pd-a-error .pd-adot {
+    .pd-chip.pd-a-error .pd-chipdot {
         background: #e7674a;
     }
-    .pd-aname {
-        color: var(--text);
-        font-weight: 500;
-    }
-    .pd-ares {
-        color: var(--text-faint);
-        font-family: var(--font-mono);
-        font-size: 11px;
+    .pd-chipname {
+        max-width: 220px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    /* The one scroll region in the detail pane. */
+    .pd-adot {
+        flex-shrink: 0;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--text-faint);
+    }
+    .pd-adot.pd-a-running {
+        background: rgb(var(--holo));
+    }
+    .pd-adot.pd-a-success {
+        background: #4ae08a;
+    }
+    .pd-adot.pd-a-error {
+        background: #e7674a;
+    }
+    /* Right slideover: a tool call's full input + result, with real vertical room. */
+    .pd-scrim {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        border: none;
+        background: rgb(0 0 0 / 0.45);
+        cursor: default;
+        animation: pd-fade 0.15s ease;
+    }
+    @keyframes pd-fade {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+    .pd-slide {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 81;
+        width: min(480px, 94vw);
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 11px;
+        padding: 20px;
+        background: var(--panel-bg, #0c0e12);
+        border-left: 1px solid rgb(var(--holo) / 0.22);
+        box-shadow: -40px 0 80px -30px rgb(0 0 0 / 0.9);
+        animation: pd-slidein 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    @keyframes pd-slidein {
+        from {
+            transform: translateX(24px);
+            opacity: 0;
+        }
+        to {
+            transform: none;
+            opacity: 1;
+        }
+    }
+    .pd-slide-head {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        flex-shrink: 0;
+    }
+    .pd-slide-name {
+        flex: 1;
+        min-width: 0;
+        font-family: var(--font-display);
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .pd-slide-status {
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+    }
+    .pd-slide-x {
+        flex-shrink: 0;
+        width: 26px;
+        height: 26px;
+        line-height: 1;
+        font-size: 18px;
+        border: none;
+        background: none;
+        color: var(--text-faint);
+        cursor: pointer;
+        border-radius: 6px;
+    }
+    .pd-slide-x:hover {
+        color: var(--text);
+        background: rgb(var(--holo) / 0.12);
+    }
+    .pd-slide-args {
+        flex-shrink: 0;
+        max-height: 26vh;
+        overflow-y: auto;
+        margin: 0;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: rgb(var(--holo) / 0.05);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--text-dim);
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .pd-slide-res {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--text);
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    /* The one scroll region in the detail pane. No box: content flows on the page. */
     .pd-out {
         flex: 1;
         min-height: 0;
         margin: 0;
         overflow-y: auto;
-        padding: 14px 16px;
-        border-radius: 9px;
-        background: rgb(0 0 0 / 0.22);
-        border: 1px solid rgb(var(--holo) / 0.12);
+        padding: 2px 2px 28px;
     }
     .pd-stream {
         font-family: var(--font-mono);

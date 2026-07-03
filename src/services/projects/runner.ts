@@ -127,8 +127,9 @@ async function processJob(job: Job): Promise<void> {
             tool: a.details.fn_name,
             displayName: a.details.display_name,
             status: a.status,
+            args: a.details.args,
             result:
-                typeof a.details.result === 'string' ? a.details.result.slice(0, 200) : undefined,
+                typeof a.details.result === 'string' ? a.details.result.slice(0, 4000) : undefined,
         });
         void flush();
     };
@@ -242,7 +243,7 @@ async function finalizeProject(projectId: string, all: ProjectTask[]): Promise<v
         };
         agent.addMessage({
             role: 'user',
-            content: `A background project you ran just finished. Write a SHORT message to the user in your own voice (2-3 sentences, no preamble, no "here's a message") telling them it's done and the single most useful takeaway from the deliverable. Then, on a new line, add exactly this and nothing else: ${link}\n\nPROJECT: ${project.title}\nGOAL: ${project.goal}\n\nDELIVERABLE:\n${result.slice(0, 12000)}`,
+            content: `A background project you ran just finished. Write a SHORT message to the user in your own voice (2-3 sentences, no preamble, no "here's a message") telling them it's done and the single most useful takeaway from the deliverable. Do not use em-dashes. Then, on a new line, add exactly this and nothing else: ${link}\n\nPROJECT: ${project.title}\nGOAL: ${project.goal}\n\nDELIVERABLE:\n${result.slice(0, 12000)}`,
         });
         const res = await withTimeout(agent.main(), 45_000, 'announce timed out');
         agent.endRun();
