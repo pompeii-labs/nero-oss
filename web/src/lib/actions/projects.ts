@@ -34,3 +34,13 @@ export function cancelProject(id: string): Promise<unknown> {
 export function dismissProject(id: string): Promise<unknown> {
     return post(`/v1/projects/${id}/dismiss`);
 }
+
+/** Approve or reject a staged merge-conflict resolution, unblocking the merge lane. */
+export function mergeApprove(id: string, action: 'approve' | 'reject'): Promise<unknown> {
+    return post(`/v1/projects/${id}/merge-approve`, { action });
+}
+
+/** Push the integration branch and open a PR; the result carries the PR url. */
+export function openProjectPr(id: string) {
+    return post<{ url?: string }>(`/v1/projects/${id}/open-pr`);
+}

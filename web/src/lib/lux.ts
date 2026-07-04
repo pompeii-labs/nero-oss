@@ -110,6 +110,15 @@ export interface ProjectRow {
     summary: string | null;
     error: string | null;
     dismissed?: boolean | null;
+    repo_path?: string | null;
+    base_branch?: string | null;
+    integration_branch?: string | null;
+    merge_conflict?: {
+        task_idx: number;
+        task_title: string;
+        files: string[];
+        diff: string;
+    } | null;
     created_at?: number | null;
     updated_at?: number | null;
 }
@@ -121,6 +130,10 @@ export interface ProjectTaskRow {
     title: string | null;
     description: string | null;
     depends_on: number[] | null;
+    kind?: 'research' | 'code' | 'verify' | null;
+    branch?: string | null;
+    commit_sha?: string | null;
+    diff?: string | null;
     status: 'pending' | 'running' | 'done' | 'failed' | 'skipped' | 'cancelled' | null;
     streaming_text: string | null;
     activities: Array<{

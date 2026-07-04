@@ -180,7 +180,10 @@
         width: min(640px, 100%);
         max-height: 78vh;
         overflow-y: auto;
-        background: var(--panel-bg);
+        /* Opaque: a faint holo tint over the solid page bg (was see-through). */
+        background:
+            linear-gradient(rgb(var(--holo) / 0.06), rgb(var(--holo) / 0.06)),
+            var(--bg, #0a0b0e);
         border: 1px solid rgb(var(--holo) / 0.3);
         border-radius: 14px;
         padding: 15px 16px 12px;

@@ -10,7 +10,12 @@
         type ProjectRow,
         type ProjectTaskRow,
     } from '$lib/lux';
-    import { pauseProject, resumeProject, cancelProject } from '$lib/actions/projects';
+    import {
+        pauseProject,
+        resumeProject,
+        cancelProject,
+        openProjectPr,
+    } from '$lib/actions/projects';
 
     marked.setOptions({ breaks: true, gfm: true });
     const md = (t?: string | null) => marked.parse(t ?? '') as string;
@@ -30,8 +35,23 @@
         | { kind: 'deliverable' }
         | { kind: 'output'; task: ProjectTaskRow }
         | { kind: 'tool'; act: Act }
+        | { kind: 'branch' }
         | null;
     let slide = $state<Slide>(null);
+
+    // Open-PR action state (code projects).
+    let prBusy = $state(false);
+    let prUrl = $state<string | null>(null);
+    let prErr = $state<string | null>(null);
+    async function openPr() {
+        if (!projectId) return;
+        prBusy = true;
+        prErr = null;
+        const res = await openProjectPr(projectId);
+        prBusy = false;
+        if (res.success) prUrl = res.data?.url ?? null;
+        else prErr = res.error?.message ?? 'Failed to open PR';
+    }
 
     const project = $derived(projectId ? (projectMap[projectId] ?? null) : null);
     const tasks = $derived(
@@ -47,10 +67,11 @@
     $effect(() => {
         if (view !== 'overview' && !taskMap[view]) view = 'overview';
     });
-    // Close the slideover when the main view changes.
+    // Close the slideover + re-latch tailing when the main view changes.
     $effect(() => {
         view;
         slide = null;
+        tailing = true;
     });
 
     // Auto-scroll a running task's live stream.
@@ -59,6 +80,47 @@
         current?.streaming_text;
         if (current?.status === 'running' && streamEl) streamEl.scrollTop = streamEl.scrollHeight;
     });
+
+    // Auto-tail: stick the main pane to the newest event as activity streams in,
+    // unless the user has scrolled up (then leave them where they are).
+    let mainEl = $state<HTMLElement>();
+    let tailing = $state(true);
+    function onMainScroll() {
+        const el = mainEl;
+        if (!el) return;
+        tailing = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    }
+    $effect(() => {
+        const n = current?.activities?.length ?? 0;
+        current?.streaming_text;
+        void n;
+        if (tailing && mainEl) mainEl.scrollTop = mainEl.scrollHeight;
+    });
+
+    // A file-writing tool call, rendered as a diff instead of a raw text dump.
+    interface FileEdit {
+        path: string;
+        removed: string[];
+        added: string[];
+    }
+    function fileEdit(a: Act): FileEdit | null {
+        const args = (a.args ?? {}) as Record<string, unknown>;
+        const path = typeof args.path === 'string' ? args.path : '';
+        if (!path) return null;
+        if (a.tool === 'write_file' && typeof args.content === 'string') {
+            return { path, removed: [], added: args.content.replace(/\n$/, '').split('\n') };
+        }
+        if (a.tool === 'edit_file') {
+            const oldS = typeof args.old_string === 'string' ? args.old_string : '';
+            const newS = typeof args.new_string === 'string' ? args.new_string : '';
+            return {
+                path,
+                removed: oldS ? oldS.replace(/\n$/, '').split('\n') : [],
+                added: newS ? newS.replace(/\n$/, '').split('\n') : [],
+            };
+        }
+        return null;
+    }
 
     onMount(async () => {
         unsubP = await subscribeProjects((c) => {
@@ -207,7 +269,7 @@
             {/each}
         </aside>
 
-        <main class="pd-main">
+        <main class="pd-main" bind:this={mainEl} onscroll={onMainScroll}>
             {#if view === 'overview'}
                 {#if synthesis}
                     <section class="pd-sec">
@@ -244,7 +306,7 @@
                     </ol>
                 </section>
 
-                {#if hasDeliverable || outputs.length}
+                {#if hasDeliverable || outputs.length || project?.integration_branch}
                     <section class="pd-sec">
                         <div class="pd-label">Artifacts</div>
                         <div class="pd-chips">
@@ -254,6 +316,15 @@
                                     onclick={() => (slide = { kind: 'deliverable' })}
                                 >
                                     <span class="pd-chipstar">★</span> Full write-up
+                                </button>
+                            {/if}
+                            {#if project?.integration_branch}
+                                <button
+                                    class="pd-chip pd-chip-branch"
+                                    onclick={() => (slide = { kind: 'branch' })}
+                                >
+                                    <span class="pd-chipbranch">⎇</span>
+                                    {project.integration_branch}
                                 </button>
                             {/if}
                             {#each outputs as t (t.id)}
@@ -329,7 +400,12 @@
     {#if slide}
         {@const sl = slide}
         <button class="pd-scrim" onclick={() => (slide = null)} aria-label="Close"></button>
-        <aside class="pd-slide" class:wide={sl.kind !== 'tool'}>
+        <aside
+            class="pd-slide"
+            class:wide={sl.kind === 'deliverable' ||
+                sl.kind === 'output' ||
+                (sl.kind === 'tool' && !!fileEdit(sl.act))}
+        >
             {#if sl.kind === 'deliverable'}
                 <div class="pd-slide-head">
                     <span class="pd-slide-star">★</span>
@@ -346,8 +422,40 @@
                     >
                 </div>
                 <div class="pd-slide-doc prose">{@html md(sl.task.result)}</div>
+            {:else if sl.kind === 'branch'}
+                <div class="pd-slide-head">
+                    <span class="pd-slide-star">⎇</span>
+                    <span class="pd-slide-name">{project?.integration_branch}</span>
+                    <button class="pd-slide-x" onclick={() => (slide = null)} title="Close">×</button
+                    >
+                </div>
+                <div class="pd-branch">
+                    <div class="pd-brow">
+                        <span class="pd-bk">repo</span><span class="pd-bv">{project?.repo_path}</span>
+                    </div>
+                    <div class="pd-brow">
+                        <span class="pd-bk">base</span><span class="pd-bv"
+                            >{project?.base_branch}</span
+                        >
+                    </div>
+                    <div class="pd-brow">
+                        <span class="pd-bk">branch</span><span class="pd-bv"
+                            >{project?.integration_branch}</span
+                        >
+                    </div>
+                </div>
+                {#if prUrl}
+                    <a class="pd-prlink" href={prUrl} target="_blank" rel="noreferrer">View PR →</a>
+                {:else}
+                    <button class="pd-prbtn" onclick={openPr} disabled={prBusy}>
+                        {prBusy ? 'Opening PR…' : 'Push + open PR'}
+                    </button>
+                {/if}
+                {#if prErr}<p class="pd-prerr">{prErr}</p>{/if}
+                <p class="pd-brnote">The full diffstat is in the deliverable write-up.</p>
             {:else}
                 {@const a = sl.act}
+                {@const fe = fileEdit(a)}
                 <div class="pd-slide-head">
                     <span class="pd-adot pd-a-{a.status}"></span>
                     <span class="pd-slide-name">{a.displayName ?? a.tool}</span>
@@ -355,12 +463,32 @@
                     <button class="pd-slide-x" onclick={() => (slide = null)} title="Close">×</button
                     >
                 </div>
-                {#if a.args && Object.keys(a.args).length}
-                    <div class="pd-label">Input</div>
-                    <pre class="pd-slide-args">{JSON.stringify(a.args, null, 2)}</pre>
+                {#if fe}
+                    <div class="pd-difffile">
+                        <span class="pd-diffpath">{fe.path}</span>
+                        <span class="pd-diffstat">
+                            {#if fe.removed.length}<span class="pd-diffdel">−{fe.removed.length}</span
+                                >{/if}
+                            {#if fe.added.length}<span class="pd-diffadd">+{fe.added.length}</span
+                                >{/if}
+                        </span>
+                    </div>
+                    <div class="pd-diff">
+                        {#each fe.removed as line, i (`r${i}`)}
+                            <div class="pd-dl pd-dl-del"><span class="pd-dlm">−</span>{line}</div>
+                        {/each}
+                        {#each fe.added as line, i (`a${i}`)}
+                            <div class="pd-dl pd-dl-add"><span class="pd-dlm">+</span>{line}</div>
+                        {/each}
+                    </div>
+                {:else}
+                    {#if a.args && Object.keys(a.args).length}
+                        <div class="pd-label">Input</div>
+                        <pre class="pd-slide-args">{JSON.stringify(a.args, null, 2)}</pre>
+                    {/if}
+                    <div class="pd-label">Result</div>
+                    <div class="pd-slide-res">{a.result ?? '(no result captured)'}</div>
                 {/if}
-                <div class="pd-label">Result</div>
-                <div class="pd-slide-res">{a.result ?? '(no result captured)'}</div>
             {/if}
         </aside>
     {/if}
@@ -789,6 +917,13 @@
         font-size: 10px;
         color: var(--text-faint);
     }
+    .pd-chip-branch {
+        font-family: var(--font-mono);
+        font-size: 11.5px;
+    }
+    .pd-chipbranch {
+        color: rgb(var(--holo));
+    }
 
     /* Step header */
     .pd-dhead {
@@ -1087,5 +1222,144 @@
         color: var(--text);
         white-space: pre-wrap;
         word-break: break-word;
+    }
+    .pd-branch {
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .pd-brow {
+        display: flex;
+        gap: 10px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+    }
+    .pd-bk {
+        flex-shrink: 0;
+        width: 56px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-size: 10px;
+        padding-top: 2px;
+    }
+    .pd-bv {
+        color: var(--text);
+        word-break: break-all;
+    }
+    .pd-prbtn {
+        flex-shrink: 0;
+        align-self: flex-start;
+        margin-top: 4px;
+        padding: 9px 15px;
+        border-radius: 9px;
+        border: 1px solid rgb(var(--holo) / 0.5);
+        background: rgb(var(--holo) / 0.16);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        cursor: pointer;
+    }
+    .pd-prbtn:hover {
+        background: rgb(var(--holo) / 0.24);
+    }
+    .pd-prbtn:disabled {
+        opacity: 0.6;
+        cursor: default;
+    }
+    .pd-prlink {
+        align-self: flex-start;
+        margin-top: 4px;
+        padding: 9px 15px;
+        border-radius: 9px;
+        border: 1px solid rgb(var(--holo) / 0.5);
+        background: rgb(var(--holo) / 0.16);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        text-decoration: none;
+    }
+    .pd-prerr {
+        margin: 0;
+        color: #e7674a;
+        font-family: var(--font-mono);
+        font-size: 11.5px;
+    }
+    .pd-brnote {
+        margin: 2px 0 0;
+        color: var(--text-faint);
+        font-size: 12px;
+    }
+    /* File-edit diff viewer (write_file / edit_file tool calls). */
+    .pd-difffile {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 11px;
+        border-radius: 8px;
+        background: rgb(var(--holo) / 0.06);
+        font-family: var(--font-mono);
+        font-size: 12px;
+    }
+    .pd-diffpath {
+        color: var(--text);
+        word-break: break-all;
+    }
+    .pd-diffstat {
+        display: flex;
+        gap: 8px;
+        font-size: 11px;
+    }
+    .pd-diffdel {
+        color: #e7674a;
+    }
+    .pd-diffadd {
+        color: #4ae08a;
+    }
+    .pd-editlink {
+        margin-left: auto;
+        flex-shrink: 0;
+        color: rgb(var(--holo));
+        text-decoration: none;
+        font-size: 11px;
+    }
+    .pd-editlink:hover {
+        text-decoration: underline;
+    }
+    .pd-diff {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        border-radius: 8px;
+        border: 1px solid rgb(var(--holo) / 0.12);
+        background: rgb(0 0 0 / 0.28);
+        font-family: var(--font-mono);
+        font-size: 11.5px;
+        line-height: 1.55;
+        padding: 6px 0;
+    }
+    .pd-dl {
+        display: flex;
+        gap: 8px;
+        padding: 0 12px;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .pd-dlm {
+        flex-shrink: 0;
+        width: 10px;
+        text-align: center;
+        opacity: 0.7;
+        user-select: none;
+    }
+    .pd-dl-add {
+        background: rgb(74 224 138 / 0.1);
+        color: #b6f0cf;
+    }
+    .pd-dl-del {
+        background: rgb(231 103 74 / 0.1);
+        color: #f0c0b6;
     }
 </style>

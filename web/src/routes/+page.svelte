@@ -39,6 +39,7 @@
     import PanelLayer from '$lib/components/field/PanelLayer.svelte';
     import AskCard from '$lib/components/field/AskCard.svelte';
     import ProjectApprovalCard from '$lib/components/field/ProjectApprovalCard.svelte';
+    import MergeApprovalCard from '$lib/components/field/MergeApprovalCard.svelte';
     import ProjectPanel from '$lib/components/field/ProjectPanel.svelte';
     import type { PanelAction } from '$lib/panels/types';
     import {
@@ -57,6 +58,7 @@
         resumeProject,
         cancelProject,
         dismissProject as dismissProjectAction,
+        mergeApprove,
     } from '$lib/actions/projects';
     import { sendMessage, cancelDispatch, type AttachmentUpload } from '$lib/actions/nero';
     import {
@@ -188,6 +190,10 @@
         dismissedProjects = new Set([...dismissedProjects, id]);
         void dismissProjectAction(id);
     }
+    // A project's merge is blocked on the user approving a staged conflict resolution.
+    const activeMergeConflict = $derived(
+        Object.values(projectMap).find((p) => !!p.merge_conflict) ?? null,
+    );
 
     function handlePanelAction(panelId: string, action: PanelAction, control: string) {
         if (action.type === 'interact') {
@@ -732,6 +738,16 @@
             onRun={(budget) => void runProject(p.id, budget)}
             onTweak={(note) => void tweakProject(p.id, note)}
             onCancel={() => void rejectProject(p.id)}
+        />
+    {/if}
+
+    <!-- a merge blocked on the user reviewing a staged conflict resolution -->
+    {#if activeMergeConflict}
+        {@const mp = activeMergeConflict}
+        <MergeApprovalCard
+            project={mp}
+            onApprove={() => void mergeApprove(mp.id, 'approve')}
+            onReject={() => void mergeApprove(mp.id, 'reject')}
         />
     {/if}
 
