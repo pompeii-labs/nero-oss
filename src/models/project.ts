@@ -9,6 +9,16 @@ export type ProjectStatus =
     | 'error'
     | 'cancelled';
 
+/** A merge blocked on the user: the agent resolved it in the integration worktree
+ *  and we hold the merge until they approve the resolution. */
+export interface MergeConflict {
+    task_idx: number;
+    task_title: string;
+    files: string[];
+    /** The staged resolution diff shown in the approval card. */
+    diff: string;
+}
+
 export interface ProjectData {
     id: string;
     title: string;
@@ -25,6 +35,12 @@ export interface ProjectData {
     summary: string | null;
     error: string | null;
     dismissed: boolean;
+    /** Set once the project touches code: the target repo + the branch its tasks
+     *  integrate onto. Null for pure-research projects. */
+    repo_path: string | null;
+    base_branch: string | null;
+    integration_branch: string | null;
+    merge_conflict: MergeConflict | null;
     created_at: number;
     updated_at: number;
 }
@@ -46,6 +62,10 @@ export class Project extends DataModel<ProjectData> {
     summary!: string | null;
     error!: string | null;
     dismissed!: boolean;
+    repo_path!: string | null;
+    base_branch!: string | null;
+    integration_branch!: string | null;
+    merge_conflict!: MergeConflict | null;
     created_at!: number;
     updated_at!: number;
 

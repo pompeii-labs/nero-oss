@@ -1,0 +1,5 @@
+TALTER project_tasks ADD kind TEXT DEFAULT 'research'
+TALTER project_tasks ADD branch TEXT
+TALTER project_tasks ADD commit_sha TEXT
+TALTER project_tasks ADD diff TEXT
+TALTER project_tasks ADD workdir TEXT

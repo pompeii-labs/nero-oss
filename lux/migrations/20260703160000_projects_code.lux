@@ -1,0 +1,4 @@
+TALTER projects ADD repo_path TEXT
+TALTER projects ADD base_branch TEXT
+TALTER projects ADD integration_branch TEXT
+TALTER projects ADD merge_conflict JSON

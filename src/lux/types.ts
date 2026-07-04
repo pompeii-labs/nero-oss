@@ -129,6 +129,7 @@ export interface MediumActivity {
 }
 
 export interface Projects {
+    base_branch: string | null;
     budget_usd: number | null;
     created_at: number | null;
     device_id: string | null;
@@ -137,8 +138,11 @@ export interface Projects {
     est_cost_usd: number | null;
     goal: string | null;
     id: string;
+    integration_branch: string | null;
+    merge_conflict: Json | null;
     model: string | null;
     parent_dispatch_id: string | null;
+    repo_path: string | null;
     result: string | null;
     spent_usd: number | null;
     status: string | null;
@@ -149,14 +153,18 @@ export interface Projects {
 
 export interface ProjectTasks {
     activities: Json | null;
+    branch: string | null;
+    commit_sha: string | null;
     cost_usd: number | null;
     created_at: number | null;
     depends_on: Json | null;
     description: string | null;
+    diff: string | null;
     id: string;
     idx: number | null;
     input_tokens: number | null;
     job_id: string | null;
+    kind: string | null;
     output_tokens: number | null;
     project_id: string | null;
     result: string | null;
@@ -165,6 +173,7 @@ export interface ProjectTasks {
     title: string | null;
     tools: Json | null;
     updated_at: number | null;
+    workdir: string | null;
 }
 
 export type Database = {

@@ -3,7 +3,8 @@ import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
 import { loadConfig } from '../../config';
 import { Project } from '../../models/project';
-import { ProjectTask } from '../../models/project-task';
+import { ProjectTask, type TaskKind } from '../../models/project-task';
+import { Settings } from '../../models/settings';
 import { waitForApproval } from './approval';
 import { launchProject } from './runner';
 import { Args } from '../../util/args';
@@ -17,6 +18,7 @@ interface PlanTask {
     description: string;
     dependsOn: number[];
     tools: string[];
+    kind: TaskKind;
     estCostUsd: number;
 }
 
@@ -32,11 +34,13 @@ function parseTasks(raw: unknown): PlanTask[] | string {
         const o = (t ?? {}) as Record<string, unknown>;
         const deps = Array.isArray(o.depends_on) ? o.depends_on : [];
         const tls = Array.isArray(o.tools) ? o.tools : [];
+        const k = String(o.kind ?? 'research');
         return {
             title: String(o.title ?? '').trim(),
             description: String(o.description ?? '').trim(),
             dependsOn: deps.map((d) => Number(d)).filter((d) => Number.isInteger(d) && d >= 0),
             tools: tls.map((x) => String(x)),
+            kind: k === 'code' || k === 'verify' ? (k as TaskKind) : 'research',
             estCostUsd: Number(o.est_cost_usd) || 0,
         };
     });
@@ -65,7 +69,8 @@ export class ProjectUtility {
         key: 'title',
         type: 'string',
         required: true,
-        description: 'A short title for the project (a few words).',
+        description:
+            'A short, descriptive title naming the project (a few words), required. Name what it delivers, e.g. "via:// namespace" - never a placeholder like "Untitled".',
     })
     @toolparam({
         key: 'goal',
@@ -78,15 +83,44 @@ export class ProjectUtility {
         type: 'string',
         required: true,
         description:
-            'JSON array of tasks, in dependency order. Each: {"title":"...", "description":"full instructions for the agent doing this task", "depends_on":[earlier task indices], "tools":["optional hints"], "est_cost_usd":0.20}. depends_on must reference EARLIER indices only (it is a DAG). Independent tasks run in parallel. The final task should synthesize/assemble if needed.',
+            'JSON array of tasks, in dependency order. Each: {"title":"...", "description":"full instructions for the agent doing this task", "depends_on":[earlier task indices], "tools":["optional hints"], "kind":"research"|"code", "est_cost_usd":0.20}. depends_on must reference EARLIER indices only (it is a DAG). Independent tasks run in parallel. Use "kind":"code" for tasks that write/modify code in the repo (they run in an isolated git worktree and produce a diff); default is "research". IMPORTANT for code work: every task (code AND research) runs in a worktree with the FULL repo checked out, so each task can read whatever files it needs on its own. Do NOT add a separate task just to "read/understand the whole codebase", that wastes tokens; each code task explores the code it touches. The final task should synthesize/assemble if needed.',
+    })
+    @toolparam({
+        key: 'repo',
+        type: 'string',
+        required: false,
+        description:
+            'Absolute path to the target git repo, REQUIRED when any task is kind "code". Its work integrates onto a fresh branch; nothing is pushed without the user opening a PR. Defaults to the code_repo_path setting if unset.',
     })
     async plan_project(call: MagmaToolCall, _agent?: MagmaAgent): Promise<string> {
         const a = new Args(call);
-        const title = a.text('title') || 'Untitled project';
+        const title = a.text('title');
+        if (!title) return 'Provide a short, descriptive title for the project (a few words).';
         const goal = a.text('goal');
         if (!goal) return 'Provide a goal for the project.';
         const parsed = parseTasks(call.fn_args.tasks);
         if (typeof parsed === 'string') return parsed;
+
+        // A code project needs a repo, and a verify step to prove it builds.
+        const hasCode = parsed.some((t) => t.kind === 'code');
+        let repoPath: string | null = null;
+        if (hasCode) {
+            repoPath = a.text('repo') || (await Settings.get('code_repo_path'));
+            if (!repoPath)
+                return 'This plan writes code, so it needs a target repo: pass the "repo" parameter (an absolute path to a git repo) or set the code_repo_path setting first.';
+            if (!parsed.some((t) => t.kind === 'verify')) {
+                const codeIdx = parsed.flatMap((t, i) => (t.kind === 'code' ? [i] : []));
+                parsed.push({
+                    title: 'Verify build and tests',
+                    description:
+                        'Run the build and test suite for this repo. If anything fails, fix the code and re-run until it passes or you have tried 3 times. Report exactly what you ran and the final result.',
+                    dependsOn: codeIdx,
+                    tools: [],
+                    kind: 'verify',
+                    estCostUsd: 0.2,
+                });
+            }
+        }
 
         const estTotal = parsed.reduce((s, t) => s + t.estCostUsd, 0);
         const project = await Project.create({
@@ -95,6 +129,7 @@ export class ProjectUtility {
             model: workerModel(),
             est_cost_usd: estTotal,
             status: 'awaiting_approval',
+            repo_path: repoPath,
         });
         for (let i = 0; i < parsed.length; i++) {
             const t = parsed[i];
@@ -105,6 +140,7 @@ export class ProjectUtility {
                 description: t.description,
                 depends_on: t.dependsOn,
                 tools: t.tools,
+                kind: t.kind,
                 status: 'pending',
             });
         }

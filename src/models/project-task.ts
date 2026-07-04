@@ -3,6 +3,7 @@ import { getLux, unwrap } from '../lib/lux';
 import type { ProjectTasks } from '../lux/types';
 
 export type TaskStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped' | 'cancelled';
+export type TaskKind = 'research' | 'code' | 'verify';
 
 export interface TaskActivity {
     id: string;
@@ -22,6 +23,8 @@ export interface ProjectTaskData {
     description: string;
     depends_on: number[];
     tools: string[];
+    /** research (text result) | code (produces a diff, runs in a worktree) | verify. */
+    kind: TaskKind;
     status: TaskStatus;
     streaming_text: string;
     activities: TaskActivity[];
@@ -30,6 +33,11 @@ export interface ProjectTaskData {
     output_tokens: number;
     cost_usd: number;
     job_id: string | null;
+    /** Code tasks: the worktree branch, its final commit, the diff, the worktree path. */
+    branch: string | null;
+    commit_sha: string | null;
+    diff: string | null;
+    workdir: string | null;
     created_at: number;
     updated_at: number;
 }
@@ -44,6 +52,7 @@ export class ProjectTask extends DataModel<ProjectTaskData> {
     description!: string;
     depends_on!: number[];
     tools!: string[];
+    kind!: TaskKind;
     status!: TaskStatus;
     streaming_text!: string;
     activities!: TaskActivity[];
@@ -52,6 +61,10 @@ export class ProjectTask extends DataModel<ProjectTaskData> {
     output_tokens!: number;
     cost_usd!: number;
     job_id!: string | null;
+    branch!: string | null;
+    commit_sha!: string | null;
+    diff!: string | null;
+    workdir!: string | null;
     created_at!: number;
     updated_at!: number;
 

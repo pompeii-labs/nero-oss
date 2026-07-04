@@ -36,3 +36,33 @@ export function deliverApproval(id: string, result: ApprovalResult): boolean {
     w.resolve(result);
     return true;
 }
+
+/** Same pattern for a merge blocked on the user: the merge lane resolves a conflict
+ *  and waits for the user to approve/reject the resolution before committing. */
+export type MergeApprovalResult = 'approve' | 'reject' | 'timeout';
+
+interface MergeWaiter {
+    resolve: (r: MergeApprovalResult) => void;
+    timer: ReturnType<typeof setTimeout>;
+}
+
+const mergeWaiters = new Map<string, MergeWaiter>();
+
+export function waitForMergeApproval(id: string, timeoutMs: number): Promise<MergeApprovalResult> {
+    return new Promise((resolve) => {
+        const timer = setTimeout(() => {
+            mergeWaiters.delete(id);
+            resolve('timeout');
+        }, timeoutMs);
+        mergeWaiters.set(id, { resolve, timer });
+    });
+}
+
+export function deliverMergeApproval(id: string, result: MergeApprovalResult): boolean {
+    const w = mergeWaiters.get(id);
+    if (!w) return false;
+    clearTimeout(w.timer);
+    mergeWaiters.delete(id);
+    w.resolve(result);
+    return true;
+}

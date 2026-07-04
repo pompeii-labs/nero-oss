@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import { Project } from '../models/project';
-import { deliverApproval } from '../services/projects/approval';
+import { deliverApproval, deliverMergeApproval } from '../services/projects/approval';
 import { scheduleReady } from '../services/projects/runner';
+import { openPr } from '../services/projects/git';
+import { getQueue } from '../lib/queue';
 import { error } from '../util/errors';
 
 /** The user acting on a project's plan-approval card: run it (with a budget), ask
@@ -59,6 +61,10 @@ export function projectRoutes(): Hono {
                 status: 'running',
                 ...(Number.isFinite(raise) && raise > p.budget_usd ? { budget_usd: raise } : {}),
             });
+            // The budget ceiling paused the queue; resume it or nothing gets picked up.
+            await getQueue()
+                .resume()
+                .catch(() => {});
             await scheduleReady(p.id);
             return c.json({ ok: true });
         } catch (err) {
@@ -86,6 +92,40 @@ export function projectRoutes(): Hono {
             if (!p) return error(c, 404);
             await Project.update(p.id, { dismissed: true });
             return c.json({ ok: true });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
+    // Resolve a blocked merge: the worker staged a conflict resolution and is waiting.
+    app.post('/v1/projects/:id/merge-approve', async (c) => {
+        try {
+            const b = (await c.req.json().catch(() => ({}))) as { action?: 'approve' | 'reject' };
+            const ok = deliverMergeApproval(
+                c.req.param('id'),
+                b.action === 'reject' ? 'reject' : 'approve',
+            );
+            return c.json({ ok });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
+    // Push the integration branch and open a PR (the only step that leaves the box).
+    app.post('/v1/projects/:id/open-pr', async (c) => {
+        try {
+            const p = await Project.get(c.req.param('id'));
+            if (!p) return error(c, 404);
+            if (!p.repo_path || !p.integration_branch)
+                return error(c, 400, 'project has no code branch');
+            const url = await openPr(
+                p.repo_path,
+                p.integration_branch,
+                p.base_branch ?? 'main',
+                p.title,
+                p.goal,
+            );
+            return c.json({ ok: true, url });
         } catch (err) {
             return error(c, 500, err);
         }
