@@ -11,6 +11,14 @@ function shellQuote(s: string): string {
 }
 
 export class FileUtility {
+    /** When set (project worker tasks), relative paths resolve against this directory
+     *  instead of the server cwd, keeping each task's writes in its own tree. */
+    constructor(private baseCwd?: string) {}
+
+    private abs(path: string): string {
+        return resolve(this.baseCwd ?? process.cwd(), expandPath(path));
+    }
+
     @tool({
         name: 'read_file',
         description: 'Read a text file from the local filesystem and return its contents.',
@@ -25,7 +33,7 @@ export class FileUtility {
         const a = new Args(call);
         const path = a.str('path');
         try {
-            return await readFile(resolve(expandPath(path)), 'utf-8');
+            return await readFile(this.abs(path), 'utf-8');
         } catch (e) {
             return `Error reading ${path}: ${(e as Error).message}`;
         }
@@ -48,7 +56,7 @@ export class FileUtility {
         const path = a.str('path');
         const content = a.str('content');
         try {
-            const abs = resolve(expandPath(path));
+            const abs = this.abs(path);
             await mkdir(dirname(abs), { recursive: true });
             await writeFile(abs, content, 'utf-8');
             return `Wrote ${content.length} bytes to ${path}.`;
@@ -81,7 +89,7 @@ export class FileUtility {
         const oldStr = a.str('old_string');
         const newStr = a.str('new_string');
         try {
-            const abs = resolve(expandPath(path));
+            const abs = this.abs(path);
             const content = await readFile(abs, 'utf-8');
             const count = content.split(oldStr).length - 1;
             if (count === 0) return `Error: old_string not found in ${path}.`;
@@ -107,7 +115,7 @@ export class FileUtility {
     async list_files(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const path = call.fn_args.path ? String(call.fn_args.path) : '.';
         try {
-            const entries = await readdir(resolve(expandPath(path)), { withFileTypes: true });
+            const entries = await readdir(this.abs(path), { withFileTypes: true });
             if (entries.length === 0) return '(empty)';
             return entries
                 .map((e) => (e.isDirectory() ? `${e.name}/` : e.name))
@@ -133,7 +141,9 @@ export class FileUtility {
     async glob(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const a = new Args(call);
         const pattern = a.str('pattern');
-        const cwd = call.fn_args.cwd ? expandPath(String(call.fn_args.cwd)) : process.cwd();
+        const cwd = call.fn_args.cwd
+            ? this.abs(String(call.fn_args.cwd))
+            : (this.baseCwd ?? process.cwd());
         try {
             const matches: string[] = [];
             const glob = new Bun.Glob(pattern);
@@ -171,7 +181,9 @@ export class FileUtility {
         // Prefer ripgrep, fall back to grep.
         const rg = `rg -n --no-heading -e ${shellQuote(pattern)} ${shellQuote(path)} 2>/dev/null | head -200`;
         const gp = `grep -rnI -e ${shellQuote(pattern)} ${shellQuote(path)} 2>/dev/null | head -200`;
-        const res = await runShell(`command -v rg >/dev/null && { ${rg}; } || { ${gp}; }`);
+        const res = await runShell(`command -v rg >/dev/null && { ${rg}; } || { ${gp}; }`, {
+            cwd: this.baseCwd,
+        });
         const out = (res.stdout || '').trim();
         return out || 'No matches.';
     }

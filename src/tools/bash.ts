@@ -5,6 +5,10 @@ import { runShell, formatShell } from './shell';
 import { Args } from '../util/args';
 
 export class BashUtility {
+    /** When set (project worker tasks), commands default to this working directory
+     *  instead of the server cwd, so parallel tasks stay in their own tree. */
+    constructor(private baseCwd?: string) {}
+
     @tool({
         name: 'run_bash',
         description:
@@ -26,7 +30,7 @@ export class BashUtility {
         const a = new Args(call);
         const command = a.str('command');
         if (!command.trim()) return 'No command provided.';
-        const cwd = call.fn_args.cwd ? String(call.fn_args.cwd) : undefined;
+        const cwd = call.fn_args.cwd ? String(call.fn_args.cwd) : this.baseCwd;
         return formatShell(await runShell(command, { cwd }));
     }
 }
