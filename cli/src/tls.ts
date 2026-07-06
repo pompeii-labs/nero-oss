@@ -19,10 +19,15 @@ export function certExists(): boolean {
     return existsSync(CERT) && existsSync(KEY);
 }
 
-/** This machine's non-internal IPv4 addresses, for cert SANs. */
+// Docker/VM/virtual interfaces are not reachable from other devices on the LAN, so
+// a phone that resolves nero.local to one of them just hangs. Skip them.
+const VIRTUAL_IFACE = /^(bridge|docker|br-|veth|vmenet|utun|awdl|llw|tun|tap|gif|stf|ap)\d*/i;
+
+/** This machine's real (physical) LAN IPv4 addresses, for cert SANs + mDNS. */
 export function lanIps(): string[] {
     const out: string[] = [];
-    for (const addrs of Object.values(networkInterfaces())) {
+    for (const [name, addrs] of Object.entries(networkInterfaces())) {
+        if (VIRTUAL_IFACE.test(name)) continue;
         for (const a of addrs ?? []) {
             if (a.family === 'IPv4' && !a.internal) out.push(a.address);
         }
