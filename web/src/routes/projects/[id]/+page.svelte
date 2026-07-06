@@ -496,14 +496,15 @@
 
 <style>
     .pd {
-        height: 100vh;
+        height: var(--app-h);
         overflow: hidden;
         box-sizing: border-box;
         background: var(--bg, #08090c);
         color: var(--text);
         display: flex;
         flex-direction: column;
-        padding: 18px 22px 20px;
+        padding: max(18px, var(--safe-t)) max(22px, var(--safe-r)) max(20px, var(--safe-b))
+            max(22px, var(--safe-l));
         gap: 14px;
         font-family: var(--font-body, system-ui, sans-serif);
     }
@@ -641,6 +642,20 @@
         grid-template-columns: 262px 1fr;
         gap: 20px;
         min-height: 0;
+    }
+    /* Tablet/phone: single column, nav becomes a horizontal strip above the content. */
+    @media (max-width: 960px) {
+        .pd-body {
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+        .pd-nav {
+            flex-direction: row;
+            overflow-x: auto;
+            gap: 8px;
+            flex-shrink: 0;
+            padding-bottom: 4px;
+        }
     }
 
     /* Left nav rail */
