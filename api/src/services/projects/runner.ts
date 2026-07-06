@@ -1,7 +1,7 @@
 import { Worker, type Job } from 'bullmq';
-import { mkdir } from 'fs/promises';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
+import { runner } from '@nero/shared/runner';
 import { NeroAgent } from '../harness/agent';
 import {
     isGitRepo,
@@ -105,7 +105,7 @@ async function setupRepo(project: Project): Promise<void> {
     const integ = `nero/p${project.id.slice(0, 8)}/integration`;
     await createBranch(repo, integ, base);
     const intWt = integrationWorktree(project.id);
-    await mkdir(dirname(intWt), { recursive: true });
+    await runner().mkdir(dirname(intWt));
     await addWorktree(repo, intWt, integ);
     await Project.update(project.id, { base_branch: base, integration_branch: integ });
     project.base_branch = base;
@@ -267,7 +267,7 @@ async function processJob(job: Job): Promise<void> {
     if (inRepo) {
         const repo = project.repo_path as string;
         workdir = taskWorktree(projectId, taskId);
-        await mkdir(join(WORKTREES_ROOT, projectId), { recursive: true });
+        await runner().mkdir(join(WORKTREES_ROOT, projectId));
         // Idempotent: a retry/resume may leave a stale worktree or branch behind.
         await removeWorktree(repo, workdir).catch(() => {});
         const startPoint = await headSha(integrationWorktree(projectId));
@@ -283,7 +283,7 @@ async function processJob(job: Job): Promise<void> {
         }
     } else {
         workdir = join(homedir(), '.nero', 'work', projectId, taskId);
-        await mkdir(workdir, { recursive: true });
+        await runner().mkdir(workdir);
     }
     const agent = new NeroAgent({ model, utilities: buildWorkerUtilities(workdir) });
     await agent.setup();

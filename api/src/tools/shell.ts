@@ -1,46 +1,12 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { homedir } from 'os';
-import { join } from 'path';
+import { runner, expandPath, type ShellResult, type ExecOpts } from '@nero/shared/runner';
 
-const execAsync = promisify(exec);
+export { expandPath };
+export type { ShellResult };
 
-/** Expand a leading ~ to the user's home directory. */
-export function expandPath(p: string): string {
-    if (!p) return p;
-    if (p === '~') return homedir();
-    if (p.startsWith('~/')) return join(homedir(), p.slice(2));
-    return p;
-}
-
-export interface ShellResult {
-    stdout: string;
-    stderr: string;
-    code: number;
-}
-
-/** Run a shell command. Single-user local box, so full access by design. */
-export async function runShell(
-    command: string,
-    opts: { cwd?: string; timeoutMs?: number; env?: Record<string, string> } = {},
-): Promise<ShellResult> {
-    try {
-        const { stdout, stderr } = await execAsync(command, {
-            cwd: opts.cwd ? expandPath(opts.cwd) : process.cwd(),
-            timeout: opts.timeoutMs ?? 120_000,
-            maxBuffer: 10 * 1024 * 1024,
-            shell: '/bin/bash',
-            env: opts.env ? { ...process.env, ...opts.env } : process.env,
-        });
-        return { stdout, stderr, code: 0 };
-    } catch (e) {
-        const err = e as { stdout?: string; stderr?: string; code?: number; message?: string };
-        return {
-            stdout: err.stdout ?? '',
-            stderr: err.stderr ?? err.message ?? String(e),
-            code: typeof err.code === 'number' ? err.code : 1,
-        };
-    }
+/** Run a shell command through the active runner (host in dev, host-runner daemon in
+ *  the container). Everything that shells out (bash tool, git ops, grep) goes here. */
+export function runShell(command: string, opts: ExecOpts = {}): Promise<ShellResult> {
+    return runner().exec(command, opts);
 }
 
 /** Format a shell result for a tool return. */

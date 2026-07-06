@@ -1,9 +1,9 @@
 import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
-import { readFile, writeFile, mkdir, readdir } from 'fs/promises';
-import { dirname, join, resolve } from 'path';
+import { resolve } from 'path';
 import { runShell, expandPath } from './shell';
+import { runner } from '@nero/shared/runner';
 import { Args } from '../util/args';
 
 function shellQuote(s: string): string {
@@ -33,7 +33,7 @@ export class FileUtility {
         const a = new Args(call);
         const path = a.str('path');
         try {
-            return await readFile(this.abs(path), 'utf-8');
+            return await runner().readFile(this.abs(path));
         } catch (e) {
             return `Error reading ${path}: ${(e as Error).message}`;
         }
@@ -56,9 +56,7 @@ export class FileUtility {
         const path = a.str('path');
         const content = a.str('content');
         try {
-            const abs = this.abs(path);
-            await mkdir(dirname(abs), { recursive: true });
-            await writeFile(abs, content, 'utf-8');
+            await runner().writeFile(this.abs(path), content);
             return `Wrote ${content.length} bytes to ${path}.`;
         } catch (e) {
             return `Error writing ${path}: ${(e as Error).message}`;
@@ -90,12 +88,12 @@ export class FileUtility {
         const newStr = a.str('new_string');
         try {
             const abs = this.abs(path);
-            const content = await readFile(abs, 'utf-8');
+            const content = await runner().readFile(abs);
             const count = content.split(oldStr).length - 1;
             if (count === 0) return `Error: old_string not found in ${path}.`;
             if (count > 1)
                 return `Error: old_string appears ${count} times in ${path}; make it unique.`;
-            await writeFile(abs, content.replace(oldStr, newStr), 'utf-8');
+            await runner().writeFile(abs, content.replace(oldStr, newStr));
             return `Edited ${path}.`;
         } catch (e) {
             return `Error editing ${path}: ${(e as Error).message}`;
@@ -115,10 +113,10 @@ export class FileUtility {
     async list_files(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const path = call.fn_args.path ? String(call.fn_args.path) : '.';
         try {
-            const entries = await readdir(this.abs(path), { withFileTypes: true });
+            const entries = await runner().readdir(this.abs(path));
             if (entries.length === 0) return '(empty)';
             return entries
-                .map((e) => (e.isDirectory() ? `${e.name}/` : e.name))
+                .map((e) => (e.dir ? `${e.name}/` : e.name))
                 .sort()
                 .join('\n');
         } catch (e) {
@@ -141,20 +139,12 @@ export class FileUtility {
     async glob(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
         const a = new Args(call);
         const pattern = a.str('pattern');
-        const cwd = call.fn_args.cwd
-            ? this.abs(String(call.fn_args.cwd))
-            : (this.baseCwd ?? process.cwd());
-        try {
-            const matches: string[] = [];
-            const glob = new Bun.Glob(pattern);
-            for await (const m of glob.scan({ cwd, dot: false })) {
-                matches.push(join(cwd, m));
-                if (matches.length >= 500) break;
-            }
-            return matches.length ? matches.join('\n') : 'No matches.';
-        } catch (e) {
-            return `Error globbing ${pattern}: ${(e as Error).message}`;
-        }
+        const cwd = call.fn_args.cwd ? this.abs(String(call.fn_args.cwd)) : this.baseCwd;
+        // Run the glob where the files actually live (host or remote), via bash globstar.
+        const cmd = `shopt -s globstar nullglob; for f in ${pattern}; do printf '%s\\n' "$f"; done | head -500`;
+        const res = await runner().exec(cmd, { cwd });
+        const out = (res.stdout || '').trim();
+        return out || 'No matches.';
     }
 
     @tool({
