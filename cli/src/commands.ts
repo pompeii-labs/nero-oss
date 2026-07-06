@@ -1,9 +1,57 @@
 /** The `nero` command handlers. Lifecycle drives docker compose; mcp/config/
  *  doctor talk straight to Lux (the "write desired state to Lux" path). */
+import { spawn } from 'child_process';
+import { join } from 'path';
+import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { c, ok, warn, info, line, kv, die } from './term';
 import { ensureDocker, compose, composeCapture } from './docker';
 import { ensureHome, ensureStackEnv, writeCompose, readEnv, luxMode, HOME } from './home';
 import { loadConfig } from '@nero/shared/config';
+
+// ---- host-runner: a host-side daemon (not a container) the api proxies code ops to ----
+const RUNNER_PID = join(HOME, 'hostrunner.pid');
+
+function runnerPid(): number | null {
+    if (!existsSync(RUNNER_PID)) return null;
+    const pid = Number(readFileSync(RUNNER_PID, 'utf8').trim());
+    if (!pid) return null;
+    try {
+        process.kill(pid, 0); // signal 0 = liveness check
+        return pid;
+    } catch {
+        unlinkSync(RUNNER_PID);
+        return null;
+    }
+}
+
+function startRunner(): void {
+    if (runnerPid()) return;
+    // Dev: run the source with bun. Shipped: a compiled binary via NERO_RUNNER_BIN.
+    const bin = process.env.NERO_RUNNER_BIN;
+    const server = join(import.meta.dir, 'hostrunner', 'server.ts');
+    const child = spawn(bin ?? 'bun', bin ? [] : [server], {
+        detached: true,
+        stdio: 'ignore',
+        env: { ...process.env, ...readEnv() },
+    });
+    child.unref();
+    if (child.pid) writeFileSync(RUNNER_PID, String(child.pid));
+}
+
+function stopRunner(): void {
+    const pid = runnerPid();
+    if (!pid) return;
+    try {
+        process.kill(pid);
+    } catch {
+        /* already gone */
+    }
+    try {
+        unlinkSync(RUNNER_PID);
+    } catch {
+        /* ok */
+    }
+}
 
 export interface StartOpts {
     foreground?: boolean;
@@ -29,6 +77,9 @@ export function start(opts: StartOpts = {}): void {
     const code = compose(['up', opts.foreground ? '' : '-d'].filter(Boolean));
     if (code !== 0) die('Stack failed to start. See the output above.');
 
+    // The host-runner runs on the host (real repos/toolchains); the api proxies to it.
+    startRunner();
+
     if (!opts.foreground) {
         const port = env.NERO_PORT || '4848';
         line();
@@ -39,6 +90,7 @@ export function start(opts: StartOpts = {}): void {
 
 export function stop(): void {
     ensureDocker();
+    stopRunner();
     const code = compose(['down']);
     if (code === 0) ok('Nero stopped.');
 }
@@ -57,6 +109,7 @@ export function status(): void {
     const env = readEnv();
     line();
     kv('lux', luxMode(env) === 'bundled' ? 'bundled engine' : 'external');
+    kv('host-runner', runnerPid() ? `up (pid ${runnerPid()})` : 'stopped');
     kv('url', `http://localhost:${env.NERO_PORT || '4848'}`);
     kv('home', HOME);
 }
