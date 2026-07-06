@@ -14,8 +14,13 @@
     "strict": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "types": ["bun"]
+    "types": ["bun"],
+    "baseUrl": ".",
+    "paths": {
+      "@nero/shared": ["./shared/index.ts"],
+      "@nero/shared/*": ["./shared/*.ts"]
+    }
   },
-  "include": ["src/**/*", "test/**/*"],
-  "exclude": ["node_modules", "dist", "web"]
+  "include": ["shared/**/*", "api/src/**/*", "api/test/**/*", "cli/src/**/*"],
+  "exclude": ["node_modules", "dist", "web", "media"]
 }

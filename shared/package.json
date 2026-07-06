@@ -1,0 +1,15 @@
+{
+  "name": "@nero/shared",
+  "version": "1.33.2",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./config": "./config.ts",
+    "./lux": "./lux.ts",
+    "./logger": "./logger.ts",
+    "./types": "./types.ts"
+  },
+  "dependencies": {
+    "@luxdb/sdk": "^2.8.0"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "nero-api",
+  "version": "1.33.2",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch --env-file=../.env --env-file=../.env.local src/main.ts",
+    "start": "bun src/main.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test test/"
+  },
+  "dependencies": {
+    "@nero/shared": "workspace:*"
+  }
+}
