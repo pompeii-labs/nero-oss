@@ -92,12 +92,12 @@ export function start(opts: StartOpts = {}): void {
     startRunner();
 
     if (!opts.foreground) {
-        const port = env.NERO_PORT || '4848';
+        const port = env.NERO_WEB_PORT || '4848';
         line();
         ok(`Nero is up  →  ${c.cyan(`http://localhost:${port}`)}`);
         if (httpsEnabled()) {
             info(
-                `${c.dim('https (voice):')} ${c.cyan(`https://localhost:${env.NERO_HTTPS_PORT || '4443'}`)}`,
+                `${c.dim('https (voice):')} ${c.cyan(`https://localhost:${env.NERO_WEB_HTTPS_PORT || '4443'}`)}`,
             );
         }
         info(`${c.dim('logs:')} nero logs    ${c.dim('stop:')} nero stop`);
@@ -109,7 +109,7 @@ export function cert(): void {
     ensureHome();
     if (ensureCert()) ok('Generated a self-signed TLS cert in ~/.nero/certs.');
     else info('TLS cert already present (~/.nero/certs). Delete it to regenerate.');
-    const hp = readEnv().NERO_HTTPS_PORT || '4443';
+    const hp = readEnv().NERO_WEB_HTTPS_PORT || '4443';
     line();
     info('HTTPS gives the browser a secure context, which voice/mic needs off localhost:');
     kv('local', `https://localhost:${hp}`);
@@ -141,7 +141,7 @@ export function status(): void {
     line();
     kv('lux', luxMode(env) === 'bundled' ? 'bundled engine' : 'external');
     kv('host-runner', runnerPid() ? `up (pid ${runnerPid()})` : 'stopped');
-    kv('url', `http://localhost:${env.NERO_PORT || '4848'}`);
+    kv('url', `http://localhost:${env.NERO_WEB_PORT || '4848'}`);
     kv('home', HOME);
 }
 
