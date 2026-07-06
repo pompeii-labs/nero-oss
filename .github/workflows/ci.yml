@@ -7,41 +7,43 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-test:
+  api:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install dependencies
-        run: bun install
-
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
       - name: Lint
-        run: bun run lint
-
-      - name: Type check
-        run: bun run build
-
+        run: bun run lint:check
+      - name: Typecheck
+        run: bun run typecheck
       - name: Test
-        run: bun run test
+        run: cd api && bun run test
 
-  build-check:
+  web:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Build web (also typechecks)
+        run: cd web && bun run build
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+  media:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build + test media
+        run: |
+          cd media
+          cargo build
+          cargo test
 
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build
-        run: bun run build
-
-      - name: Verify Docker build
-        run: docker build -t nero-test .
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Sanity-build the api image
+        run: docker build -f Dockerfile.api -t nero-api-test .

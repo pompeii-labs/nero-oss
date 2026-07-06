@@ -1,20 +1,18 @@
-# Nero API — the Bun service (agent, dispatch, MCP, realtime emit). API only.
-# No static serving; the web image (nginx) serves the SPA and proxies here.
-FROM oven/bun:1 AS builder
+# Nero API - the Bun service (agent, dispatch, MCP, realtime emit). Lean by design:
+# code-project builds run on the host-runner (on the host), so no git/gh/toolchains
+# live here. The web image (nginx) serves the SPA and reverse-proxies to this service.
+# Build context is the repo root (monorepo: needs shared/ + api/ + the workspace).
+FROM oven/bun:1
 WORKDIR /app
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
-COPY . .
-RUN bun run build
 
-FROM oven/bun:alpine
-WORKDIR /app
-COPY package.json bun.lock ./
+# Whole workspace (node_modules/dist/.git are excluded via .dockerignore).
+# --production skips devDeps (sharp, tsc, eslint); --ignore-scripts skips the
+# playwright browser download. The api runs TS directly, so no build step.
+COPY . .
 RUN bun install --frozen-lockfile --production --ignore-scripts \
     && rm -rf ~/.bun/install/cache
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prompts ./prompts
 
 ENV NODE_ENV=production
 EXPOSE 4848
-CMD ["bun", "run", "dist/service/entrypoint.js"]
+WORKDIR /app/api
+CMD ["bun", "src/main.ts"]
