@@ -30,6 +30,7 @@ ${c.bold('Config')}
   config             resolved config (secrets hidden)
   model [slug]       show or set the model (any OpenRouter slug)
   doctor             preflight checks
+  restore <file>     seed the bundled Lux from a volume backup
 
   ${c.dim('-v, --version    -h, --help')}
 
@@ -133,6 +134,9 @@ async function main(): Promise<void> {
             break;
         case 'doctor':
             await cmd.doctor();
+            break;
+        case 'restore':
+            cmd.restore(parse(rest).pos[0]);
             break;
         default:
             line(c.red(`Unknown command: ${command}`));

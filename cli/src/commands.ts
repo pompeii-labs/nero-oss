@@ -1,7 +1,7 @@
 /** The `nero` command handlers. Lifecycle drives docker compose; mcp/config/
  *  doctor talk straight to Lux (the "write desired state to Lux" path). */
-import { spawn } from 'child_process';
-import { join } from 'path';
+import { spawn, spawnSync } from 'child_process';
+import { join, resolve, basename, dirname } from 'path';
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { c, ok, warn, info, line, kv, die } from './term';
 import { ensureDocker, compose, composeCapture } from './docker';
@@ -227,8 +227,38 @@ export async function doctor(): Promise<void> {
         /* unreachable */
     }
     check('Lux reachable', luxReachable, luxReachable ? '' : 'is the stack up? `nero start`');
+    check('host-runner', !!runnerPid(), runnerPid() ? '' : '`nero start` launches it');
 
     line();
     if (bad) warn(`${bad} issue${bad > 1 ? 's' : ''} to fix.`);
     else ok('All good.');
+}
+
+// ---- data restore (seed the bundled Lux from a volume backup) ----
+
+export function restore(backupPath?: string): void {
+    ensureDocker();
+    if (!backupPath) die('Usage: nero restore <backup.tgz>');
+    const abs = resolve(backupPath);
+    if (!existsSync(abs)) die(`Backup not found: ${abs}`);
+    warn('This REPLACES the bundled Lux data with the backup. Stop the stack first if running.');
+    info(`Restoring ${c.cyan(abs)} into the bundled Lux volume…`);
+    const r = spawnSync(
+        'docker',
+        [
+            'run',
+            '--rm',
+            '-v',
+            'nero_lux-data:/data',
+            '-v',
+            `${dirname(abs)}:/backup:ro`,
+            'alpine',
+            'sh',
+            '-c',
+            `rm -rf /data/* && tar xzf /backup/${basename(abs)} -C /data && echo restored`,
+        ],
+        { stdio: 'inherit' },
+    );
+    if (r.status === 0) ok('Restored. Start the stack: nero start');
+    else die('Restore failed (has the stack run once to create the volume?).');
 }

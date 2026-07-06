@@ -291,17 +291,28 @@ nero relay start          # Start tunnel
 
 ## Development
 
+Monorepo: `api/` (Bun server) · `web/` (SvelteKit) · `cli/` (the `nero` binary) ·
+`shared/` (`@nero/shared`) · `media/` (Rust WebRTC sidecar) · `lux/` (migrations).
+
 ```bash
 bun install
-cp .env.example .env
+cp .env.example .env        # fill in OPENROUTER_API_KEY etc.
 
-docker compose up db -d
-bun run db:migrate
+lux start                   # local Lux engine (the data layer)
 
-bun run dev:service      # Terminal 1: Service
-bun run dev              # Terminal 2: CLI
-bun test                 # Run tests
+cd api && bun run dev       # terminal 1: the server  → http://localhost:4848
+cd web && bun run dev       # terminal 2: the web UI
+
+cd api && bun run test      # tests
 ```
+
+The full containerized stack is driven by the CLI: `nero start` brings up
+**lux + media + api + web** and launches the host-side runner (code-project builds
+run on the host, not in a container). `nero status` / `nero doctor` inspect it.
+
+**Backups.** Lux data lives in a Docker volume. Tar it to back up; restore into the
+bundled engine with `nero restore <backup.tgz>` (do this before cutting over to a
+fresh stack so you never lose your history).
 
 ## iOS App
 
