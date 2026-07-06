@@ -18,6 +18,13 @@ const IMG_WEB = process.env.NERO_WEB_IMAGE || 'ghcr.io/pompeii-labs/nero-web:lat
 const IMG_MEDIA = process.env.NERO_MEDIA_IMAGE || 'ghcr.io/pompeii-labs/nero-media:latest';
 const IMG_LUX = process.env.NERO_LUX_IMAGE || 'ghcr.io/lux-db/lux:latest';
 
+const CERT_DIR = join(HOME, 'certs');
+const TLS_CONF = join(HOME, 'tls.conf');
+/** HTTPS is on once a cert is provisioned (`nero cert` / auto on `nero start`). */
+export function httpsEnabled(): boolean {
+    return existsSync(join(CERT_DIR, 'cert.pem')) && existsSync(join(CERT_DIR, 'key.pem'));
+}
+
 export function ensureHome(): void {
     if (!existsSync(HOME)) mkdirSync(HOME, { recursive: true });
 }
@@ -123,6 +130,7 @@ export function ensureStackEnv(): string[] {
 /** Render the managed docker-compose.yml for the current env. */
 export function renderCompose(env = readEnv()): string {
     const bundled = luxMode(env) === 'bundled';
+    const tls = httpsEnabled();
     const lux = bundled
         ? `  lux:
     image: ${IMG_LUX}
@@ -170,7 +178,11 @@ ${lux}  media:
     restart: unless-stopped
     depends_on: [api]
     ports:
-      - "\${NERO_PORT:-4848}:80"
+      - "\${NERO_PORT:-4848}:80"${tls ? `\n      - "\${NERO_HTTPS_PORT:-4443}:443"` : ''}${
+          tls
+              ? `\n    volumes:\n      - ${CERT_DIR}:/etc/nginx/certs:ro\n      - ${TLS_CONF}:/etc/nginx/tls.d/tls.conf:ro`
+              : ''
+      }
 ${bundled ? 'volumes:\n  lux-data:\n' : ''}`;
 }
 

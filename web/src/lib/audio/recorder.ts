@@ -11,6 +11,11 @@ export class AudioRecorder {
     async start(onData: (data: Float32Array, rms: number) => void): Promise<void> {
         this.onData = onData;
 
+        // Mic needs a secure context (HTTPS/localhost); over plain-HTTP it's absent.
+        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+            throw new Error('voice-insecure-context');
+        }
+
         this.mediaStream = await navigator.mediaDevices.getUserMedia({
             audio: {
                 sampleRate: 48000,

@@ -45,6 +45,14 @@ export async function startVoice(events: VoiceEvents): Promise<VoiceSession> {
     const { onState, onTranscript, onTurn, onActivity } = events;
     onState('connecting');
 
+    // Mic access requires a secure context (HTTPS or localhost). Over plain-HTTP
+    // (a LAN IP on a phone) navigator.mediaDevices is undefined; fail with a clear
+    // message instead of a cryptic getUserMedia throw.
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        onState('error');
+        throw new Error('voice-insecure-context');
+    }
+
     const pc = new RTCPeerConnection();
 
     // Inbound audio MUST play through a real media sink for AEC to cancel it.

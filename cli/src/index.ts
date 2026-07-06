@@ -31,6 +31,7 @@ ${c.bold('Config')}
   model [slug]       show or set the model (any OpenRouter slug)
   doctor             preflight checks
   restore <file>     seed the bundled Lux from a volume backup
+  cert               provision self-signed HTTPS (needed for voice on mobile)
 
   ${c.dim('-v, --version    -h, --help')}
 
@@ -137,6 +138,9 @@ async function main(): Promise<void> {
             break;
         case 'restore':
             cmd.restore(parse(rest).pos[0]);
+            break;
+        case 'cert':
+            cmd.cert();
             break;
         default:
             line(c.red(`Unknown command: ${command}`));

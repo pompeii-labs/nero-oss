@@ -568,6 +568,8 @@
     }
 
     // Voice session lifecycle: open when engaged, tear down when disengaged.
+    // Mic needs a secure context; over plain-HTTP (a LAN IP on a phone) it's blocked.
+    const insecureContext = typeof window !== 'undefined' && !window.isSecureContext;
     let voiceSession = $state<VoiceSession | null>(null);
     let voiceState = $state<VoiceState>('idle');
     let liveTranscript = $state('');
@@ -821,7 +823,9 @@
             {#if !engaged}
                 tap the orb to talk · <kbd>esc</kbd> to exit
             {:else if voiceState === 'connecting'}connecting…
-            {:else if voiceState === 'error'}voice unavailable
+            {:else if voiceState === 'error'}{insecureContext
+                    ? 'voice needs https'
+                    : 'voice unavailable'}
             {:else if voicePhase === 'thinking'}thinking…
             {:else if voicePhase === 'speaking'}speaking
             {:else}listening{/if}

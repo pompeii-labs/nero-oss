@@ -5,7 +5,16 @@ import { join, resolve, basename, dirname } from 'path';
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { c, ok, warn, info, line, kv, die } from './term';
 import { ensureDocker, compose, composeCapture } from './docker';
-import { ensureHome, ensureStackEnv, writeCompose, readEnv, luxMode, HOME } from './home';
+import {
+    ensureHome,
+    ensureStackEnv,
+    writeCompose,
+    readEnv,
+    luxMode,
+    HOME,
+    httpsEnabled,
+} from './home';
+import { ensureCert, lanIps } from './tls';
 import { loadConfig } from '@nero/shared/config';
 
 // ---- host-runner: a host-side daemon (not a container) the api proxies code ops to ----
@@ -61,6 +70,8 @@ export function start(opts: StartOpts = {}): void {
     ensureDocker();
     ensureHome();
     const added = ensureStackEnv();
+    // Provision TLS so voice/mic works off localhost (needs a secure context).
+    if (ensureCert()) info('Generated a self-signed TLS cert in ~/.nero/certs.');
     writeCompose();
 
     const env = readEnv();
@@ -84,8 +95,28 @@ export function start(opts: StartOpts = {}): void {
         const port = env.NERO_PORT || '4848';
         line();
         ok(`Nero is up  →  ${c.cyan(`http://localhost:${port}`)}`);
+        if (httpsEnabled()) {
+            info(
+                `${c.dim('https (voice):')} ${c.cyan(`https://localhost:${env.NERO_HTTPS_PORT || '4443'}`)}`,
+            );
+        }
         info(`${c.dim('logs:')} nero logs    ${c.dim('stop:')} nero stop`);
     }
+}
+
+/** Provision a self-signed TLS cert (idempotent) + print how to reach + trust it. */
+export function cert(): void {
+    ensureHome();
+    if (ensureCert()) ok('Generated a self-signed TLS cert in ~/.nero/certs.');
+    else info('TLS cert already present (~/.nero/certs). Delete it to regenerate.');
+    const hp = readEnv().NERO_HTTPS_PORT || '4443';
+    line();
+    info('HTTPS gives the browser a secure context, which voice/mic needs off localhost:');
+    kv('local', `https://localhost:${hp}`);
+    for (const ip of lanIps()) kv('lan', `https://${ip}:${hp}`);
+    line();
+    warn('Self-signed: the browser warns once. On iPhone, visit the URL, then trust it in');
+    line('  Settings > General > About > Certificate Trust Settings.');
 }
 
 export function stop(): void {
