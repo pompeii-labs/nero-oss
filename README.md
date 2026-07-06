@@ -60,7 +60,7 @@ Nero isn't tied to one interface. Every medium shares the same conversation, mem
 | **Voice Calls** | Real phone calls with Deepgram STT, ElevenLabs/Hume TTS, and real-time emotion detection |
 | **Displays** | Mount a tablet or spare monitor as a named display -- Nero pushes dynamic UI panels and voice to it |
 | **SMS** | Text it from your phone, get responses back |
-| **iOS App** | Native SwiftUI app with chat, voice mode, and memory management |
+| **Mobile** | Installable PWA -- add the web app to your phone's home screen |
 | **Slack** | Message it in Slack with rich Block Kit responses |
 | **API** | REST + SSE streaming for custom integrations |
 
@@ -93,7 +93,7 @@ nero think notify on
 
 Nero builds a persistent knowledge graph from every conversation. People, projects, concepts, events, preferences, and tools are extracted as nodes and connected by edges. When you mention something, related memories activate and spread through the graph -- so Nero recalls not just what you said, but the context around it.
 
-The web dashboard and iOS app both render the graph as an interactive 3D sphere you can rotate, zoom, tap into, and search.
+The web dashboard renders the graph as an interactive 3D sphere you can rotate, zoom, tap into, and search.
 
 ### Emotion Detection
 
@@ -313,33 +313,6 @@ run on the host, not in a container). `nero status` / `nero doctor` inspect it.
 **Backups.** Lux data lives in a Docker volume. Tar it to back up; restore into the
 bundled engine with `nero restore <backup.tgz>` (do this before cutting over to a
 fresh stack so you never lose your history).
-
-## iOS App
-
-Native SwiftUI companion app with chat, voice mode with the neural sphere, an interactive 3D knowledge graph explorer, live log streaming, and MCP server management.
-
-<p align="center">
-  <img src="assets/ios.jpg" alt="Nero iOS" width="300" />
-</p>
-
-### Setup
-
-```bash
-cd ios
-cp Signing.xcconfig.template Signing.xcconfig
-```
-
-Edit `Signing.xcconfig` with your Apple Developer Team ID and bundle identifier:
-
-```
-DEVELOPMENT_TEAM = YOUR_TEAM_ID
-PRODUCT_BUNDLE_IDENTIFIER = com.yourorg.nero
-CODE_SIGN_STYLE = Automatic
-```
-
-Open `ios/Nero.xcodeproj` in Xcode, build and run. On first launch, go to Settings and enter your Nero server URL (e.g., `https://nero.local`).
-
-Requires iOS 17+ and Xcode 15+.
 
 ## License
 

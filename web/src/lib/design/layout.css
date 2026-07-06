@@ -1,0 +1,37 @@
+/*
+ * Responsive layout primitives (global).
+ *
+ * --app-h  the REAL visible height. Mobile browsers report a too-tall viewport
+ *          (the URL bar / keyboard overlay it), which crops fixed bottom-docked
+ *          UI. We fall back to 100vh -> 100dvh in CSS for first paint / no-JS,
+ *          and keep it exactly in sync from window.visualViewport in
+ *          +layout.svelte (that's the only source that reflects the keyboard).
+ * --safe-* the notch / home-indicator insets. These are 0 until app.html sets
+ *          viewport-fit=cover, so they're safe to use unconditionally.
+ *
+ * Breakpoints (CSS can't read custom props in @media, so these are a convention):
+ *   phone  <= 640px
+ *   tablet <= 960px
+ */
+:root {
+    --app-h: 100vh;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+}
+
+@supports (height: 100dvh) {
+    :root {
+        --app-h: 100dvh;
+    }
+}
+
+/* Never let the page pan sideways (iOS rubber-band, an overflowing bubble, etc.).
+   Vertical scroll containers still scroll; long code/URLs scroll inside their own box. */
+html,
+body {
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+    max-width: 100%;
+}

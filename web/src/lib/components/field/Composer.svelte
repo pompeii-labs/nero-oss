@@ -279,6 +279,11 @@
         width: min(620px, 78vw);
         position: relative;
     }
+    @media (max-width: 640px) {
+        .composer {
+            width: 100%;
+        }
+    }
     .chips {
         display: flex;
         flex-wrap: wrap;

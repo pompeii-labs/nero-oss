@@ -561,6 +561,11 @@
     function toggleTalk() {
         if (presenceMode) engaged = !engaged;
     }
+    // Touch-friendly presence exit (no Esc key on a phone): stop voice, then leave.
+    function exitPresence() {
+        if (engaged) engaged = false;
+        else presenceMode = false;
+    }
 
     // Voice session lifecycle: open when engaged, tear down when disengaged.
     let voiceSession = $state<VoiceSession | null>(null);
@@ -800,6 +805,9 @@
     {/if}
 
     {#if presenceMode}
+        <button class="presence-exit" onclick={exitPresence} aria-label="Exit presence">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+        </button>
         {#if engaged && voiceToolActive && voiceToolName}
             <div class="voice-activity">
                 <span class="va-pulse"></span>
@@ -828,7 +836,7 @@
                 {#if connected}
                     <i class="dot"></i> {myDeviceName}{neroIsHere ? ' · present' : ''}
                 {:else}
-                    <i class="dot off"></i> {connectionError ? 'offline' : 'connecting'}
+                    <i class="dot off"></i> {connectionError ? 'offline: ' + connectionError.slice(0, 90) : 'connecting'}
                 {/if}
             </span>
         </div>
@@ -902,7 +910,11 @@
 <style>
     .field {
         position: fixed;
-        inset: 0;
+        top: 0;
+        left: 0;
+        right: 0;
+        /* real visible height (URL-bar / keyboard aware) so the composer never crops */
+        height: var(--app-h);
         display: flex;
         flex-direction: column;
         overflow: hidden;
@@ -916,8 +928,19 @@
         align-items: center;
         justify-content: space-between;
         padding: 20px 28px;
+        padding-top: max(20px, var(--safe-t));
+        padding-left: max(28px, var(--safe-l));
+        padding-right: max(28px, var(--safe-r));
         z-index: 30;
         transition: opacity 0.6s ease;
+    }
+    @media (max-width: 640px) {
+        .bar {
+            padding: max(12px, var(--safe-t)) max(16px, var(--safe-r)) 12px max(16px, var(--safe-l));
+        }
+        .wordmark {
+            font-size: 20px;
+        }
     }
     .mark {
         display: flex;
@@ -986,8 +1009,14 @@
         opacity: 1;
     }
     @media (max-width: 1180px) {
+        /* The ambient gutter orb is a desktop affordance (there's no side gutter on
+           a phone). Below 1180px it only appears in presence mode, centered — so the
+           orb never crowds the chat, but never fully vanishes either. */
         .presence-orb {
             display: none;
+        }
+        .field.presence .presence-orb {
+            display: block;
         }
     }
 
@@ -1137,6 +1166,31 @@
         opacity: 0;
         pointer-events: none;
     }
+    /* Touch exit from presence mode (there's no Esc key on a phone). */
+    .presence-exit {
+        position: fixed;
+        top: max(18px, var(--safe-t));
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: 1px solid rgb(var(--holo) / 0.22);
+        background: rgb(var(--holo) / 0.05);
+        color: rgb(var(--holo-soft));
+        cursor: pointer;
+        backdrop-filter: blur(8px);
+        opacity: 0.7;
+        transition: opacity 0.2s, background 0.2s;
+    }
+    .presence-exit:hover {
+        opacity: 1;
+        background: rgb(var(--holo) / 0.12);
+    }
     .voice-transcript {
         position: fixed;
         left: 50%;
@@ -1238,6 +1292,10 @@
     .scroller {
         flex: 1;
         overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
         z-index: 10;
         transition: transform 0.85s cubic-bezier(0.65, 0, 0.2, 1), opacity 0.6s ease;
     }
@@ -1249,6 +1307,8 @@
         flex-direction: column;
         gap: 18px;
         padding: 12px 24px 28px;
+        /* long words / URLs wrap instead of widening the thread */
+        overflow-wrap: anywhere;
     }
 
     .queued-row {
@@ -1320,7 +1380,8 @@
         flex-direction: column;
         align-items: center;
         gap: 10px;
-        padding: 10px 20px 26px;
+        padding: 10px max(20px, var(--safe-r)) max(26px, calc(var(--safe-b) + 14px))
+            max(20px, var(--safe-l));
         z-index: 30;
         transition: transform 0.7s cubic-bezier(0.65, 0, 0.2, 1), opacity 0.5s ease;
     }
@@ -1393,7 +1454,7 @@
         display: flex;
         flex-direction: column;
         gap: 12px;
-        max-height: calc(100vh - 140px);
+        max-height: calc(var(--app-h) - 140px);
         overflow-y: auto;
         padding-right: 4px;
     }
@@ -1402,6 +1463,23 @@
             left: 12px;
             right: 12px;
             top: 56px;
+        }
+    }
+
+    /* ---- phone ---- */
+    @media (max-width: 640px) {
+        .thread {
+            padding: 10px 14px 22px;
+            gap: 14px;
+        }
+        .voice-transcript {
+            width: min(640px, 90vw);
+            font-size: 20px;
+        }
+        .tagline {
+            font-size: 20px;
+            padding: 0 24px;
+            text-align: center;
         }
     }
 </style>

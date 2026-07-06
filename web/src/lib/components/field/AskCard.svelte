@@ -278,9 +278,9 @@
     .ask.composer {
         left: 0;
         right: 0;
-        bottom: 22px;
+        bottom: max(22px, calc(var(--safe-b) + 10px));
         justify-content: center;
-        padding: 0 16px;
+        padding: 0 max(16px, var(--safe-l)) 0 max(16px, var(--safe-r));
     }
     /* Voice mode: a right rail that never covers the orb. */
     .ask.rail {
