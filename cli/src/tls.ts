@@ -11,8 +11,9 @@ import { networkInterfaces } from 'os';
 import { HOME } from './home';
 
 export const CERT_DIR = join(HOME, 'certs');
-export const CERT = join(CERT_DIR, 'cert.pem');
-export const KEY = join(CERT_DIR, 'key.pem');
+export const CERT = join(CERT_DIR, 'cert.pem'); // fullchain (leaf + CA) the server presents
+export const KEY = join(CERT_DIR, 'key.pem'); // leaf private key
+export const CA_CERT = join(CERT_DIR, 'ca.pem'); // the CA you install + trust on devices
 export const TLS_CONF = join(HOME, 'tls.conf');
 
 export function certExists(): boolean {
@@ -37,26 +38,50 @@ export function lanIps(): string[] {
 
 const isIp = (h: string) => /^\d+\.\d+\.\d+\.\d+$/.test(h);
 
-/** Generate + persist a 5-year self-signed cert covering localhost + the given hosts. */
+/**
+ * Generate a local CA (install + trust this on your devices) plus a short-lived leaf
+ * the server presents. The split is required for iOS: only a CA can be enabled in
+ * Certificate Trust Settings, and a TLS leaf must be <=825 days.
+ */
 export function ensureCert(): boolean {
     if (certExists()) return false;
     if (!existsSync(CERT_DIR)) mkdirSync(CERT_DIR, { recursive: true });
 
     const hosts = ['localhost', '127.0.0.1', 'nero.local', ...lanIps()];
-    const keys = forge.pki.rsa.generateKeyPair(2048);
-    const cert = forge.pki.createCertificate();
-    cert.publicKey = keys.publicKey;
-    cert.serialNumber = '01' + forge.util.bytesToHex(forge.random.getBytesSync(8));
-    cert.validity.notBefore = new Date();
-    cert.validity.notAfter = new Date();
-    cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 5);
-    const attrs = [
-        { name: 'commonName', value: 'nero.local' },
+    const serial = () => '01' + forge.util.bytesToHex(forge.random.getBytesSync(8));
+
+    // --- Local CA (long-lived, self-signed). This is what you install + trust. ---
+    const caKeys = forge.pki.rsa.generateKeyPair(2048);
+    const ca = forge.pki.createCertificate();
+    ca.publicKey = caKeys.publicKey;
+    ca.serialNumber = serial();
+    ca.validity.notBefore = new Date();
+    ca.validity.notAfter = new Date();
+    ca.validity.notAfter.setFullYear(ca.validity.notBefore.getFullYear() + 10);
+    const caAttrs = [
+        { name: 'commonName', value: 'Nero Local CA' },
         { name: 'organizationName', value: 'Nero' },
     ];
-    cert.setSubject(attrs);
-    cert.setIssuer(attrs);
-    cert.setExtensions([
+    ca.setSubject(caAttrs);
+    ca.setIssuer(caAttrs);
+    ca.setExtensions([
+        { name: 'basicConstraints', cA: true },
+        { name: 'keyUsage', keyCertSign: true, cRLSign: true },
+        { name: 'subjectKeyIdentifier' },
+    ]);
+    ca.sign(caKeys.privateKey, forge.md.sha256.create());
+
+    // --- Leaf (short-lived, signed by the CA, carries the SANs). Served by nginx. ---
+    const leafKeys = forge.pki.rsa.generateKeyPair(2048);
+    const leaf = forge.pki.createCertificate();
+    leaf.publicKey = leafKeys.publicKey;
+    leaf.serialNumber = serial();
+    leaf.validity.notBefore = new Date();
+    leaf.validity.notAfter = new Date();
+    leaf.validity.notAfter.setDate(leaf.validity.notBefore.getDate() + 800); // < iOS 825-day cap
+    leaf.setSubject([{ name: 'commonName', value: 'nero.local' }]);
+    leaf.setIssuer(caAttrs);
+    leaf.setExtensions([
         { name: 'basicConstraints', cA: false },
         { name: 'keyUsage', digitalSignature: true, keyEncipherment: true },
         { name: 'extKeyUsage', serverAuth: true },
@@ -65,10 +90,12 @@ export function ensureCert(): boolean {
             altNames: hosts.map((h) => (isIp(h) ? { type: 7, ip: h } : { type: 2, value: h })),
         },
     ]);
-    cert.sign(keys.privateKey, forge.md.sha256.create());
+    leaf.sign(caKeys.privateKey, forge.md.sha256.create());
 
-    writeFileSync(CERT, forge.pki.certificateToPem(cert));
-    writeFileSync(KEY, forge.pki.privateKeyToPem(keys.privateKey), { mode: 0o600 });
+    // cert.pem = leaf + CA (the fullchain nginx presents); ca.pem = install this.
+    writeFileSync(CERT, forge.pki.certificateToPem(leaf) + forge.pki.certificateToPem(ca));
+    writeFileSync(KEY, forge.pki.privateKeyToPem(leafKeys.privateKey), { mode: 0o600 });
+    writeFileSync(CA_CERT, forge.pki.certificateToPem(ca));
     // The nginx :443 server that the web container includes when TLS is on.
     writeFileSync(
         TLS_CONF,
