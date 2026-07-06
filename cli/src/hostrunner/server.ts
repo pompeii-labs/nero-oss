@@ -4,6 +4,7 @@
  * It IS a HostRunner behind an authenticated HTTP surface. Started by `nero start`.
  */
 import { HostRunner, type ExecOpts } from '@nero/shared/runner';
+import { startMdns } from '../mdns';
 
 const runner = new HostRunner();
 
@@ -63,6 +64,12 @@ export function startHostRunner(): void {
         },
     });
     console.log(`nero host-runner listening on :${port}`);
+    // Advertise nero.local on the LAN (best-effort; never blocks the runner).
+    try {
+        startMdns();
+    } catch (e) {
+        console.error('mdns failed:', e);
+    }
 }
 
 if (import.meta.main) startHostRunner();
