@@ -1,10 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#080a0f"/>
-  <g fill="#5b9dff">
-    <rect x="6" y="6" width="4" height="20"/>
-    <rect x="22" y="6" width="4" height="20"/>
-    <rect x="10" y="8" width="4" height="4"/>
-    <rect x="14" y="12" width="4" height="4"/>
-    <rect x="18" y="16" width="4" height="4"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="64" height="64">
+  <defs>
+    <radialGradient id="body" cx="38%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="#2b2b2d"/><stop offset="40%" stop-color="#141416"/><stop offset="72%" stop-color="#0a0a0b"/><stop offset="100%" stop-color="#050506"/>
+    </radialGradient>
+    <radialGradient id="core" cx="50%" cy="53%" r="52%">
+      <stop offset="0%" stop-color="#fbfbfb"/><stop offset="15%" stop-color="#dcdcdc"/><stop offset="34%" stop-color="#9a9a9a" stop-opacity="0.5"/><stop offset="60%" stop-color="#8f8f8f" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bloom" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#c6c6c6" stop-opacity="0.30"/><stop offset="45%" stop-color="#9a9a9a" stop-opacity="0.07"/><stop offset="70%" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="inner" cx="50%" cy="50%" r="50%">
+      <stop offset="58%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity="0.85"/>
+    </radialGradient>
+  </defs>
+  <circle cx="100" cy="100" r="94" fill="url(#bloom)"/>
+  <circle cx="100" cy="100" r="82" fill="url(#body)"/>
+  <circle cx="100" cy="100" r="82" fill="url(#inner)"/>
+  <circle cx="100" cy="106" r="64" fill="url(#core)"/>
+  <circle cx="100" cy="100" r="90" fill="none" stroke="#dcdcdc" stroke-width="3.5" stroke-opacity="0.85" stroke-dasharray="70 282" stroke-linecap="round"/>
+  <circle cx="100" cy="100" r="70" fill="none" stroke="#9a9a9a" stroke-width="2" stroke-opacity="0.5" stroke-dasharray="34 16"/>
+  <circle cx="100" cy="10" r="6" fill="#fbfbfb"/>
 </svg>

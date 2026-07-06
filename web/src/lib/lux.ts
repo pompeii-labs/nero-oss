@@ -15,7 +15,11 @@ async function getClient(): Promise<LuxProjectClient> {
             const { luxUrl, luxPublishableKey } = await (
                 await fetch(getServerUrl('/v1/config'))
             ).json();
-            const lux = createBrowserClient(luxUrl, luxPublishableKey);
+            // Empty in the shipped stack → talk to Lux same-origin through the nginx
+            // /lux proxy (one port, reachable from any host). Dev serves an absolute
+            // URL to the local engine.
+            const base = luxUrl || `${location.origin}/lux`;
+            const lux = createBrowserClient(base, luxPublishableKey);
             const { data } = await lux.auth.getSession();
             if (!data?.session) await lux.auth.signInAnonymously();
             return lux;

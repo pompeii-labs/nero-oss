@@ -18,7 +18,7 @@ export function metaRoutes(): Hono {
     app.get('/v1/config', (c) => {
         try {
             const { lux } = loadConfig();
-            return c.json({ luxUrl: lux.url, luxPublishableKey: lux.publishableKey });
+            return c.json({ luxUrl: lux.publicUrl, luxPublishableKey: lux.publishableKey });
         } catch (err) {
             return error(c, 500, err);
         }

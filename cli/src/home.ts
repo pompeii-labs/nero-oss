@@ -66,11 +66,13 @@ const key = (prefix: string) => `${prefix}${randomBytes(24).toString('hex')}`;
 
 export type LuxMode = 'bundled' | 'external';
 
-/** Bundled unless the user pointed LUX_URL at something that isn't our engine. */
+/** Bundled unless the user pointed Lux at something that isn't our compose engine.
+ *  Detect via the internal `lux` service host in either the HTTP or the direct URL. */
 export function luxMode(env = readEnv()): LuxMode {
-    const url = env.LUX_URL;
-    if (!url) return 'bundled';
-    return url.includes('@lux:') ? 'bundled' : 'external';
+    const url = env.LUX_URL ?? '';
+    const direct = env.LUX_DIRECT_URL ?? '';
+    if (!url && !direct) return 'bundled';
+    return url.includes('//lux:') || direct.includes('@lux:') ? 'bundled' : 'external';
 }
 
 /**
@@ -89,10 +91,12 @@ export function ensureStackEnv(): string[] {
                 {
                     LUX_SECRET_KEY: secret,
                     LUX_PUBLISHABLE_KEY: pub,
-                    // api -> engine over the compose network (operator: Bearer == password)
-                    LUX_URL: `lux://:${secret}@lux:6379`,
-                    // browser -> engine, host-reachable (served to the SPA via /v1/config)
-                    NERO_PUBLIC_LUX_URL: 'http://localhost:8080',
+                    // api HTTP client -> engine (SDK; Bearer == secret key)
+                    LUX_URL: 'http://lux:8080',
+                    // api RESP/direct -> engine (BullMQ over the Redis protocol)
+                    LUX_DIRECT_URL: `lux://:${secret}@lux:6379`,
+                    // The browser reaches Lux same-origin via the web's nginx /lux proxy,
+                    // so no browser-facing engine URL is needed here.
                 },
                 'Bundled Lux engine (auto-generated; safe to leave)',
             ),
@@ -106,9 +110,9 @@ export function ensureStackEnv(): string[] {
         ...appendEnv(
             {
                 NERO_MEDIA_URL: 'ws://media:7070',
-                NERO_RUNNER_URL: 'http://host.docker.internal:7717',
+                NERO_RUNNER_URL: 'http://host.docker.internal:4853',
                 NERO_RUNNER_TOKEN: runnerToken,
-                NERO_RUNNER_PORT: '7717',
+                NERO_RUNNER_PORT: '4853',
             },
             'Media sidecar + host-runner',
         ),
@@ -125,7 +129,7 @@ export function renderCompose(env = readEnv()): string {
     restart: unless-stopped
     environment:
       LUX_AUTH_ENABLED: "1"
-      LUX_AUTH_PASSWORD: "\${LUX_SECRET_KEY}"
+      LUX_PASSWORD: "\${LUX_SECRET_KEY}"
       LUX_AUTH_SECRET_KEY: "\${LUX_SECRET_KEY}"
       LUX_AUTH_PUBLISHABLE_KEY: "\${LUX_PUBLISHABLE_KEY}"
       LUX_PORT: "6379"
@@ -137,7 +141,8 @@ export function renderCompose(env = readEnv()): string {
     volumes:
       - lux-data:/data
     ports:
-      - "8080:8080"
+      - "\${NERO_LUX_PORT:-4850}:8080"
+      - "\${NERO_LUX_RESP_PORT:-4851}:6379"
 `
         : '';
     const apiDeps = bundled ? '[lux, media]' : '[media]';
@@ -149,7 +154,8 @@ ${lux}  media:
     image: ${IMG_MEDIA}
     restart: unless-stopped
     env_file: [.env]
-    expose: ["7070"]
+    ports:
+      - "\${NERO_MEDIA_PORT:-4852}:7070"
   api:
     image: ${IMG_API}
     restart: unless-stopped
@@ -157,7 +163,8 @@ ${lux}  media:
     depends_on: ${apiDeps}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    expose: ["4848"]
+    ports:
+      - "\${NERO_API_PORT:-4849}:4848"
   web:
     image: ${IMG_WEB}
     restart: unless-stopped

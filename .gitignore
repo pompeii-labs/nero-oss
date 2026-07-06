@@ -6,7 +6,7 @@ dist/
 target/
 
 # Wakeword (python venv + rust build)
-wakeword/venv/
+wakeword/
 
 # Environment
 .env

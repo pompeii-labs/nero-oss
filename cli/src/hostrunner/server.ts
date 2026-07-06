@@ -41,7 +41,7 @@ async function handle(op: string, body: unknown): Promise<unknown | undefined> {
 
 export function startHostRunner(): void {
     const token = process.env.NERO_RUNNER_TOKEN ?? '';
-    const port = Number(process.env.NERO_RUNNER_PORT ?? 7717);
+    const port = Number(process.env.NERO_RUNNER_PORT ?? 4853);
     Bun.serve({
         port,
         idleTimeout: 240,

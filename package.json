@@ -17,6 +17,10 @@
   "scripts": {
     "dev:api": "cd api && bun run dev",
     "dev:web": "cd web && bun run dev",
+    "build:api": "docker build -f Dockerfile.api -t ghcr.io/pompeii-labs/nero-api:latest .",
+    "build:web": "docker build -f Dockerfile.web -t ghcr.io/pompeii-labs/nero-web:latest .",
+    "build:media": "docker build -t ghcr.io/pompeii-labs/nero-media:latest media",
+    "build:images": "bun run build:api && bun run build:web && bun run build:media",
     "build": "cd api && bun run build",
     "lint": "eslint . --ext .ts --fix",
     "lint:check": "eslint . --ext .ts --max-warnings=0",

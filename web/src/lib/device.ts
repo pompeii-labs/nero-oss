@@ -14,6 +14,15 @@ function param(key: string): string | null {
 }
 const slug = (s: string) => `dev-${s.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
+// crypto.randomUUID is secure-context only (HTTPS/localhost); over a plain-HTTP LAN
+// IP it's undefined, so fall back to a non-crypto id (device ids aren't secrets).
+function randomShortId(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID().slice(0, 8);
+    }
+    return Math.random().toString(16).slice(2, 10);
+}
+
 /** `?name=kitchen` makes this tab a distinct display named "kitchen". `?device=`
  *  is the legacy id-only override (distinct device, server picks the name). */
 export function deviceId(): string {
@@ -23,7 +32,7 @@ export function deviceId(): string {
     if (legacy) return slug(legacy);
     let id = localStorage.getItem(ID_KEY);
     if (!id) {
-        id = `dev-${crypto.randomUUID().slice(0, 8)}`;
+        id = `dev-${randomShortId()}`;
         localStorage.setItem(ID_KEY, id);
     }
     return id;

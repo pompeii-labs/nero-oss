@@ -6,7 +6,13 @@ export interface NeroConfig {
     openrouter: { apiKey: string; baseUrl: string };
     model: string;
     embedModel: string;
-    lux: { url: string; directUrl: string; secretKey: string; publishableKey: string };
+    lux: {
+        url: string;
+        publicUrl: string;
+        directUrl: string;
+        secretKey: string;
+        publishableKey: string;
+    };
     tavilyApiKey: string;
     port: number;
     timezone: string;
@@ -33,6 +39,15 @@ export function loadConfig(): NeroConfig {
         tavilyApiKey: env('TAVILY_API_KEY'),
         lux: {
             url: env('LUX_URL', 'http://localhost:8090'),
+            // What the SPA connects to. Explicit override wins; else if LUX_URL is the
+            // compose-internal `lux` host it's not browser-reachable, so serve '' and the
+            // SPA uses the same-origin nginx /lux proxy. In dev LUX_URL is localhost, so
+            // the browser can hit it directly.
+            publicUrl:
+                env('NERO_PUBLIC_LUX_URL') ||
+                (env('LUX_URL', 'http://localhost:8090').includes('//lux:')
+                    ? ''
+                    : env('LUX_URL', 'http://localhost:8090')),
             // RESP/Redis endpoint (lux:// or rediss://) for BullMQ - the project queue.
             directUrl: env('LUX_DIRECT_URL'),
             secretKey: env('LUX_SECRET_KEY'),
