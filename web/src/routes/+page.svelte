@@ -844,7 +844,34 @@
                 {/if}
             </span>
         </div>
-        {#if neroIsHere}<a class="ws" href="/protocols">Protocols</a>{/if}
+        {#if neroIsHere}
+            <div class="bar-actions">
+                {#if !presenceMode}
+                    <button
+                        class="voice-enter"
+                        onclick={() => (presenceMode = true)}
+                        aria-label="Voice mode"
+                        title="Voice mode (⌘↵)"
+                    >
+                        <svg
+                            viewBox="0 0 24 24"
+                            width="17"
+                            height="17"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                            <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+                            <path d="M12 18v4" />
+                        </svg>
+                    </button>
+                {/if}
+                <a class="ws" href="/protocols">Protocols</a>
+            </div>
+        {/if}
     </header>
 
     <!-- The interaction surface (chat + composer) lives ONLY where the orb is.
@@ -988,6 +1015,30 @@
     }
     .ws:hover {
         color: var(--text);
+    }
+    .bar-actions {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    /* Enter the voice canvas from text mode (there's no Cmd+Enter on a phone). */
+    .voice-enter {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 1px solid rgb(var(--holo) / 0.22);
+        background: rgb(var(--holo) / 0.05);
+        color: rgb(var(--holo-soft));
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.2s, color 0.2s;
+    }
+    .voice-enter:hover {
+        background: rgb(var(--holo) / 0.12);
+        color: rgb(var(--holo-hot));
     }
 
     /* the one orb: ambient in the gutter; glides to center + expands in voice mode */
