@@ -1,0 +1,25 @@
+{
+	"name": "Nero",
+	"short_name": "Nero",
+	"description": "Your self-hosted AI companion",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "portrait",
+	"background_color": "#05070a",
+	"theme_color": "#05070a",
+	"icons": [
+		{
+			"src": "/icons/orb-192.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any maskable"
+		},
+		{
+			"src": "/icons/orb-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "any maskable"
+		}
+	]
+}
