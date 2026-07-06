@@ -232,6 +232,43 @@
         flex: 1;
         min-height: 0;
     }
+
+    /* Phone: pixel-dragged floating windows make no sense. Panels become a
+       full-width stack in a bottom sheet; no drag, no resize. */
+    @media (max-width: 640px) {
+        .panel-layer {
+            inset: auto 0 0 0;
+            max-height: 82dvh;
+            overflow-y: auto;
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px 10px calc(var(--safe-b) + 10px);
+        }
+        .panel-pos,
+        .panel-pos.maximized {
+            position: relative !important;
+            inset: auto !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+        }
+        .panel-pos :global(.panel) {
+            width: 100% !important;
+        }
+        .panel-body {
+            max-height: 60vh !important;
+            overflow-y: auto;
+        }
+        .phdr {
+            cursor: default;
+            touch-action: auto;
+        }
+        .presize {
+            display: none;
+        }
+    }
     .phdr {
         display: flex;
         align-items: center;

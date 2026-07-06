@@ -111,7 +111,7 @@
 
 <style>
     .pp {
-        width: 320px;
+        width: min(320px, 100%);
         background: var(--panel-bg);
         border: 1px solid rgb(var(--holo) / 0.3);
         border-radius: 13px;
