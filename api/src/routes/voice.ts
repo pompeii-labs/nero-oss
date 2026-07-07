@@ -23,7 +23,7 @@ function makeTTS(onPcm: (pcm: Buffer, contextId: string) => void): VoiceTTS {
     if (TTS_PROVIDER === 'kokoro') {
         return new KokoroStreamingTTS({
             url: process.env.NERO_KOKORO_URL || 'http://localhost:8880',
-            voice: process.env.NERO_KOKORO_VOICE || 'af_sky',
+            voice: process.env.NERO_KOKORO_VOICE || 'am_onyx',
             model: process.env.NERO_KOKORO_MODEL || 'kokoro',
             onPcm,
         });
