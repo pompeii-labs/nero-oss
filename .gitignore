@@ -58,3 +58,4 @@ web/static/ort/
 # Wakeword training (local): venv + generated corpus
 scripts/wakeword/.venv/
 scripts/wakeword/data/
+__pycache__/
