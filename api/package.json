@@ -1,6 +1,6 @@
 {
   "name": "nero-api",
-  "version": "1.33.2",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "bun --watch --env-file=../.env --env-file=../.env.local src/main.ts",

@@ -1,6 +1,6 @@
 {
   "name": "@nero/shared",
-  "version": "1.33.2",
+  "version": "2.0.0",
   "type": "module",
   "exports": {
     ".": "./index.ts",

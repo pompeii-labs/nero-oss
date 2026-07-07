@@ -2,6 +2,28 @@
 
 All notable changes to Nero are documented here.
 
+## 2.0.0 (2026-07-06)
+
+Full architectural rebuild.
+
+### Added
+
+- Monorepo (bun workspaces): `api`, `web`, `cli`, `shared`, `media`.
+- Lux backend (tables, KV, vectors, realtime, queues, auth) replacing Postgres.
+- `nero start` fuses a 4-container stack (lux + api + web + media) plus a host-side runner for code-project ops.
+- Mobile-responsive web + installable PWA (orb icons).
+- Local HTTPS with an auto-provisioned CA + short-lived leaf; port-free (80/443); `/cert.crt` for one-tap trust; voice works on mobile.
+- mDNS `nero.local`.
+
+### Changed
+
+- Single-origin web: relative URLs + a same-origin nginx `/lux` proxy, so it works from localhost, a LAN IP, or a domain.
+- Thin `nero` CLI (`start`/`stop`/`status`/`doctor`/`cert`/`restore`) over docker-compose in `~/.nero`.
+
+### Removed
+
+- Legacy native iOS app; the old `src/` monolith and Postgres migrations.
+
 ## 1.32.10 (2026-02-27)
 
 ### Fixes
