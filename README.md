@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="assets/icon.png" alt="Nero" width="120" />
+  <img src="assets/orb.png" alt="Nero" width="120" />
 </p>
 
 <h1 align="center">Nero</h1>
 
 <p align="center">
-  <strong>The first AI agent with <em>agency</em>.</strong>
+  <strong>A self-hosted AI companion that lives on your hardware.</strong>
 </p>
 
 <p align="center">
@@ -17,306 +17,159 @@
 
 ---
 
-Nero isn't built to be a lightweight rust-based agent runtime. It's meant to be **everything you need** out of the box to have a personal AI -
-* [`autonomy` mode](#autonomy-mode), where nero has his own projects and priorities. when you come back to talk to him, he'll always have something new to say
-* Nero's memory goes beyond a `MEMORIES.md` file. His "brain" is a node/edge graph representing every tool used, project developed, topic discussed. A true google earth view of your relationship with Nero
-* Spawn custom interfaces across multiple [displays / devices](#displays)
-* Native Claude Code inspired MCP support
-* Locally hosted web UI with chat, voice, MCP setup, logs, etc 
+Nero is a single-user AI companion you run yourself. No account, no cloud tenant, no
+per-seat billing. It runs as a small stack on a machine you own (a Mac Mini, a home
+server, a spare box) and you reach it from the web, your phone, and voice. One agent,
+one memory, one presence, across every surface.
 
-*(mac mini supported but not included)*
+It is closer to Jarvis than to a chatbot: something that is *around*, that you talk to
+by voice or text, that can act on the world, work on things in the background, and show
+up on whatever screen you are near.
 
-
-<p align="center">
-  <img src="assets/voice.png" alt="Nero Voice" width="800" />
-</p>
-
-<p align="center">
-  <img src="assets/screenshot.png" alt="Nero Chat" width="800" />
-</p>
-
-<p align="center">
-  <img src="assets/terminal.png" alt="Nero Terminal" width="800" />
-</p>
-
-## Quick Start
+## Quick start
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pompeii-labs/nero-oss/main/install.sh | bash
-```
-
-Then bring up the stack (needs Docker):
-
-```bash
 nero start
 ```
 
-Nero comes up at `http://localhost` (and `https://localhost` for voice -- TLS is auto-provisioned). Put your `OPENROUTER_API_KEY` in `~/.nero/.env` so it can think. Update anytime with `nero update`.
+The installer drops the `nero` binary in your `PATH`. `nero start` pulls the images,
+provisions TLS, and brings the stack up at `http://localhost` (and `https://localhost`
+for voice). Put your `OPENROUTER_API_KEY` in `~/.nero/.env` so Nero can think, then
+`nero restart`. Update anytime with `nero update`.
 
-## How You Interact With It
+Needs Docker. That is the only host dependency.
 
-Nero isn't tied to one interface. Every medium shares the same conversation, memory, and context.
+## Why
 
-| Interface | What it is |
-|-----------|------------|
-| **Terminal** | Interactive REPL or one-shot commands via `nero -m "..."` |
-| **Web Dashboard** | Chat, knowledge graph explorer, logs, settings -- all in a self-hosted UI at `localhost:4848` |
-| **Voice Calls** | Real phone calls with Deepgram STT, ElevenLabs/Hume TTS, and real-time emotion detection |
-| **Displays** | Mount a tablet or spare monitor as a named display -- Nero pushes dynamic UI panels and voice to it |
-| **SMS** | Text it from your phone, get responses back |
-| **Mobile** | Installable PWA -- add the web app to your phone's home screen |
-| **Slack** | Message it in Slack with rich Block Kit responses |
-| **API** | REST + SSE streaming for custom integrations |
+Most "AI agents" are a chat box in front of someone else's server. Nero is the opposite
+bet:
 
-## What Makes Nero Different
+- **You own it.** It runs on your hardware, against your files, with your keys. Your
+  conversations and memory live in a local database you can back up and move. Nothing is
+  someone else's tenant.
+- **It is one being, not one interface.** The same agent, memory, and context are shared
+  across voice, text, and every display you put it on. There is no separate app per
+  surface. You talk to Nero; the surface is just where you happened to be.
+- **It is present.** Nero is a single orb that lives on one screen at a time. Walk up to
+  a different device and summon it there. Talk by voice or type, they are two modes of the
+  same presence, not two apps.
+- **It can act.** Browser automation, MCP tools, scheduled actions, and background
+  projects that write real code against real repos. It does work, not just answers.
 
-### Unified Context Across Every Interface
+## How it works
 
-Talk to Nero on a voice call, then text it, then open the web dashboard. It remembers everything across every medium. There's no "Slack bot" and "CLI tool" -- it's one agent with one memory.
-
-### Autonomy Mode
-
-Nero doesn't just respond. It can work on its own projects while you're away -- tracking progress, writing journal entries, and managing its own token budget. This isn't a cron job. It's an agent that decides what to work on, does the work, and picks up where it left off next session.
-
-```bash
-nero autonomy on
-nero autonomy status
-nero autonomy budget 500000
-```
-
-### Background Thinking
-
-When you step away, Nero watches your environment -- git status, logs, MCP tools -- and surfaces what it finds when you come back. Optional Slack notifications for anything urgent.
-
-```bash
-nero think on
-nero think notify on
-```
-
-### Knowledge Graph Memory
-
-Nero builds a persistent knowledge graph from every conversation. People, projects, concepts, events, preferences, and tools are extracted as nodes and connected by edges. When you mention something, related memories activate and spread through the graph -- so Nero recalls not just what you said, but the context around it.
-
-The web dashboard renders the graph as an interactive 3D sphere you can rotate, zoom, tap into, and search.
-
-### Emotion Detection
-
-During voice calls, Nero analyzes vocal prosody in real-time via Hume's Expression Measurement API (48 dimensions). It knows how you're feeling and adjusts its responses accordingly. No other open-source agent does this.
-
-### MCP-Native
-
-First-class Model Context Protocol support. Add any MCP server in seconds -- stdio or HTTP, with OAuth support for remote servers.
-
-```bash
-nero mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem ~/
-nero mcp add github -- npx -y @modelcontextprotocol/server-github
-nero mcp add remote-server https://mcp.example.com --transport http
-```
-
-### Browser Automation
-
-Built-in Playwright for web automation -- navigate, click, type, screenshot, run JavaScript. Cookie banners dismissed automatically.
-
-### Scheduled Actions
-
-Schedule recurring tasks -- daily, weekly, monthly, or on any interval. Nero executes them autonomously.
-
-### Skills
-
-Extend Nero with reusable prompts that follow the [Agent Skills](https://skills.sh) standard.
-
-```bash
-nero skills add user/repo
-nero skills create my-skill
-```
-
-### Hooks
-
-Run shell commands at key lifecycle points -- block dangerous tool calls, log everything, inject custom workflows.
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [{ "command": "~/.nero/hooks/block-rm.sh", "match": "bash" }]
-  }
-}
-```
-
-Seven events: `PreToolUse`, `PostToolUse`, `OnPrompt`, `OnResponse`, `OnMainFinish`, `OnError`, `OnSessionStart`.
-
-### Subagent Dispatch
-
-Spawn parallel agents for independent research or build tasks. Each runs in isolation with its own model and context.
-
-### Dynamic Interfaces
-
-Nero can build and push interactive UI to any connected device. Buttons, sliders, toggles, text inputs, lists, progress bars, images -- 12 component types with reactive state bindings. Interfaces support automatic triggers (run on open, poll on interval) and actions that call tools, run commands, or update state.
-
-The agent decides what to build and when. Ask it for a Spotify controller and it builds one. Ask for a system dashboard and it generates a live-updating panel. Ask it to put something on the kitchen display and it moves the interface there.
-
-### Displays
-
-Turn any tablet, phone, or spare monitor into a dedicated Nero display. Open `https://nero.local/display/kitchen` and that device becomes the "kitchen" display. Nero can push interfaces to specific displays and migrate voice between them.
-
-Walk into a room and say "move to the kitchen" -- Nero transfers its voice session to the kitchen display and keeps talking.
-
-### LAN Discovery & Auto-TLS
-
-Nero broadcasts `nero.local` via mDNS and auto-generates TLS certificates on first run. A dedicated HTTPS server runs on port 443, so any device on your LAN can reach it at `https://nero.local` with full secure-context browser APIs (microphone, crypto, etc.).
-
-New devices need to trust the CA certificate once. On the device, open `nero.local/ca.crt` in a browser to download it, then install it in your device's certificate trust settings. After that, `https://nero.local` works without warnings.
-
-Certificates are stored in `~/.nero/certs/` and auto-renew before expiry. No OpenSSL, no manual cert management.
-
-## Architecture
+`nero start` fuses four containers plus a host-side runner, managed by a thin CLI:
 
 ```
-┌─────────────────────────────────────────┐
-│   Relay (:4848 HTTP) ─ Auth ─ Proxy    │
-│   HTTPS (:443) ─ Auto-TLS ─ LAN       │
-│   mDNS (nero.local)                    │
-├─────────────────────────────────────────┤
-│            Service (:4847)             │
-│                                         │
-│  ┌─────────┐ ┌─────────┐ ┌──────────┐ │
-│  │  Agent   │ │   MCP   │ │  Tools   │ │
-│  │ (Magma)  │ │ Servers │ │ (30+)    │ │
-│  └─────────┘ └─────────┘ └──────────┘ │
-│                                         │
-│  ┌─────────┐ ┌─────────┐ ┌──────────┐ │
-│  │  Voice   │ │   SMS   │ │  Slack   │ │
-│  │ (Twilio) │ │(Twilio) │ │(Webhook) │ │
-│  └─────────┘ └─────────┘ └──────────┘ │
-│                                         │
-│  ┌─────────┐ ┌─────────┐ ┌──────────┐ │
-│  │ Browser  │ │Autonomy │ │Background│ │
-│  │(Playwrt) │ │ Engine  │ │ Thinking │ │
-│  └─────────┘ └─────────┘ └──────────┘ │
-│                                         │
-│  ┌─────────┐ ┌──────────────────────┐  │
-│  │Interface │ │  Knowledge Graph     │  │
-│  │ Manager  │ │  (Embeddings)        │  │
-│  └─────────┘ └──────────────────────┘  │
-├─────────────────────────────────────────┤
-│           PostgreSQL                    │
-└─────────────────────────────────────────┘
+  web          nginx. Serves the web UI and is the single origin. Proxies /v1 to the
+               api and /lux to the engine (HTTP + the realtime WebSocket).
+  api          Bun. The agent, mediums, background projects, MCP, and voice signaling.
+  lux          The backend: tables, KV, vectors, realtime, queues, and auth - one engine.
+  media        A small Rust WebRTC sidecar for voice (Opus <-> PCM, str0m).
+  host-runner  A daemon on the host (not a container) that the api proxies filesystem,
+               git, and shell ops to, so code projects run against real repos + toolchains.
 ```
 
-The HTTP relay on port `4848` is the primary entry point for the CLI, API, and remote tunnels. A separate HTTPS server on port `443` provides TLS for LAN devices (so `https://nero.local` works without a port). Both proxy to the internal service on `127.0.0.1:4847`, which is never exposed directly. mDNS broadcasts `nero.local` for zero-config LAN discovery. Without a license key, the relay is an open passthrough. With one, it enforces auth for non-private IPs.
+The web UI has two planes. The **Field** (`/`) is Nero's space: the orb, voice,
+conversation, and the panels it throws onto your screen, no admin chrome. The **Workshop**
+is your space: mediums, memories, MCP, logs, and settings, the workbench where you inspect
+and configure. You never talk to a database or a config file directly; the CLI writes
+desired state and the stack reconciles.
 
-## Deployment
+## Design decisions
 
-### Docker (Recommended)
+### One backend: Lux
 
-```bash
-nero setup --db --integrated    # Full host access (default)
-nero setup --db --contained     # Standalone, no host mounts
-nero status                          # Check current mode
-nero update                          # Pull latest image + restart
-```
+A self-hosted appliance should not make you run and operate Postgres *and* Redis *and* a
+vector store *and* a realtime/pubsub layer *and* an auth system. That is five moving parts
+to install, secure, back up, and reason about, for one person.
 
-**--db Flag** (requires docker compose) includes a local postgres database for Nero to store information
+Nero uses [Lux](https://luxdb.dev) instead: a single engine that is tables, KV, vectors,
+realtime subscriptions, a job queue, and auth at once. It speaks the Redis protocol (so
+the background-project queue runs on it directly), exposes an HTTP SDK, and pushes realtime
+changes to the browser. The whole persistence story is one container and one volume. Back
+Nero up by tarring that volume; move it by moving the volume. That is why the stack is four
+small services instead of a dozen.
 
-**Integrated mode** gives Nero access to your host filesystem (`~/`), Docker, and network. **Contained mode** runs standalone with no host mounts.
+### An appliance, driven by a thin CLI
 
-### Local Models
+The `nero` CLI never serves anything. It is a host-side manager over docker-compose in
+`~/.nero`, modeled on the Lux CLI. It generates the compose file and environment, pulls the
+published images, and brings them up; the containers do the work. `~/.nero/.env` is treated
+as sacred, the CLI only ever appends missing keys, it never edits or removes what you put
+there. `nero start`, `stop`, `status`, `doctor`, `restore`, `cert`, `update`.
 
-Works with Ollama, vLLM, or any OpenAI-compatible API.
+### Code runs on the host: the host-runner
 
-```bash
-nero config set baseUrl http://localhost:11434/v1
-nero config set model llama3.2:3b
-```
+Nero can write code, background projects that plan, edit real repositories, run tests, and
+open PRs. Code needs real toolchains, `git`, `gh`, and the actual filesystem, none of which
+belong locked inside a hardened container. So a small daemon runs those operations on the
+host, and the containerized api proxies filesystem/exec/git calls to it over an
+authenticated HTTP surface. In local dev the exact same interface runs in-process. The
+containers stay lean; the messy, powerful work happens where it should.
 
-### Remote Access
+### One origin
 
-```bash
-nero relay start         # Start tunnel to relay
-nero license register    # One-time webhook registration
-nero relay status        # Check tunnel status
-```
+The browser talks to a single origin. nginx serves the SPA, proxies `/v1` to the api, and
+proxies `/lux` (HTTP and the realtime WebSocket) to the engine. Because the app uses
+relative URLs, it works identically from `localhost`, a LAN IP, or a domain, with no CORS,
+no per-deploy URL configuration, and no second port a client has to reach. This is what
+makes it just work whether you open it on the host or on your phone.
 
-Access Nero from anywhere. The tunnel connects to the relay, and the license key handles auth.
+### Local HTTPS + mDNS, so voice works off localhost
 
-## Configuration
+Microphone access and other browser APIs require a *secure context*, which off `localhost`
+means HTTPS. On first run Nero provisions a local certificate authority and a short-lived
+leaf and serves port 443; visiting `nero.local/cert.crt` (or `<ip>/cert.crt`) installs the
+CA so a device trusts it once. It advertises `nero.local` over mDNS. After that, voice works
+in the browser on any device on your network. No OpenSSL, no manual cert management.
 
-All config lives at `~/.nero/config.json`. Persistent instructions go in `~/.nero/NERO.md`.
+### Presence, not a chat window
 
-### Environment Variables
+Nero is a single entity. The orb renders on exactly one screen at a time; from any other
+device you summon it. Voice and text are two modes of the same presence, tap the orb to
+talk, type to chat, and it is one continuous conversation either way. The web app is an
+installable PWA, so on a phone it is a real home-screen app.
 
-Add to `~/.nero/.env`:
+## What it does
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `OPENROUTER_API_KEY` | Yes* | OpenRouter API key (*not needed with local models) |
-| `DATABASE_URL` | No | PostgreSQL connection string |
-| `TAVILY_API_KEY` | No | Web search tool |
-| `DEEPGRAM_API_KEY` | No | Voice STT |
-| `ELEVENLABS_API_KEY` | No | Voice TTS (ElevenLabs) |
-| `HUME_API_KEY` | No | Voice TTS (Hume) and emotion detection |
-| `NERO_LICENSE_KEY` | No | Voice/SMS webhook routing |
-| `POMPEII_API_KEY` | No | Pompeii workspace integration (chat tools + webhook) |
-| `POMPEII_WEBHOOK_SECRET` | No | HMAC signature verification for Pompeii webhooks |
-
-### Voice, SMS & Slack
-
-Nero works fully without a license. The CLI, web dashboard, and MCP tools all work out of the box.
-
-A license unlocks voice calls, SMS, and Slack by routing webhooks through Pompeii's infrastructure. Once registered, you get a phone number for calls and texts.
-
-```bash
-nero license register
-nero license status
-```
-
-## CLI Reference
-
-```bash
-nero                      # Interactive REPL
-nero -m "message"         # One-shot message
-nero chat                 # Start REPL (alias)
-nero config               # Show config
-nero config set <k> <v>   # Set config value
-nero models               # List available models
-nero status               # Installation status
-nero setup                # Interactive setup
-nero update               # Update to latest
-nero reload               # Reload MCP servers, skills, NERO.md
-nero restart              # Restart service
-nero logs                 # View recent logs
-nero logs -f              # Stream logs in real-time
-nero mcp list             # List MCP servers
-nero mcp add <name> ...   # Add MCP server
-nero skills list          # List skills
-nero think on/off         # Toggle background thinking
-nero autonomy on/off      # Toggle autonomy mode
-nero relay start          # Start tunnel
-```
+- **Voice.** Real-time conversation with a cascaded pipeline (Deepgram STT, a fast LLM,
+  ElevenLabs TTS) over the Rust WebRTC sidecar, with barge-in. Works in the browser on any
+  device on your LAN over HTTPS.
+- **Background projects.** Nero plans a multi-step project, you approve, and it executes in
+  the background, spawning subagents, writing and testing code in isolated git worktrees,
+  and reporting back when done.
+- **Knowledge-graph memory.** People, projects, concepts, and events are extracted as nodes
+  and connected by edges. Mentioning something activates related memories through the graph.
+- **Mediums.** Surfaces are first-class, pluggable modules that share one conversation and
+  memory (web, voice, and displays today; more are just modules). Nero reaches you where
+  you are by urgency and presence.
+- **MCP-native.** Add any Model Context Protocol server (stdio or HTTP, with OAuth) in
+  seconds.
+- **Displays + panels.** Mount a tablet or spare monitor as a named display; Nero throws
+  interactive UI panels onto it and can move its voice session between rooms.
+- **Mobile.** Installable PWA with the responsive Field, add it to your home screen.
 
 ## Development
 
-Monorepo: `api/` (Bun server) · `web/` (SvelteKit) · `cli/` (the `nero` binary) ·
-`shared/` (`@nero/shared`) · `media/` (Rust WebRTC sidecar) · `lux/` (migrations).
+Monorepo (bun workspaces): `api/` (server), `web/` (SvelteKit), `cli/` (the `nero`
+binary + host-runner), `shared/` (`@nero/shared`), `media/` (Rust WebRTC sidecar),
+`lux/` (migrations).
 
 ```bash
 bun install
 cp .env.example .env        # fill in OPENROUTER_API_KEY etc.
 
 lux start                   # local Lux engine (the data layer)
-
-cd api && bun run dev       # terminal 1: the server  → http://localhost:4848
+cd api && bun run dev       # terminal 1: the server
 cd web && bun run dev       # terminal 2: the web UI
 
 cd api && bun run test      # tests
 ```
 
-The full containerized stack is driven by the CLI: `nero start` brings up
-**lux + media + api + web** and launches the host-side runner (code-project builds
-run on the host, not in a container). `nero status` / `nero doctor` inspect it.
-
-**Backups.** Lux data lives in a Docker volume. Tar it to back up; restore into the
-bundled engine with `nero restore <backup.tgz>` (do this before cutting over to a
-fresh stack so you never lose your history).
+`nero start` runs the full containerized stack. `nero doctor` inspects it. Lux data lives
+in a Docker volume; `nero restore <backup.tgz>` seeds the bundled engine from a backup.
 
 ## License
 
