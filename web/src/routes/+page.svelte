@@ -620,12 +620,37 @@
         else if (!shouldListen && wakeword) disarmWakeword();
     });
 
+    // A soft ascending two-note chime so you know Nero heard the wakeword.
+    function wakeChime() {
+        try {
+            const ctx = new AudioContext();
+            const now = ctx.currentTime;
+            for (const [i, freq] of [660, 880].entries()) {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                const t = now + i * 0.09;
+                gain.gain.setValueAtTime(0, t);
+                gain.gain.linearRampToValueAtTime(0.13, t + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0008, t + 0.22);
+                osc.connect(gain).connect(ctx.destination);
+                osc.start(t);
+                osc.stop(t + 0.24);
+            }
+            setTimeout(() => void ctx.close(), 700);
+        } catch {
+            /* audio unavailable */
+        }
+    }
+
     async function armWakeword() {
         wakewordStatus = 'arming';
         const { WakewordListener } = await import('$lib/wakeword');
         const w = new WakewordListener({
             threshold: 0.5,
             onDetect: () => {
+                wakeChime();
                 if (!neroIsHere) void bringNeroHere();
                 presenceMode = true;
                 engaged = true;
