@@ -54,3 +54,7 @@ lux/.lux-local.json
 
 # onnxruntime-web WASM runtime (staged from node_modules by web/scripts/setup-ort.mjs)
 web/static/ort/
+
+# Wakeword training (local): venv + generated corpus
+scripts/wakeword/.venv/
+scripts/wakeword/data/

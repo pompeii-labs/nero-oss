@@ -18,7 +18,7 @@ export class WakewordListener {
 
     constructor(opts: WakewordOptions = {}) {
         this.detector = new WakewordDetector({
-            modelUrl: '/wakeword/hey_jarvis_v0.1.onnx',
+            modelUrl: '/wakeword/hey_nero.onnx',
             ...opts,
         });
     }

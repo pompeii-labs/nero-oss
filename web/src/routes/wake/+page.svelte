@@ -79,9 +79,9 @@
         const params = new URLSearchParams(location.search);
         if (params.has('autotest')) {
             status = 'running autotest…';
-            const hj = await runClip('/wakeword/test-heyjarvis.wav');
+            const hn = await runClip('/wakeword/test-heynero.wav');
             const neg = await runClip('/wakeword/test-negative.wav');
-            autotest = `heyjarvis=${hj.toFixed(3)} negative=${neg.toFixed(3)} ${hj > 0.5 && hj > neg ? 'PASS' : 'FAIL'}`;
+            autotest = `heynero=${hn.toFixed(3)} negative=${neg.toFixed(3)} ${hn > 0.5 && hn > neg ? 'PASS' : 'FAIL'}`;
             status = 'autotest done';
             (window as unknown as { __wakeResult: string }).__wakeResult = autotest;
         } else {
