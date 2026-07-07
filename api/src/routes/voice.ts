@@ -5,6 +5,7 @@ import { loadConfig } from '@nero/shared/config';
 import { runVoiceTurn } from '../services/voice/turn';
 import { StreamingTTS, type VoiceTTS } from '../services/voice/tts';
 import { HumeStreamingTTS } from '../services/voice/hume';
+import { KokoroStreamingTTS } from '../services/voice/kokoro';
 import { Panel } from '../models/panel';
 import { formatInteraction } from '../services/panels/interaction';
 
@@ -19,6 +20,14 @@ const TTS_PROVIDER =
 
 /** Build the per-session streaming TTS for the active provider. */
 function makeTTS(onPcm: (pcm: Buffer, contextId: string) => void): VoiceTTS {
+    if (TTS_PROVIDER === 'kokoro') {
+        return new KokoroStreamingTTS({
+            url: process.env.NERO_KOKORO_URL || 'http://localhost:8880',
+            voice: process.env.NERO_KOKORO_VOICE || 'af_sky',
+            model: process.env.NERO_KOKORO_MODEL || 'kokoro',
+            onPcm,
+        });
+    }
     if (TTS_PROVIDER === 'hume') {
         return new HumeStreamingTTS({
             apiKey: process.env.HUME_API_KEY ?? '',
@@ -74,6 +83,7 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
             let ttsSeq = 0;
             // latency marks for the current turn
             let tEot = 0;
+            let tSetupDone = 0;
             let tFirstText = 0;
             let tFirstAudio = 0;
             // Estimated wall-clock when the buffered TTS finishes playing out. Nero
@@ -99,6 +109,7 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                 turnAbort = new AbortController();
                 const signal = turnAbort.signal;
                 tEot = Date.now();
+                tSetupDone = 0;
                 tFirstText = 0;
                 tFirstAudio = 0;
                 ttsSeq = 0;
@@ -115,6 +126,9 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                     const content = await runVoiceTurn(
                         transcript,
                         {
+                            onThinking: () => {
+                                if (!tSetupDone) tSetupDone = Date.now();
+                            },
                             onText: (chunk) => {
                                 if (signal.aborted) return;
                                 if (!tFirstText) tFirstText = Date.now();
@@ -174,8 +188,11 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                         if (!tFirstAudio) {
                             tFirstAudio = Date.now();
                             ws.send(JSON.stringify({ type: 'turn', state: 'speaking' }));
+                            const setup = (tSetupDone || tEot) - tEot;
+                            const llm = tFirstText - (tSetupDone || tEot);
+                            const ttsMs = tFirstAudio - tFirstText;
                             console.log(
-                                `[voice] latency  EOT→text ${tFirstText - tEot}ms  EOT→firstaudio ${tFirstAudio - tEot}ms`,
+                                `[voice] EOT→audio ${tFirstAudio - tEot}ms = setup ${setup} + llm ${llm} + tts ${ttsMs}`,
                             );
                         }
                         sidecar.send(frameTts(peer, ttsSeq++, pcm));

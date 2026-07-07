@@ -11,11 +11,11 @@ let client: OpenAI | null = null;
 
 function getClient(): OpenAI | null {
     const cfg = loadConfig();
-    if (!cfg.openrouter.apiKey) return null;
+    if (!cfg.embed.apiKey) return null;
     if (!client) {
         client = new OpenAI({
-            baseURL: cfg.openrouter.baseUrl,
-            apiKey: cfg.openrouter.apiKey,
+            baseURL: cfg.embed.baseUrl,
+            apiKey: cfg.embed.apiKey,
             timeout: 30_000,
             maxRetries: 2,
         });
@@ -29,7 +29,7 @@ export async function embed(text: string): Promise<number[] | null> {
     const input = text.trim().slice(0, MAX_INPUT_CHARS);
     if (!input) return null;
     try {
-        const res = await c.embeddings.create({ model: loadConfig().embedModel, input });
+        const res = await c.embeddings.create({ model: loadConfig().embed.model, input });
         return res.data[0]?.embedding ?? null;
     } catch (e) {
         console.error('[nero] embed failed:', e);

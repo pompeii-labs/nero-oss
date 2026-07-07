@@ -13,8 +13,10 @@ const cfg = loadConfig();
 if (!isLuxConnected()) {
     log.warn('Lux not configured (LUX_URL / LUX_SECRET_KEY). Run `lux start`.');
 }
-if (!cfg.openrouter.apiKey) {
-    log.warn('OPENROUTER_API_KEY not set; runs will fail until it is.');
+if (cfg.llm.baseUrl.includes('openrouter.ai')) {
+    if (!cfg.llm.apiKey) log.warn('OPENROUTER_API_KEY not set; runs will fail until it is.');
+} else {
+    log.info(`LLM: ${cfg.llm.baseUrl} (model ${cfg.model})`);
 }
 
 if (isLuxConnected()) {

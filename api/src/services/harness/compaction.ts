@@ -66,8 +66,8 @@ export function foldBoundary(rows: Message[], keepTokens: number): number {
 async function summarize(transcript: string): Promise<string> {
     const cfg = loadConfig();
     const client = new OpenAI({
-        baseURL: cfg.openrouter.baseUrl,
-        apiKey: cfg.openrouter.apiKey,
+        baseURL: cfg.llm.baseUrl,
+        apiKey: cfg.llm.apiKey || 'local',
         timeout: 60_000,
         maxRetries: 1,
     });

@@ -3,9 +3,13 @@
  * `.env.local` (written by `lux start`); the OpenRouter key from `.env`.
  */
 export interface NeroConfig {
-    openrouter: { apiKey: string; baseUrl: string };
+    // The chat/voice LLM. OpenAI-compatible, so it can point at OpenRouter (default)
+    // or a local server (ollama, llama-server): set NERO_LLM_BASE_URL + NERO_MODEL.
+    llm: { apiKey: string; baseUrl: string };
     model: string;
-    embedModel: string;
+    // Embeddings stay separate from the LLM: a local LLM server usually has no
+    // embedding model, so memory recall keeps using OpenRouter unless overridden.
+    embed: { apiKey: string; baseUrl: string; model: string };
     lux: {
         url: string;
         publicUrl: string;
@@ -30,12 +34,20 @@ let cached: NeroConfig | null = null;
 export function loadConfig(): NeroConfig {
     if (cached) return cached;
     cached = {
-        openrouter: {
-            apiKey: env('OPENROUTER_API_KEY'),
-            baseUrl: env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
+        llm: {
+            apiKey: env('NERO_LLM_API_KEY') || env('OPENROUTER_API_KEY'),
+            baseUrl:
+                env('NERO_LLM_BASE_URL') ||
+                env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
         },
         model: env('NERO_MODEL', 'anthropic/claude-sonnet-4.5'),
-        embedModel: env('NERO_EMBED_MODEL', 'openai/text-embedding-3-small'),
+        embed: {
+            apiKey: env('NERO_EMBED_API_KEY') || env('OPENROUTER_API_KEY'),
+            baseUrl:
+                env('NERO_EMBED_BASE_URL') ||
+                env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
+            model: env('NERO_EMBED_MODEL', 'openai/text-embedding-3-small'),
+        },
         tavilyApiKey: env('TAVILY_API_KEY'),
         lux: {
             url: env('LUX_URL', 'http://localhost:8090'),

@@ -274,11 +274,19 @@ export function config(): void {
     const cfg = loadConfig();
     line(c.bold('Nero config') + c.dim('  (resolved from ~/.nero/.env - secrets hidden)'));
     kv('model', cfg.model);
-    kv('embed model', cfg.embedModel);
+    kv('llm', cfg.llm.baseUrl.includes('openrouter.ai') ? 'openrouter' : cfg.llm.baseUrl);
+    kv(
+        'llm key',
+        cfg.llm.apiKey
+            ? c.green('set')
+            : cfg.llm.baseUrl.includes('openrouter.ai')
+              ? c.red('missing')
+              : c.dim('n/a (local)'),
+    );
+    kv('embed model', cfg.embed.model);
     kv('port', String(cfg.port));
     kv('timezone', cfg.timezone);
     kv('lux', luxMode() === 'bundled' ? 'bundled engine' : 'external');
-    kv('openrouter', cfg.openrouter.apiKey ? c.green('set') : c.red('missing'));
     kv('tavily', cfg.tavilyApiKey ? c.green('set') : c.dim('unset'));
 }
 
@@ -291,10 +299,15 @@ export async function doctor(): Promise<void> {
     };
 
     const cfg = loadConfig();
+    const usingOR = cfg.llm.baseUrl.includes('openrouter.ai');
     check(
-        'OPENROUTER_API_KEY',
-        !!cfg.openrouter.apiKey,
-        cfg.openrouter.apiKey ? '' : 'set it in ~/.nero/.env',
+        'LLM',
+        !usingOR || !!cfg.llm.apiKey,
+        usingOR
+            ? cfg.llm.apiKey
+                ? 'openrouter'
+                : 'set OPENROUTER_API_KEY in ~/.nero/.env'
+            : cfg.llm.baseUrl,
     );
     check('LUX configured', !!cfg.lux.url && !!cfg.lux.secretKey);
 

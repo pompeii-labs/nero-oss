@@ -3,14 +3,15 @@ import { loadConfig } from '@nero/shared/config';
 
 let client: OpenAI | null = null;
 
-/** Shared OpenRouter (OpenAI-compatible) client. Stateless and reusable, so a
- *  singleton rather than one per agent. */
+/** Shared OpenAI-compatible LLM client. Points at OpenRouter by default, or a local
+ *  server (ollama, llama-server) via NERO_LLM_BASE_URL. Singleton, reusable. */
 export function openrouter(): OpenAI {
     if (client) return client;
     const cfg = loadConfig();
     client = new OpenAI({
-        baseURL: cfg.openrouter.baseUrl,
-        apiKey: cfg.openrouter.apiKey,
+        baseURL: cfg.llm.baseUrl,
+        // Dummy key so the SDK constructs when none is set; local servers ignore it.
+        apiKey: cfg.llm.apiKey || 'local',
         timeout: 120_000,
         maxRetries: 2,
         defaultHeaders: { 'X-Title': 'Nero' },
