@@ -18,3 +18,8 @@ coverage
 *.test.ts
 *.spec.ts
 wakeword/
+**/.venv
+**/__pycache__
+scripts/wakeword/data
+web/static/ort
+competitive_analysis
