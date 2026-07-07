@@ -178,7 +178,7 @@ ${lux}  media:
     restart: unless-stopped
     depends_on: [api]
     ports:
-      - "\${NERO_WEB_PORT:-4848}:80"${tls ? `\n      - "\${NERO_WEB_HTTPS_PORT:-4443}:443"` : ''}${
+      - "\${NERO_WEB_PORT:-80}:80"${tls ? `\n      - "\${NERO_WEB_HTTPS_PORT:-443}:443"` : ''}${
           tls
               ? `\n    volumes:\n      - ${CERT_DIR}:/etc/nginx/certs:ro\n      - ${TLS_CONF}:/etc/nginx/tls.d/tls.conf:ro`
               : ''

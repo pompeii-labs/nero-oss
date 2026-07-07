@@ -92,14 +92,13 @@ export function start(opts: StartOpts = {}): void {
     startRunner();
 
     if (!opts.foreground) {
-        const port = env.NERO_WEB_PORT || '4848';
+        const port = env.NERO_WEB_PORT || '80';
+        const hport = env.NERO_WEB_HTTPS_PORT || '443';
+        const httpUrl = port === '80' ? 'http://localhost' : `http://localhost:${port}`;
+        const httpsUrl = hport === '443' ? 'https://localhost' : `https://localhost:${hport}`;
         line();
-        ok(`Nero is up  →  ${c.cyan(`http://localhost:${port}`)}`);
-        if (httpsEnabled()) {
-            info(
-                `${c.dim('https (voice):')} ${c.cyan(`https://localhost:${env.NERO_WEB_HTTPS_PORT || '4443'}`)}`,
-            );
-        }
+        ok(`Nero is up  →  ${c.cyan(httpUrl)}`);
+        if (httpsEnabled()) info(`${c.dim('https (voice):')} ${c.cyan(httpsUrl)}`);
         info(`${c.dim('logs:')} nero logs    ${c.dim('stop:')} nero stop`);
     }
 }
@@ -109,11 +108,12 @@ export function cert(): void {
     ensureHome();
     if (ensureCert()) ok('Generated a self-signed TLS cert in ~/.nero/certs.');
     else info('TLS cert already present (~/.nero/certs). Delete it to regenerate.');
-    const hp = readEnv().NERO_WEB_HTTPS_PORT || '4443';
+    const hp = readEnv().NERO_WEB_HTTPS_PORT || '443';
+    const suf = hp === '443' ? '' : `:${hp}`;
     line();
     info('HTTPS gives the browser a secure context, which voice/mic needs off localhost:');
-    kv('local', `https://localhost:${hp}`);
-    for (const ip of lanIps()) kv('lan', `https://${ip}:${hp}`);
+    kv('local', `https://localhost${suf}`);
+    for (const ip of lanIps()) kv('lan', `https://${ip}${suf}`);
     line();
     warn('Self-signed: the browser warns once. On iPhone, visit the URL, then trust it in');
     line('  Settings > General > About > Certificate Trust Settings.');
@@ -141,7 +141,8 @@ export function status(): void {
     line();
     kv('lux', luxMode(env) === 'bundled' ? 'bundled engine' : 'external');
     kv('host-runner', runnerPid() ? `up (pid ${runnerPid()})` : 'stopped');
-    kv('url', `http://localhost:${env.NERO_WEB_PORT || '4848'}`);
+    const wp = env.NERO_WEB_PORT || '80';
+    kv('url', wp === '80' ? 'http://localhost' : `http://localhost:${wp}`);
     kv('home', HOME);
 }
 
