@@ -7,6 +7,9 @@ export interface NeroConfig {
     // or a local server (ollama, llama-server): set NERO_LLM_BASE_URL + NERO_MODEL.
     llm: { apiKey: string; baseUrl: string };
     model: string;
+    // Voice needs low time-to-first-token, so it uses its own model, a fast one by
+    // default (Haiku on OpenRouter), overridable with NERO_VOICE_MODEL.
+    voiceModel: string;
     // Embeddings stay separate from the LLM: a local LLM server usually has no
     // embedding model, so memory recall keeps using OpenRouter unless overridden.
     embed: { apiKey: string; baseUrl: string; model: string };
@@ -33,14 +36,20 @@ let cached: NeroConfig | null = null;
 
 export function loadConfig(): NeroConfig {
     if (cached) return cached;
+    const llmBaseUrl =
+        env('NERO_LLM_BASE_URL') || env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1');
+    const chatModel = env('NERO_MODEL', 'anthropic/claude-sonnet-4.5');
     cached = {
         llm: {
             apiKey: env('NERO_LLM_API_KEY') || env('OPENROUTER_API_KEY'),
-            baseUrl:
-                env('NERO_LLM_BASE_URL') ||
-                env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
+            baseUrl: llmBaseUrl,
         },
-        model: env('NERO_MODEL', 'anthropic/claude-sonnet-4.5'),
+        model: chatModel,
+        // Fast model for voice on OpenRouter; on a local server, reuse the chat model
+        // (an Anthropic slug wouldn't exist there).
+        voiceModel:
+            env('NERO_VOICE_MODEL') ||
+            (llmBaseUrl.includes('openrouter.ai') ? 'anthropic/claude-haiku-4.5' : chatModel),
         embed: {
             apiKey: env('NERO_EMBED_API_KEY') || env('OPENROUTER_API_KEY'),
             baseUrl:

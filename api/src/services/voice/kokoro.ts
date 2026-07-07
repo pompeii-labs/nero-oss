@@ -38,6 +38,7 @@ export class KokoroStreamingTTS implements VoiceTTS {
     private buf = '';
     private queue: Promise<void> = Promise.resolve();
     private abort: AbortController | null = null;
+    private firstFired = false;
 
     constructor(private opts: KokoroTTSOpts) {}
 
@@ -46,14 +47,26 @@ export class KokoroStreamingTTS implements VoiceTTS {
         this.buf = '';
         this.queue = Promise.resolve();
         this.abort = new AbortController();
+        this.firstFired = false;
     }
 
     pushText(contextId: string, chunk: string): void {
         if (contextId !== this.ctx) return;
         this.buf += chunk;
-        // Fire everything up to the last sentence-ending punctuation; hold the rest.
+        // The first fragment fires on any clause boundary (>=12 chars) so first-audio
+        // lands sooner; after that, whole sentences for better prosody.
+        if (!this.firstFired) {
+            const clause = this.buf.match(/^(.{12,}?[,.!?;:])\s(.*)$/s);
+            if (clause) {
+                this.firstFired = true;
+                this.buf = clause[2];
+                this.enqueue(clause[1], contextId);
+                return;
+            }
+        }
         const m = this.buf.match(/^(.*[.!?])\s(.*)$/s);
         if (m) {
+            this.firstFired = true;
             this.buf = m[2];
             this.enqueue(m[1], contextId);
         }
