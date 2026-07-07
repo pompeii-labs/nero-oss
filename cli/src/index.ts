@@ -17,6 +17,7 @@ ${c.bold('Lifecycle')}
   start              start the stack          ${c.dim('-f, --foreground')}
   stop               stop the stack
   restart            restart the stack
+  update             update the CLI + stack to the latest release
   status             stack status + URL
   logs               tail logs                ${c.dim('-n <lines>, -f')}
 
@@ -110,6 +111,9 @@ async function main(): Promise<void> {
             break;
         case 'restart':
             cmd.restart();
+            break;
+        case 'update':
+            await cmd.update();
             break;
         case 'status':
             cmd.status();

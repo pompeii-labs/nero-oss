@@ -3,6 +3,8 @@
 import { spawn, spawnSync } from 'child_process';
 import { join, resolve, basename, dirname } from 'path';
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
+import { tmpdir } from 'os';
+import pkg from '../package.json';
 import { c, ok, warn, info, line, kv, die } from './term';
 import { ensureDocker, compose, composeCapture } from './docker';
 import {
@@ -124,6 +126,52 @@ export function stop(): void {
     stopRunner();
     const code = compose(['down']);
     if (code === 0) ok('Nero stopped.');
+}
+
+/** Self-update the CLI binary to the latest release + pull the latest stack images. */
+export async function update(): Promise<void> {
+    const os = process.platform === 'darwin' ? 'darwin' : 'linux';
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+    const repo = 'pompeii-labs/nero-oss';
+
+    info('Checking for the latest release…');
+    let tag = '';
+    try {
+        const rel = (await (
+            await fetch(`https://api.github.com/repos/${repo}/releases/latest`)
+        ).json()) as { tag_name?: string };
+        tag = rel.tag_name ?? '';
+    } catch {
+        die('Could not reach GitHub. Check your connection.');
+    }
+    if (!tag) die('No release found.');
+
+    if (tag === `v${pkg.version}`) {
+        ok(`nero is already up to date (${tag}).`);
+    } else {
+        info(`Updating nero ${`v${pkg.version}`} -> ${tag}…`);
+        const dest = process.execPath;
+        const tmp = join(tmpdir(), `nero-${tag}`);
+        const url = `https://github.com/${repo}/releases/download/${tag}/nero-${os}-${arch}`;
+        if (spawnSync('curl', ['-fsSL', url, '-o', tmp], { stdio: 'inherit' }).status !== 0)
+            die('Download failed.');
+        spawnSync('chmod', ['+x', tmp]);
+        // Overwrite the running binary; a running executable can be replaced in place.
+        let mv = spawnSync('mv', [tmp, dest]);
+        if (mv.status !== 0) mv = spawnSync('sudo', ['mv', tmp, dest], { stdio: 'inherit' });
+        if (mv.status !== 0) die('Could not replace the binary - re-run with sudo.');
+        ok(`Updated nero to ${tag}.`);
+    }
+
+    // The stack images track :latest; refresh them if a stack is configured.
+    if (existsSync(join(HOME, 'docker-compose.yml'))) {
+        writeCompose(); // regenerate against the current image tags before pulling
+        info('Pulling the latest stack images…');
+        compose(['pull']);
+        info('Run `nero restart` to apply.');
+    } else {
+        info('Run `nero start` to bring up the stack.');
+    }
 }
 
 export function restart(): void {
