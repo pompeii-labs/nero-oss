@@ -83,6 +83,10 @@ def augment(samples):
     outs = [samples]
     for _ in range(4):
         s = samples.copy()
+        # occasional speed/pitch perturbation (linear resample)
+        if RNG.random() < 0.5:
+            n = int(len(s) / RNG.uniform(0.9, 1.1))
+            s = np.interp(np.linspace(0, len(s) - 1, n), np.arange(len(s)), s).astype(np.float32)
         snr = RNG.uniform(5, 25)
         rms = np.sqrt(np.mean(s ** 2)) + 1e-6
         noise = RNG.standard_normal(len(s)).astype(np.float32) * rms / (10 ** (snr / 20))

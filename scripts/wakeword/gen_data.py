@@ -20,7 +20,14 @@ NEG = os.path.join(DATA, "negatives")
 
 WAKE = "hey nero"
 
-# Phonetically-close phrases the model must learn to reject.
+# The near-homophones that most confuse the model (nero vs neo/nemo/narrow). Generated
+# heavily across every voice + rate so it learns the fine boundary.
+VERY_HARD = [
+    "hey neo", "hey nemo", "hey narrow", "hey neon", "hey nearo", "hey neuro",
+    "hey new row", "hey miro", "hey nero's", "hey narrow oh", "hey neo oh",
+]
+
+# Other phonetically-close phrases to reject.
 HARD_NEGATIVES = [
     "hey neo", "hey nemo", "hey narrow", "hey hero", "hey nero's",
     "hey neil", "hey miro", "hey zero", "hey nair", "a narrow road",
@@ -89,7 +96,7 @@ def main():
 
     vs = voices()
     print(f"{len(vs)} English voices")
-    rates = [150, 180, 210]
+    rates = [140, 160, 180, 200, 220]  # more rates -> better recall across speaking speeds
     random.seed(7)
 
     npos = 0
@@ -101,8 +108,13 @@ def main():
 
     nneg = 0
     for v in vs:
-        # ALL hard (near-phonetic) negatives across every voice + rate: this is the fine
-        # boundary the model must learn ("hey neo"/"hey narrow" vs "hey nero").
+        # The near-homophones, heavily (every voice x 3 rates) so the fine boundary is learned.
+        for text in VERY_HARD:
+            for r in (150, 180, 210):
+                slug = "".join(c for c in text if c.isalnum())[:16]
+                if synth(text, v, r, os.path.join(NEG, f"hard_{v}_{slug}_{r}.wav")):
+                    nneg += 1
+        # Other hard negatives across every voice + rate.
         for text in HARD_NEGATIVES:
             for r in (160, 200):
                 slug = "".join(c for c in text if c.isalnum())[:16]
