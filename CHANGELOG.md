@@ -2,6 +2,16 @@
 
 All notable changes to Nero are documented here.
 
+## 2.0.1 (2026-07-06)
+
+### Added
+
+- `nero update` self-updates the CLI binary + refreshes the stack images.
+
+### Fixed
+
+- `install.sh` installs to `/usr/local/bin` and points at `nero start` (was `nero setup`, a removed command).
+
 ## 2.0.0 (2026-07-06)
 
 Full architectural rebuild.
