@@ -5,8 +5,8 @@ node_modules/
 dist/
 target/
 
-# Wakeword (python venv + rust build)
-wakeword/
+# Old wakeword experiment (python venv + rust build) — root dir only
+/wakeword/
 
 # Environment
 .env
@@ -51,3 +51,6 @@ WISHLIST.md
 proactive-monitoring-thoughts.md
 .env.local
 lux/.lux-local.json
+
+# onnxruntime-web WASM runtime (staged from node_modules by web/scripts/setup-ort.mjs)
+web/static/ort/

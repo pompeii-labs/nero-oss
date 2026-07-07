@@ -9,6 +9,7 @@
     import ToolGroup from '$lib/components/field/ToolGroup.svelte';
     import Composer, { type PendingFile } from '$lib/components/field/Composer.svelte';
     import ThemeSwitch from '$lib/components/field/ThemeSwitch.svelte';
+    import type { WakewordListener } from '$lib/wakeword';
     import {
         startVoice,
         type VoiceSession,
@@ -208,6 +209,7 @@
     }
 
     onMount(async () => {
+        wakewordOn = localStorage.getItem('nero.wakeword') === '1';
         try {
             const initial = await loadMessages();
             msgs = [...initial].sort((a, b) => a.id - b.id);
@@ -364,6 +366,7 @@
         unsubProjects?.();
         unsubProjectTasks?.();
         unsubSettings?.();
+        wakeword?.stop();
         if (heartbeat) clearInterval(heartbeat);
     });
 
@@ -602,6 +605,57 @@
             voiceActivities = [];
         }
     });
+
+    // Wakeword: opt-in per device (localStorage). When armed + present + on a secure
+    // origin + NOT already in a call, listen for the wakeword; a detection summons Nero
+    // here and opens voice. Listening pauses during a live call to free the mic, then the
+    // reactive guard below re-arms it when the call ends.
+    let wakewordOn = $state(false);
+    let wakewordStatus = $state<'off' | 'arming' | 'on' | 'error' | 'insecure'>('off');
+    let wakeword: WakewordListener | null = null;
+
+    $effect(() => {
+        const shouldListen = wakewordOn && neroIsHere && !insecureContext && !engaged;
+        if (shouldListen && !wakeword) void armWakeword();
+        else if (!shouldListen && wakeword) disarmWakeword();
+    });
+
+    async function armWakeword() {
+        wakewordStatus = 'arming';
+        const { WakewordListener } = await import('$lib/wakeword');
+        const w = new WakewordListener({
+            threshold: 0.5,
+            onDetect: () => {
+                if (!neroIsHere) void bringNeroHere();
+                presenceMode = true;
+                engaged = true;
+            },
+        });
+        try {
+            await w.load();
+            await w.start();
+            wakeword = w;
+            wakewordStatus = 'on';
+        } catch (e) {
+            wakeword = null;
+            wakewordStatus = (e as Error).message.includes('insecure') ? 'insecure' : 'error';
+        }
+    }
+
+    function disarmWakeword() {
+        wakeword?.stop();
+        wakeword = null;
+        if (wakewordStatus === 'on' || wakewordStatus === 'arming') wakewordStatus = 'off';
+    }
+
+    function toggleWakeword() {
+        wakewordOn = !wakewordOn;
+        try {
+            localStorage.setItem('nero.wakeword', wakewordOn ? '1' : '0');
+        } catch {
+            /* private mode */
+        }
+    }
 
     // A voice tool can finish in well under a frame; latch the "tool" look for a
     // short dwell whenever a NEW tool fires so it's actually watchable (the chat
@@ -869,6 +923,32 @@
                         </svg>
                     </button>
                 {/if}
+                <button
+                    class="wake-toggle"
+                    class:on={wakewordStatus === 'on'}
+                    onclick={toggleWakeword}
+                    aria-label="Wakeword"
+                    title={wakewordStatus === 'insecure'
+                        ? 'Wakeword needs HTTPS'
+                        : wakewordStatus === 'on'
+                          ? 'Listening for "Hey Nero"'
+                          : 'Listen for "Hey Nero"'}
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        width="16"
+                        height="16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.7"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+                        <path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7" />
+                        <path d="M6 6a8 8 0 0 0 0 12M18 6a8 8 0 0 1 0 12" opacity="0.5" />
+                    </svg>
+                </button>
                 <a class="ws" href="/protocols">Protocols</a>
             </div>
         {/if}
@@ -1039,6 +1119,43 @@
     .voice-enter:hover {
         background: rgb(var(--holo) / 0.12);
         color: rgb(var(--holo-hot));
+    }
+    /* Wakeword arm/disarm. Resting: dim + quiet. Armed: holo + a gentle listening pulse. */
+    .wake-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: 1px solid rgb(var(--holo) / 0.16);
+        background: transparent;
+        color: var(--text-dim);
+        cursor: pointer;
+        flex-shrink: 0;
+        transition:
+            background 0.2s,
+            color 0.2s,
+            border-color 0.2s;
+    }
+    .wake-toggle:hover {
+        color: var(--text);
+        border-color: rgb(var(--holo) / 0.3);
+    }
+    .wake-toggle.on {
+        color: rgb(var(--holo-hot));
+        border-color: rgb(var(--holo) / 0.5);
+        background: rgb(var(--holo) / 0.08);
+        animation: wake-pulse 2.4s ease-in-out infinite;
+    }
+    @keyframes wake-pulse {
+        0%,
+        100% {
+            box-shadow: 0 0 0 0 rgb(var(--holo) / 0.35);
+        }
+        50% {
+            box-shadow: 0 0 0 4px rgb(var(--holo) / 0);
+        }
     }
 
     /* the one orb: ambient in the gutter; glides to center + expands in voice mode */

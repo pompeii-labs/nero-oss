@@ -4,8 +4,8 @@
 	"version": "2.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev",
-		"build": "vite build",
+		"dev": "bun scripts/setup-ort.mjs && vite dev",
+		"build": "bun scripts/setup-ort.mjs && vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"test": "vitest run",
@@ -43,6 +43,7 @@
 		"@pompeii-labs/audio": "^0.2.2",
 		"buffer": "^6.0.3",
 		"marked": "^17.0.1",
+		"onnxruntime-web": "^1.27.0",
 		"three": "^0.183.0"
 	}
 }
