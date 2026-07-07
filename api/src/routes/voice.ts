@@ -1,15 +1,12 @@
 import { Hono } from 'hono';
 import type { UpgradeWebSocket } from 'hono/ws';
 import { DeepgramFluxSTT } from '@pompeii-labs/audio/voice';
-import { loadConfig } from '@nero/shared/config';
 import { runVoiceTurn } from '../services/voice/turn';
 import { StreamingTTS, type VoiceTTS } from '../services/voice/tts';
 import { HumeStreamingTTS } from '../services/voice/hume';
 import { KokoroStreamingTTS } from '../services/voice/kokoro';
 import { Panel } from '../models/panel';
 import { formatInteraction } from '../services/panels/interaction';
-
-let nextPeer = 1;
 
 const TTS_VOICE = process.env.NERO_TTS_VOICE || 'iP95p4xoKVk53GoZ742B'; // ElevenLabs "chris"
 const TTS_MODEL = process.env.NERO_TTS_MODEL || 'eleven_flash_v2_5'; // low-latency
@@ -46,24 +43,13 @@ function makeTTS(onPcm: (pcm: Buffer, contextId: string) => void): VoiceTTS {
     });
 }
 
-/** Frame 48 kHz linear16 PCM as a Tts binary packet for the media sidecar. */
-function frameTts(peer: number, seq: number, pcm: Buffer): Buffer {
-    const header = Buffer.alloc(12);
-    header.writeUInt32LE(peer, 0);
-    header.writeUInt8(1, 4); // dir = Tts
-    header.writeUInt8(0, 5); // reserved
-    header.writeUInt16LE(48, 6); // rate kHz
-    header.writeUInt32LE(seq, 8);
-    return Buffer.concat([header, pcm]);
-}
-
 /**
- * The browser's voice session. Four legs:
- *   browser <-WS-> here:    SDP signaling + transcripts/turn-state down.
- *   here <-WS-> sidecar:    SDP up, mic PCM down, TTS PCM up.
- *   here <-WS-> Deepgram:   mic PCM up, transcripts + turn detection down.
- *   here -> ElevenLabs:     response text up, TTS PCM down (-> sidecar -> browser).
- * On a finished turn the harness runs (same mind/history as chat) and speaks back.
+ * The browser's voice session, all over one WebSocket (no WebRTC, no media sidecar):
+ *   browser mic (48kHz s16 PCM, binary up) -> Deepgram Flux -> turn -> harness -> TTS
+ *   TTS PCM (48kHz s16, binary down) -> browser Web Audio playout.
+ * Half-duplex: while Nero speaks we don't transcribe (his voice would echo in). The
+ * browser plays the PCM through a Web Audio ring buffer, which is smooth (vs a WebRTC
+ * jitter buffer underrunning on bursty TTS).
  */
 export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
     const app = new Hono();
@@ -71,31 +57,22 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
     app.get(
         '/v1/voice',
         upgradeWebSocket(() => {
-            const peer = nextPeer++;
-            let sidecar: WebSocket | null = null;
-            let pendingOffer: string | null = null;
             let flux: DeepgramFluxSTT | null = null;
             let tts: VoiceTTS | null = null;
 
             let turnActive = false;
             let turnAbort: AbortController | null = null;
             let currentReqId = '';
-            let ttsSeq = 0;
             // latency marks for the current turn
             let tEot = 0;
             let tSetupDone = 0;
             let tFirstText = 0;
             let tFirstAudio = 0;
-            // Estimated wall-clock when the buffered TTS finishes playing out. Nero
-            // keeps speaking well after generation ends (the sidecar plays the
-            // backlog at realtime), so this, not turnActive, is what makes a turn
-            // interruptible during speech.
+            // Estimated wall-clock when the buffered TTS finishes playing out. Half-duplex
+            // gates the mic through this window so Nero doesn't hear himself.
             let speakingUntil = 0;
             let ttsSamples = 0;
             let listenTimer: ReturnType<typeof setTimeout> | null = null;
-
-            const sendOpen = (sdp: string) =>
-                sidecar?.send(JSON.stringify({ t: 'peer_open', peer, sdp_offer: sdp }));
 
             const isBusy = () => turnActive || Date.now() < speakingUntil;
 
@@ -112,7 +89,6 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                 tSetupDone = 0;
                 tFirstText = 0;
                 tFirstAudio = 0;
-                ttsSeq = 0;
                 ttsSamples = 0;
                 speakingUntil = 0;
                 if (listenTimer) clearTimeout(listenTimer);
@@ -164,16 +140,10 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                         eagerEotThreshold: 0.4,
                     });
                     flux.onSpeechDetected = () => {
-                        // Mere sound onset (incl. Nero's own voice echoing into the
-                        // mic) does NOT barge - only actual transcribed words do.
                         if (!isBusy())
                             ws.send(JSON.stringify({ type: 'turn', state: 'listening' }));
                     };
                     flux.onEagerEndOfTurn = (text: string) => {
-                        // Show the live partial. Barge-in is off for now: half-duplex
-                        // gates the mic while Nero speaks, so the only phase a barge
-                        // could fire is mid-think/mid-tool, where stray noise would
-                        // wrongly cancel him. Full turn-taking until we have real AEC.
                         ws.send(JSON.stringify({ type: 'transcript', text, final: false }));
                     };
                     flux.onOutput = ({ text }: { text: string }) => {
@@ -182,9 +152,7 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                     };
 
                     tts = makeTTS((pcm, contextId) => {
-                        // Route by context: drop audio from a cancelled (barged) turn.
                         if (contextId !== currentReqId || turnAbort?.signal.aborted) return;
-                        if (!sidecar || sidecar.readyState !== WebSocket.OPEN) return;
                         if (!tFirstAudio) {
                             tFirstAudio = Date.now();
                             ws.send(JSON.stringify({ type: 'turn', state: 'speaking' }));
@@ -195,13 +163,12 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                                 `[voice] EOT→audio ${tFirstAudio - tEot}ms = setup ${setup} + llm ${llm} + tts ${ttsMs}`,
                             );
                         }
-                        sidecar.send(frameTts(peer, ttsSeq++, pcm));
+                        // Stream the raw 48kHz s16 PCM straight to the browser (binary).
+                        ws.send(new Uint8Array(pcm));
 
-                        // Extend the speaking window by this chunk's real duration so
-                        // the turn stays interruptible until playback actually ends.
                         ttsSamples += pcm.length / 2; // 48 kHz mono linear16
                         const playMs = (ttsSamples / 48_000) * 1000;
-                        speakingUntil = tFirstAudio + playMs + 400; // pad for jitter buffer
+                        speakingUntil = tFirstAudio + playMs + 400; // pad for the playout buffer
                         if (listenTimer) clearTimeout(listenTimer);
                         listenTimer = setTimeout(
                             () => ws.send(JSON.stringify({ type: 'turn', state: 'listening' })),
@@ -209,60 +176,28 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                         );
                     });
 
-                    sidecar = new WebSocket(loadConfig().voice.mediaBridgeUrl);
-                    sidecar.binaryType = 'arraybuffer';
-                    sidecar.onopen = () => {
-                        if (pendingOffer) {
-                            sendOpen(pendingOffer);
-                            pendingOffer = null;
-                        }
-                    };
-                    sidecar.onmessage = (ev) => {
-                        // Binary = mic PCM (12-byte AudioHeader + 48 kHz linear16) -> Flux.
-                        // Half-duplex: while Nero is speaking (through speakingUntil's
-                        // jitter pad), DON'T transcribe the mic, or his own voice
-                        // echoes back in and interrupts him. Re-opens the instant he
-                        // stops. (Trades barge-during-speech for not self-hearing.)
-                        if (typeof ev.data !== 'string' && Date.now() < speakingUntil) return;
-                        if (typeof ev.data !== 'string') {
-                            const buf = Buffer.from(ev.data as ArrayBuffer);
-                            if (buf.length > 12) flux?.input(buf.subarray(12));
-                            return;
-                        }
-                        try {
-                            const msg = JSON.parse(ev.data);
-                            if (msg.t === 'peer_answer') {
-                                ws.send(JSON.stringify({ type: 'answer', sdp: msg.sdp }));
-                            }
-                        } catch {
-                            /* ignore */
-                        }
-                    };
-                    sidecar.onerror = () =>
-                        ws.send(
-                            JSON.stringify({ type: 'error', message: 'media sidecar unavailable' }),
-                        );
+                    ws.send(JSON.stringify({ type: 'ready' }));
                 },
                 onMessage(evt, ws) {
+                    // Binary = mic PCM (48 kHz s16). Half-duplex: drop it while Nero speaks.
+                    if (typeof evt.data !== 'string') {
+                        if (Date.now() < speakingUntil) return;
+                        flux?.input(Buffer.from(evt.data as ArrayBuffer));
+                        return;
+                    }
                     let msg: {
                         type?: string;
-                        sdp?: string;
                         panelId?: string;
                         control?: string;
                         intent?: string;
                         value?: unknown;
                     };
                     try {
-                        msg = JSON.parse(String(evt.data));
+                        msg = JSON.parse(evt.data);
                     } catch {
                         return;
                     }
-                    if (msg.type === 'offer' && msg.sdp) {
-                        if (sidecar?.readyState === WebSocket.OPEN) sendOpen(msg.sdp);
-                        else pendingOffer = msg.sdp;
-                    } else if (msg.type === 'interact' && msg.panelId) {
-                        // A panel interaction while engaged: run it through the voice
-                        // turn so Nero SPEAKS the response (not just text it).
+                    if (msg.type === 'interact' && msg.panelId) {
                         const pid = msg.panelId;
                         const payload = {
                             control: msg.control,
@@ -271,11 +206,10 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                         };
                         void (async () => {
                             const panel = await Panel.get(pid);
-                            if (panel) {
+                            if (panel)
                                 void runTurn(formatInteraction(panel, payload), ws, {
                                     interaction: true,
                                 });
-                            }
                         })();
                     }
                 },
@@ -288,14 +222,6 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                     } catch {
                         /* ignore */
                     }
-                    if (sidecar) {
-                        try {
-                            sidecar.send(JSON.stringify({ t: 'peer_close', peer }));
-                        } catch {
-                            /* ignore */
-                        }
-                        sidecar.close();
-                    }
                 },
             };
         }),
@@ -304,7 +230,7 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
     return app;
 }
 
-/** Minimal shape of the Hono WS context we use. */
+/** Minimal shape of the Hono WS context we use (control JSON + binary TTS PCM). */
 interface WSLike {
-    send(data: string): void;
+    send(data: string | ArrayBuffer | ArrayBufferView): void;
 }

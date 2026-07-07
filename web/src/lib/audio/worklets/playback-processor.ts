@@ -22,6 +22,10 @@ class PlaybackProcessor extends AudioWorkletProcessor {
     private bufferLength = 128;
     private currentBuffer: Float32Array = new Float32Array(this.bufferLength);
     private writeOffset = 0;
+    // On drain, output silence for this many render quanta (~200ms @48k, 128/quantum)
+    // before stopping, so a brief gap between TTS chunks doesn't cut playout short.
+    private graceLeft = 0;
+    private readonly grace = 75;
 
     constructor() {
         super();
@@ -67,6 +71,7 @@ class PlaybackProcessor extends AudioWorkletProcessor {
 
         if (this.outputBuffers.length) {
             this.hasStarted = true;
+            this.graceLeft = this.grace; // refill the cushion whenever we have audio
             const buffer = this.outputBuffers.shift()!;
             for (let i = 0; i < output.length; i++) {
                 output[i] = buffer[i] || 0;
@@ -75,6 +80,13 @@ class PlaybackProcessor extends AudioWorkletProcessor {
         }
 
         if (this.hasStarted) {
+            // Drained: coast on silence through the grace window; if more audio arrives
+            // it resumes seamlessly. Only stop once the gap outlasts the cushion.
+            if (this.graceLeft > 0) {
+                this.graceLeft--;
+                for (let i = 0; i < output.length; i++) output[i] = 0;
+                return true;
+            }
             this.port.postMessage({ event: 'stop' });
             return false;
         }

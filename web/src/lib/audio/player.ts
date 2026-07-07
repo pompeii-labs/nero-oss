@@ -1,156 +1,82 @@
-import playbackProcessorUrl from './worklets/playback-processor.ts?worker&url';
-
+/**
+ * Streaming PCM playout via scheduled AudioBufferSourceNodes, the classic smooth
+ * approach. Each 48kHz s16 chunk becomes an AudioBuffer scheduled back-to-back on the
+ * AudioContext clock, so playback is sample-accurate and jitter-tolerant, and Web Audio
+ * resamples cleanly if the context isn't 48kHz (iOS Safari often forces 44.1kHz). No
+ * AudioWorklet, so no heavy work on the audio thread (that was the stutter).
+ */
 export class AudioPlayer {
-    private audioContext: AudioContext | null = null;
-    private workletNode: AudioWorkletNode | null = null;
-    private scriptNode: ScriptProcessorNode | null = null;
-    private useWorklet = true;
-    private isPlaying = false;
-    private onStop: (() => void) | null = null;
+    private ctx: AudioContext | null = null;
+    private nextTime = 0;
+    private readonly lead = 0.2; // seconds of scheduling cushion to absorb WS jitter
+    private sources = new Set<AudioBufferSourceNode>();
 
-    private scriptBuffers: Float32Array[] = [];
-    private scriptHasStarted = false;
-
-    async connect(onStop?: () => void): Promise<void> {
-        this.onStop = onStop || null;
-        this.audioContext = new AudioContext({ sampleRate: 48000 });
-
-        if (this.audioContext.state === 'suspended') {
-            this.audioContext.resume().catch(() => {});
-        }
-
-        try {
-            await this.audioContext.audioWorklet.addModule(playbackProcessorUrl);
-            this.useWorklet = true;
-        } catch {
-            this.useWorklet = false;
-        }
+    async connect(): Promise<void> {
+        this.ctx = new AudioContext({ sampleRate: 48000 });
+        if (this.ctx.state === 'suspended') await this.ctx.resume().catch(() => {});
+        this.nextTime = 0;
     }
 
     async tryResume(): Promise<boolean> {
-        if (!this.audioContext) return false;
-        if ((this.audioContext.state as string) === 'running') return true;
+        if (!this.ctx) return false;
+        if ((this.ctx.state as string) === 'running') return true;
         try {
-            await this.audioContext.resume();
-            return (this.audioContext.state as string) === 'running';
+            await this.ctx.resume();
         } catch {
-            return false;
+            /* ignore */
         }
+        return (this.ctx.state as string) === 'running';
     }
 
     get suspended(): boolean {
-        return this.audioContext?.state === 'suspended';
+        return this.ctx?.state === 'suspended';
     }
 
-    play(int16Array: Int16Array): void {
-        if (!this.audioContext) return;
-
-        if (this.useWorklet) {
-            this.playWorklet(int16Array);
-        } else {
-            this.playScript(int16Array);
-        }
+    /** Schedule a 48kHz s16 mono chunk to play right after the previously queued audio. */
+    play(int16: Int16Array): void {
+        const ctx = this.ctx;
+        if (!ctx || !int16.length) return;
+        const f = new Float32Array(int16.length);
+        for (let i = 0; i < int16.length; i++) f[i] = int16[i] / 32768;
+        // Buffer at the source rate (48k); Web Audio resamples to the context rate.
+        const buf = ctx.createBuffer(1, f.length, 48000);
+        buf.getChannelData(0).set(f);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        const now = ctx.currentTime;
+        // Back-to-back; if we've fallen behind (a real gap), resume with a fresh lead.
+        if (this.nextTime < now + 0.02) this.nextTime = now + this.lead;
+        src.start(this.nextTime);
+        this.nextTime += buf.duration;
+        this.sources.add(src);
+        src.onended = () => this.sources.delete(src);
     }
 
-    private playWorklet(int16Array: Int16Array): void {
-        if (!this.audioContext) return;
-
-        if (!this.workletNode) {
-            this.workletNode = new AudioWorkletNode(this.audioContext, 'playback-processor');
-            this.workletNode.connect(this.audioContext.destination);
-            this.workletNode.port.onmessage = (e) => {
-                if (e.data.event === 'stop') {
-                    this.isPlaying = false;
-                    this.workletNode?.disconnect();
-                    this.workletNode = null;
-                    this.onStop?.();
-                }
-            };
-        }
-
-        this.isPlaying = true;
-        this.workletNode.port.postMessage({ event: 'write', buffer: int16Array });
-    }
-
-    private playScript(int16Array: Int16Array): void {
-        if (!this.audioContext) return;
-
-        const float32 = new Float32Array(int16Array.length);
-        for (let i = 0; i < int16Array.length; i++) {
-            float32[i] = int16Array[i] / 0x8000;
-        }
-
-        const bufferLength = 128;
-        for (let offset = 0; offset < float32.length; offset += bufferLength) {
-            const chunk = new Float32Array(bufferLength);
-            const end = Math.min(offset + bufferLength, float32.length);
-            for (let i = 0; i < end - offset; i++) {
-                chunk[i] = float32[offset + i];
-            }
-            this.scriptBuffers.push(chunk);
-        }
-
-        if (!this.scriptNode) {
-            this.scriptNode = this.audioContext.createScriptProcessor(128, 0, 1);
-            this.scriptNode.connect(this.audioContext.destination);
-
-            this.scriptNode.onaudioprocess = (event) => {
-                const output = event.outputBuffer.getChannelData(0);
-
-                if (this.scriptBuffers.length) {
-                    this.scriptHasStarted = true;
-                    const buffer = this.scriptBuffers.shift()!;
-                    for (let i = 0; i < output.length; i++) {
-                        output[i] = buffer[i] || 0;
-                    }
-                    return;
-                }
-
-                for (let i = 0; i < output.length; i++) output[i] = 0;
-
-                if (this.scriptHasStarted) {
-                    this.scriptHasStarted = false;
-                    this.isPlaying = false;
-                    this.scriptNode?.disconnect();
-                    this.scriptNode = null;
-                    this.onStop?.();
-                }
-            };
-        }
-
-        this.isPlaying = true;
-    }
-
+    /** Barge-in: stop everything queued and reset the clock. */
     clear(): void {
-        if (this.useWorklet) {
-            this.workletNode?.port.postMessage({ event: 'clear' });
-        } else {
-            this.scriptBuffers = [];
+        for (const s of this.sources) {
+            try {
+                s.stop();
+            } catch {
+                /* already ended */
+            }
         }
+        this.sources.clear();
+        if (this.ctx) this.nextTime = this.ctx.currentTime;
     }
 
     stop(): void {
-        if (this.useWorklet) {
-            this.workletNode?.port.postMessage({ event: 'stop' });
-        } else {
-            this.scriptBuffers = [];
-            this.scriptHasStarted = false;
-            this.isPlaying = false;
-            this.scriptNode?.disconnect();
-            this.scriptNode = null;
-            this.onStop?.();
-        }
+        this.clear();
     }
 
     disconnect(): void {
-        this.stop();
-        this.audioContext?.close();
-        this.audioContext = null;
-        this.workletNode = null;
-        this.scriptNode = null;
+        this.clear();
+        void this.ctx?.close();
+        this.ctx = null;
     }
 
     get playing(): boolean {
-        return this.isPlaying;
+        return !!this.ctx && this.ctx.currentTime < this.nextTime;
     }
 }

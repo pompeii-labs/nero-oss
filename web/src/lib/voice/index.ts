@@ -1,4 +1,5 @@
 import { getServerUrl } from '$lib/actions/helpers';
+import { AudioRecorder, AudioPlayer } from '$lib/audio';
 
 export type VoiceState = 'idle' | 'connecting' | 'connected' | 'error';
 
@@ -35,79 +36,77 @@ export interface VoiceSession {
     }): void;
 }
 
+const MIC_CHUNK = 960; // 20 ms of 48 kHz mono, batched before sending
+
 /**
- * Open a voice session: capture the mic (with echo cancellation), offer over
- * WebRTC to the Rust media sidecar via the `/v1/voice` relay, and play whatever
- * comes back through an <audio> sink so the browser's AEC can observe it. M1 is
- * a loopback, you hear yourself, clean.
+ * Open a voice session over ONE WebSocket (no WebRTC): capture the mic and stream
+ * 48kHz s16 PCM up (binary), receive Nero's TTS PCM down (binary) and play it through
+ * a Web Audio ring buffer, which stays smooth on bursty TTS (a WebRTC jitter buffer
+ * underran and glitched). Half-duplex: we stop sending the mic while Nero speaks.
  */
 export async function startVoice(events: VoiceEvents): Promise<VoiceSession> {
     const { onState, onTranscript, onTurn, onActivity } = events;
     onState('connecting');
 
-    // Mic access requires a secure context (HTTPS or localhost). Over plain-HTTP
-    // (a LAN IP on a phone) navigator.mediaDevices is undefined; fail with a clear
-    // message instead of a cryptic getUserMedia throw.
+    // Mic + audio playout need a secure context (HTTPS or localhost). Over plain-HTTP
+    // (a LAN IP on a phone) navigator.mediaDevices is undefined.
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
         onState('error');
         throw new Error('voice-insecure-context');
     }
 
-    const pc = new RTCPeerConnection();
+    const player = new AudioPlayer();
+    await player.connect();
+    const recorder = new AudioRecorder();
 
-    // Inbound audio MUST play through a real media sink for AEC to cancel it.
-    const audio = document.createElement('audio');
-    audio.autoplay = true;
-    audio.style.display = 'none';
-    document.body.appendChild(audio);
-    pc.ontrack = (e) => {
-        audio.srcObject = e.streams[0] ?? new MediaStream([e.track]);
-    };
-
-    pc.oniceconnectionstatechange = () => {
-        const st = pc.iceConnectionState;
-        console.log('[voice] ice', st);
-        if (st === 'connected' || st === 'completed') onState('connected');
-        else if (st === 'failed' || st === 'disconnected' || st === 'closed') onState('error');
-    };
-
-    const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
-    for (const track of stream.getAudioTracks()) pc.addTrack(track, stream);
+    let speaking = false; // Nero is speaking -> hold the mic (half-duplex)
+    let micBuf: number[] = [];
 
     const wsUrl = getServerUrl('/v1/voice').replace(/^http/, 'ws');
     const ws = new WebSocket(wsUrl);
+    ws.binaryType = 'arraybuffer';
 
-    ws.onmessage = async (ev) => {
+    ws.onmessage = (ev) => {
+        if (typeof ev.data !== 'string') {
+            player.play(new Int16Array(ev.data as ArrayBuffer));
+            return;
+        }
         try {
-            const msg = JSON.parse(String(ev.data));
-            if (msg.type === 'answer') {
-                await pc.setRemoteDescription({ type: 'answer', sdp: msg.sdp });
-                console.log('[voice] remote description set');
+            const msg = JSON.parse(ev.data);
+            if (msg.type === 'ready') {
+                onState('connected');
             } else if (msg.type === 'transcript') {
-                console.log('[voice] transcript', msg.final ? '(final)' : '(eager)', msg.text);
                 onTranscript?.(msg.text, msg.final);
             } else if (msg.type === 'turn') {
+                speaking = msg.state === 'speaking';
                 onTurn?.(msg.state);
             } else if (msg.type === 'activity') {
                 onActivity?.(msg.activity);
             } else if (msg.type === 'error') {
                 onState('error');
             }
-        } catch (e) {
-            console.error('[voice] answer apply failed', e);
+        } catch {
+            /* ignore */
         }
     };
+    ws.onerror = () => onState('error');
 
     ws.onopen = async () => {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        await iceGatheringComplete(pc); // non-trickle: ship the full SDP
-        ws.send(JSON.stringify({ type: 'offer', sdp: pc.localDescription?.sdp }));
-        console.log('[voice] offer sent');
+        try {
+            await recorder.start((data) => {
+                if (speaking || ws.readyState !== WebSocket.OPEN) return;
+                for (let i = 0; i < data.length; i++) {
+                    const s = data[i] > 1 ? 1 : data[i] < -1 ? -1 : data[i];
+                    micBuf.push(s * 32767);
+                }
+                while (micBuf.length >= MIC_CHUNK) {
+                    ws.send(Int16Array.from(micBuf.splice(0, MIC_CHUNK)).buffer);
+                }
+            });
+        } catch {
+            onState('error');
+        }
     };
-    ws.onerror = () => onState('error');
 
     function stop() {
         try {
@@ -115,9 +114,9 @@ export async function startVoice(events: VoiceEvents): Promise<VoiceSession> {
         } catch {
             /* ignore */
         }
-        for (const track of stream.getTracks()) track.stop();
-        pc.close();
-        audio.remove();
+        recorder.stop();
+        player.disconnect();
+        micBuf = [];
         onState('idle');
     }
 
@@ -132,19 +131,4 @@ export async function startVoice(events: VoiceEvents): Promise<VoiceSession> {
     }
 
     return { stop, interact };
-}
-
-/** Resolve once ICE gathering finishes (or after a short safety timeout). */
-function iceGatheringComplete(pc: RTCPeerConnection): Promise<void> {
-    if (pc.iceGatheringState === 'complete') return Promise.resolve();
-    return new Promise((resolve) => {
-        const done = () => {
-            if (pc.iceGatheringState === 'complete') {
-                pc.removeEventListener('icegatheringstatechange', done);
-                resolve();
-            }
-        };
-        pc.addEventListener('icegatheringstatechange', done);
-        setTimeout(resolve, 2000);
-    });
 }
