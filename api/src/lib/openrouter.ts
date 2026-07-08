@@ -14,7 +14,9 @@ export function openrouter(): OpenAI {
         apiKey: cfg.llm.apiKey || 'local',
         timeout: 120_000,
         maxRetries: 2,
-        defaultHeaders: { 'X-Title': 'Nero' },
+        defaultHeaders: cfg.llm.baseUrl.includes('openrouter.ai')
+            ? { 'X-Title': 'Nero', 'HTTP-Referer': 'https://nero.pompeiilabs.com' }
+            : {},
     });
     return client;
 }
