@@ -578,15 +578,36 @@
     let liveTranscript = $state('');
     let voicePhase = $state<TurnPhase | null>(null);
     let voiceActivities = $state<VoiceActivity[]>([]);
+
+    // After a minute of no one speaking (and no wakeword), the call goes quiet; say the
+    // wakeword to re-engage. Reset on any speech in either direction.
+    const VOICE_IDLE_MS = 60_000;
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    function bumpVoiceIdle() {
+        if (idleTimer) clearTimeout(idleTimer);
+        if (!engaged) return;
+        idleTimer = setTimeout(() => {
+            if (engaged) {
+                engaged = false;
+                chime([880, 660]);
+            }
+        }, VOICE_IDLE_MS);
+    }
+
     $effect(() => {
         if (engaged && !voiceSession) {
+            bumpVoiceIdle();
             startVoice({
                 onState: (s) => (voiceState = s),
-                onTranscript: (text) => (liveTranscript = text),
+                onTranscript: (text) => {
+                    liveTranscript = text;
+                    bumpVoiceIdle();
+                },
                 onTurn: (phase) => {
                     voicePhase = phase;
                     // A fresh user turn clears the prior turn's tool trail.
                     if (phase === 'listening' || phase === 'thinking') voiceActivities = [];
+                    bumpVoiceIdle();
                 },
                 onActivity: (a) => {
                     const i = voiceActivities.findIndex((x) => x.id === a.id);
@@ -597,6 +618,7 @@
                 .then((s) => (voiceSession = s))
                 .catch(() => (voiceState = 'error'));
         } else if (!engaged && voiceSession) {
+            if (idleTimer) clearTimeout(idleTimer);
             voiceSession.stop();
             voiceSession = null;
             voiceState = 'idle';
@@ -620,12 +642,12 @@
         else if (!shouldListen && wakeword) disarmWakeword();
     });
 
-    // A soft ascending two-note chime so you know Nero heard the wakeword.
-    function wakeChime() {
+    // Ascending [660,880] on wake, descending [880,660] on idle-exit.
+    function chime(freqs: number[]) {
         try {
             const ctx = new AudioContext();
             const now = ctx.currentTime;
-            for (const [i, freq] of [660, 880].entries()) {
+            for (const [i, freq] of freqs.entries()) {
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
                 osc.type = 'sine';
@@ -650,10 +672,11 @@
         const w = new WakewordListener({
             threshold: 0.5,
             onDetect: () => {
-                wakeChime();
+                chime([660, 880]);
                 if (!neroIsHere) void bringNeroHere();
                 presenceMode = true;
                 engaged = true;
+                bumpVoiceIdle();
             },
         });
         try {
@@ -664,6 +687,7 @@
         } catch (e) {
             wakeword = null;
             wakewordStatus = (e as Error).message.includes('insecure') ? 'insecure' : 'error';
+            console.error('[wakeword] arm failed', e);
         }
     }
 

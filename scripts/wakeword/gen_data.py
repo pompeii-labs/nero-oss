@@ -27,6 +27,16 @@ VERY_HARD = [
     "hey new row", "hey miro", "hey nero's", "hey narrow oh", "hey neo oh",
 ]
 
+# Standalone words that share nero's vowels/consonants but are NOT the wakeword (no
+# "hey nero"). These stop the model firing on the "-ero/-eer/-ear" sound alone.
+CONFUSABLES = [
+    "hero", "spear", "zero", "nero", "near", "hear", "here", "ear", "deer", "dear",
+    "career", "sincere", "narrow", "arrow", "borrow", "sorrow", "neo", "nemo", "neon",
+    "gyro", "mirror", "error", "terror", "spero", "nearo", "we're here", "nero's",
+    "the hero saved the day", "throw the spear", "zero to sixty", "come over here",
+    "he's my hero", "a broken mirror", "we're almost there",
+]
+
 # Other phonetically-close phrases to reject.
 HARD_NEGATIVES = [
     "hey neo", "hey nemo", "hey narrow", "hey hero", "hey nero's",
@@ -111,6 +121,12 @@ def main():
         # The near-homophones, heavily (every voice x 3 rates) so the fine boundary is learned.
         for text in VERY_HARD:
             for r in (150, 180, 210):
+                slug = "".join(c for c in text if c.isalnum())[:16]
+                if synth(text, v, r, os.path.join(NEG, f"hard_{v}_{slug}_{r}.wav")):
+                    nneg += 1
+        # Standalone confusables (hero/spear/zero/...) so the vowel sound alone won't fire.
+        for text in CONFUSABLES:
+            for r in (150, 190):
                 slug = "".join(c for c in text if c.isalnum())[:16]
                 if synth(text, v, r, os.path.join(NEG, f"hard_{v}_{slug}_{r}.wav")):
                     nneg += 1

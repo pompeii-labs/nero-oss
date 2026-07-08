@@ -35,7 +35,7 @@ export class WakewordListener {
         this.stream = await navigator.mediaDevices.getUserMedia({
             audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
         });
-        this.ctx = new AudioContext({ sampleRate: 16000 });
+        this.ctx = new AudioContext();
         this.source = this.ctx.createMediaStreamSource(this.stream);
         await this.ctx.audioWorklet.addModule(captureUrl);
         this.node = new AudioWorkletNode(this.ctx, 'wakeword-capture');
