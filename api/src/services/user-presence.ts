@@ -15,8 +15,9 @@ export async function userHeartbeat(): Promise<void> {
 
 export async function isUserPresent(): Promise<boolean> {
     try {
-        const res = unwrap(await getLux().exec(`EXISTS ${KEY}`));
-        return res === 1 || res === '1' || res === true;
+        // exec wraps the RESP reply as { result: <value> }; EXISTS -> 1 or 0.
+        const res = unwrap(await getLux().exec(`EXISTS ${KEY}`)) as { result?: unknown } | null;
+        return Number(res?.result) === 1;
     } catch {
         return false;
     }
