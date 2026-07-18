@@ -40,6 +40,15 @@ final class NeroStore: ObservableObject {
 
     /// The in-flight assistant bubble: the active dispatch, unless a persisted
     /// assistant message for it already landed (then the message takes over).
+    /// A project that's in-flight — surfaced via the top-bar indicator + sheet.
+    /// Excludes awaiting_approval (that docks as an approval card) and dismissed ones.
+    var activeProject: Project? {
+        projects.first { ["planning", "running", "paused"].contains($0.status ?? "") && $0.dismissed != true }
+    }
+    func projectTasks(for project: Project) -> [ProjectTask] {
+        tasks.filter { $0.project_id == project.id }
+    }
+
     var liveDispatch: DispatchState? {
         guard let d = dispatch else { return nil }
         // While the turn is in-flight, always surface it (status + tool cards).

@@ -6,6 +6,7 @@ struct ChatScreen: View {
     @Environment(\.theme) private var theme
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var store: NeroStore
+    var onOpenProject: () -> Void = {}
     @State private var draft = ""
     @State private var cmdResult: String?
     @FocusState private var focused: Bool
@@ -37,6 +38,9 @@ struct ChatScreen: View {
             GlassIconButton(system: "chevron.left", size: 38, iconSize: 15) { dismiss() }
             Text("NERO").font(Typeface.display(19)).tracking(2).foregroundStyle(theme.text)
             Spacer()
+            if let p = store.activeProject {
+                ProjectIndicator(project: p, onTap: onOpenProject)
+            }
             statusDot
         }
         .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 8)

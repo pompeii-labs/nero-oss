@@ -1,4 +1,5 @@
 import SwiftUI
+import MarkdownUI
 
 // MARK: - Shared bits
 
@@ -500,5 +501,205 @@ struct MergeApprovalCard: View {
 
     private func merge(_ action: String) {
         Task { await store.client.projectAction(project.id, "merge-approve", body: ["action": action]) }
+    }
+}
+
+// MARK: - ProjectSheet
+
+/// The full project panel (mirrors the web ProjectPanel), presented as a dismissable
+/// sheet: header + status, spend/progress meter, the complete task list with live
+/// lines + cost, notes, the deliverable when done, and lifecycle actions.
+struct ProjectSheet: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.dismiss) private var dismiss
+    let project: Project
+    let tasks: [ProjectTask]
+    let store: NeroStore
+
+    private var ordered: [ProjectTask] { tasks.sorted { ($0.idx ?? 0) < ($1.idx ?? 0) } }
+    private var spent: Double { project.spent_usd ?? 0 }
+    private var budget: Double { project.budget_usd ?? 0 }
+    private var pct: Double { budget > 0 ? min(1, spent / budget) : 0 }
+    private var doneCount: Int { ordered.filter { $0.status == "done" }.count }
+    private var near: Bool { pct >= 0.8 }
+    private var status: String { project.status ?? "" }
+    private var deliverableText: String? {
+        let t = (project.result ?? project.summary)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (t?.isEmpty == false) ? t : nil
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    meter
+                    if let g = project.goal, !g.isEmpty {
+                        Text(g).font(Typeface.ui(13)).foregroundStyle(theme.textDim)
+                    }
+                    tasksSection
+                    if status == "paused" {
+                        note("Paused at the budget. Resume to keep going.", color: Color(hex: 0xe7b34a))
+                    }
+                    if status == "error", let e = project.error, !e.isEmpty {
+                        note(e, color: Color(hex: 0xe7674a))
+                    }
+                    if status == "done", let d = deliverableText { deliverable(d) }
+                }
+                .padding(18)
+            }
+            actions.padding(.horizontal, 16).padding(.vertical, 14)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(theme.void_.ignoresSafeArea())
+        .presentationDetents([.medium, .large])
+        .presentationBackground(theme.void_)
+        .presentationDragIndicator(.visible)
+    }
+
+    private var header: some View {
+        HStack(spacing: 11) {
+            Circle()
+                .fill(status == "running" ? theme.holo() : theme.holo(0.5))
+                .frame(width: 8, height: 8)
+                .shadow(color: status == "running" ? theme.holo(0.85) : .clear, radius: 4)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(project.title ?? "Project").font(Typeface.display(19)).foregroundStyle(theme.text).lineLimit(1)
+                Text(status.uppercased()).font(Typeface.mono(9)).tracking(1.2).foregroundStyle(statusColor)
+            }
+            Spacer()
+            IconButton(system: "xmark", size: 34, iconSize: 13, radius: 8) { dismiss() }
+        }
+        .padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 10)
+        .overlay(alignment: .bottom) { Rectangle().fill(theme.holo(0.08)).frame(height: 1) }
+    }
+
+    private var statusColor: Color {
+        switch status {
+        case "running": return theme.holoSoft
+        case "paused": return Color(hex: 0xe7b34a)
+        case "error", "cancelled": return Color(hex: 0xe7674a)
+        case "done": return Color(hex: 0x4ae08a)
+        default: return theme.textDim
+        }
+    }
+
+    private var meter: some View {
+        HStack(spacing: 10) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(theme.holo(0.12))
+                    Capsule().fill(near ? Color(hex: 0xe7b34a) : theme.holo())
+                        .frame(width: max(2, geo.size.width * pct))
+                }
+            }
+            .frame(height: 5)
+            Text("$\(String(format: "%.3f", spent))" + (budget > 0 ? " / $\(String(format: "%.2f", budget))" : ""))
+                .font(Typeface.mono(11)).foregroundStyle(theme.textDim)
+            Text("\(doneCount)/\(ordered.count)").font(Typeface.mono(11)).foregroundStyle(theme.textFaint)
+        }
+    }
+
+    private var tasksSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(ordered) { t in
+                taskRow(t)
+                if t.id != ordered.last?.id {
+                    Rectangle().fill(theme.holo(0.06)).frame(height: 1).padding(.leading, 26)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glass(radius: 13, strokeAlpha: 0.14)
+    }
+
+    private func taskRow(_ t: ProjectTask) -> some View {
+        HStack(alignment: .top, spacing: 11) {
+            taskDot(t.status).padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(t.title ?? "…").font(Typeface.ui(13.5)).foregroundStyle(taskColor(t.status))
+                    .fixedSize(horizontal: false, vertical: true)
+                if let live = liveLine(t) {
+                    Text(live).font(Typeface.mono(10)).foregroundStyle(theme.textFaint).lineLimit(2)
+                }
+            }
+            Spacer(minLength: 4)
+            if let c = t.cost_usd, c > 0 {
+                Text(String(format: "$%.3f", c)).font(Typeface.mono(10)).foregroundStyle(theme.textFaint)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private func taskDot(_ s: String?) -> some View {
+        switch s {
+        case "done":
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 14)).foregroundStyle(Color(hex: 0x4ae08a))
+        case "running":
+            Circle().fill(theme.holoSoft).frame(width: 9, height: 9).shadow(color: theme.holo(0.8), radius: 4)
+                .frame(width: 15, height: 15)
+        case "failed", "cancelled":
+            Image(systemName: "xmark.circle.fill").font(.system(size: 14)).foregroundStyle(Color(hex: 0xe7674a))
+        case "skipped":
+            Image(systemName: "minus.circle").font(.system(size: 14)).foregroundStyle(theme.textFaint)
+        default:
+            Circle().strokeBorder(theme.textFaint, lineWidth: 1.3).frame(width: 11, height: 11).frame(width: 15, height: 15)
+        }
+    }
+
+    private func taskColor(_ s: String?) -> Color {
+        switch s {
+        case "done": return theme.text.opacity(0.75)
+        case "running": return theme.text
+        case "failed", "cancelled": return Color(hex: 0xe7674a).opacity(0.9)
+        case "skipped": return theme.textFaint
+        default: return theme.textDim
+        }
+    }
+
+    private func liveLine(_ t: ProjectTask) -> String? {
+        guard t.status == "running",
+              let s = t.streaming_text?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty
+        else { return nil }
+        let last = s.split(separator: "\n").last.map(String.init) ?? s
+        return String(last.suffix(120))
+    }
+
+    private func note(_ text: String, color: Color) -> some View {
+        Text(text).font(Typeface.ui(12.5)).foregroundStyle(color)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(11)
+            .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func deliverable(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Kicker(text: "deliverable")
+            Markdown(text).markdownTheme(.nero(theme))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .glass(radius: 13, strokeAlpha: 0.16)
+    }
+
+    private var actions: some View {
+        HStack(spacing: 8) {
+            switch status {
+            case "running":
+                GhostCardButton(title: "Pause") { act("pause") }
+                GhostCardButton(title: "Stop", action: { act("cancel") }, danger: true)
+            case "paused":
+                PrimaryCardButton(title: "RESUME") { act("resume") }
+                GhostCardButton(title: "Stop", action: { act("cancel") }, danger: true)
+            default:
+                GhostCardButton(title: "Dismiss") { act("dismiss"); dismiss() }
+            }
+        }
+    }
+
+    private func act(_ action: String) {
+        Task { await store.client.projectAction(project.id, action) }
     }
 }

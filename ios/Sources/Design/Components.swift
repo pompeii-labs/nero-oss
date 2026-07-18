@@ -131,6 +131,29 @@ private struct RoutePickerRep: UIViewRepresentable {
     func updateUIView(_ v: AVRoutePickerView, context: Context) { v.tintColor = tint }
 }
 
+/// Top-bar chip shown while a project is in-flight; tap to open the project sheet.
+struct ProjectIndicator: View {
+    @Environment(\.theme) private var theme
+    let project: Project
+    let onTap: () -> Void
+    private var running: Bool { project.status == "running" || project.status == "planning" }
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 6) {
+                if running { PulseDot() } else {
+                    Circle().fill(theme.holo(0.6)).frame(width: 6, height: 6)
+                }
+                Text(project.title ?? "Project")
+                    .font(Typeface.mono(10)).tracking(0.4)
+                    .foregroundStyle(theme.holoSoft).lineLimit(1)
+            }
+            .padding(.horizontal, 11).padding(.vertical, 6)
+            .glassEffect(.regular.tint(theme.holo(0.12)).interactive(), in: .capsule)
+        }
+        .buttonStyle(PressableButtonStyle())
+    }
+}
+
 /// A softly blinking holo dot (live "thinking" indicator).
 struct PulseDot: View {
     @Environment(\.theme) private var theme

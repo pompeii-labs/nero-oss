@@ -9,6 +9,7 @@ struct FieldView: View {
     @StateObject private var voice: VoiceSession
     @State private var path = NavigationPath()
     @State private var showSettings = false
+    @State private var showProject = false
 
     enum Route: Hashable { case chat }
 
@@ -24,13 +25,14 @@ struct FieldView: View {
                 store: store,
                 voice: voice,
                 onType: { path.append(Route.chat) },
-                onSettings: { showSettings = true }
+                onSettings: { showSettings = true },
+                onOpenProject: { showProject = true }
             )
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .chat:
-                    ChatScreen(store: store)
+                    ChatScreen(store: store, onOpenProject: { showProject = true })
                         .environment(\.theme, theme)
                         .toolbar(.hidden, for: .navigationBar)
                 }
@@ -41,6 +43,12 @@ struct FieldView: View {
         .onDisappear { store.stop() }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store).environment(\.theme, theme)
+        }
+        .sheet(isPresented: $showProject) {
+            if let p = store.activeProject {
+                ProjectSheet(project: p, tasks: store.projectTasks(for: p), store: store)
+                    .environment(\.theme, theme)
+            }
         }
     }
 }
@@ -54,6 +62,7 @@ struct HomeScreen: View {
     @ObservedObject var voice: VoiceSession
     var onType: () -> Void
     var onSettings: () -> Void
+    var onOpenProject: () -> Void
 
     private var voiceOn: Bool { voice.phase != .idle }
 
@@ -110,9 +119,13 @@ struct HomeScreen: View {
                 }
             }
             Spacer()
+            if let p = store.activeProject {
+                ProjectIndicator(project: p, onTap: onOpenProject).padding(.trailing, 4)
+            }
             GlassIconButton(system: "gearshape", size: 40, iconSize: 16, action: onSettings)
         }
         .padding(.horizontal, 20).padding(.top, 6)
+        .animation(Motion.glide, value: store.activeProject?.id)
     }
 
     private func caption(view text: String) -> some View {
