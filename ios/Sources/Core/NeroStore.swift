@@ -12,6 +12,9 @@ final class NeroStore: ObservableObject {
     @Published private(set) var projects: [Project] = []
     @Published private(set) var tasks: [ProjectTask] = []
     @Published private(set) var panels: [Panel] = []
+    /// Tool activity captured per dispatch so it stays grouped with the finished
+    /// message in scrollback (the dispatch row loses them once the turn ends).
+    @Published private(set) var toolsByDispatch: [String: [Activity]] = [:]
 
     let client: NeroClient
     private let stream = RealtimeStream()
@@ -53,7 +56,9 @@ final class NeroStore: ObservableObject {
         switch ev {
         case .ready: break
         case .message(let m): upsertMessage(m)
-        case .dispatch(let d): dispatch = d
+        case .dispatch(let d):
+            dispatch = d
+            if let acts = d.activities, !acts.isEmpty { toolsByDispatch[d.id] = acts }
         case .question(let q): upsert(&questions, q)
         case .project(let p): upsert(&projects, p)
         case .task(let t): upsert(&tasks, t)

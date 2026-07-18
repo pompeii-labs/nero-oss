@@ -58,10 +58,19 @@ struct ChatScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     ForEach(bubbles) { m in
-                        MessageBubble(role: m.role ?? "assistant", text: m.content ?? "").id(m.id)
+                        VStack(alignment: .leading, spacing: 10) {
+                            if m.isAssistant, let acts = store.toolsByDispatch[m.dispatch_id ?? ""], !acts.isEmpty {
+                                ToolGroup(activities: acts)
+                            }
+                            MessageBubble(role: m.role ?? "assistant", text: m.content ?? "")
+                        }
+                        .id(m.id)
                     }
-                    if let t = store.liveDispatch?.streaming_text, !t.isEmpty {
-                        MessageBubble(role: "assistant", text: t)
+                    if let d = store.liveDispatch {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if let acts = d.activities, !acts.isEmpty { ToolGroup(activities: acts, live: true) }
+                            if let t = d.streaming_text, !t.isEmpty { MessageBubble(role: "assistant", text: t) }
+                        }
                     }
                     Color.clear.frame(height: 8).id("bottom")
                 }
@@ -140,20 +149,13 @@ struct ChatScreen: View {
     }
 
     @ViewBuilder private func liveStatus(_ d: DispatchState) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let acts = d.activities, !acts.isEmpty {
-                ToolGroup(activities: acts, live: true)
+        if (d.streaming_text ?? "").isEmpty {
+            HStack(spacing: 8) {
+                PulseDot()
+                Text(statusLabel(d.status)).font(Typeface.mono(12)).tracking(1).foregroundStyle(theme.textFaint)
             }
-            if (d.streaming_text ?? "").isEmpty {
-                HStack(spacing: 8) {
-                    PulseDot()
-                    Text(statusLabel(d.status)).font(Typeface.mono(12)).tracking(1).foregroundStyle(theme.textFaint)
-                }
-                .padding(.leading, 4)
-            }
+            .padding(.leading, 4).padding(.bottom, 2)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, 2)
     }
 
     private func statusLabel(_ s: String?) -> String {
