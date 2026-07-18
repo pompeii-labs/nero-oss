@@ -34,21 +34,19 @@ final class RealtimeStream {
                     onStatus(true)
                     backoff = 500_000_000
 
-                    var event = "message"
-                    var data = ""
-                    // Flush on a blank line (spec) OR on the next `event:` — Swift's
-                    // `bytes.lines` doesn't reliably yield the blank separator, so
-                    // relying on it alone drops every event.
-                    for try await line in bytes.lines {
-                        if line.isEmpty {
-                            if !data.isEmpty { Self.emit(event, data, onEvent); data = ""; event = "message" }
-                        } else if line.hasPrefix("event:") {
-                            if !data.isEmpty { Self.emit(event, data, onEvent); data = "" }
-                            event = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
-                        } else if line.hasPrefix("data:") {
-                            let chunk = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
-                            data += data.isEmpty ? chunk : "\n" + chunk
-                        }
+                    // Parse SSE by raw bytes, dispatching each event on its `\n\n`
+                    // terminator (like the browser's EventSource). `bytes.lines`
+                    // withholds the trailing event until the next line arrives, so the
+                    // final `done` snapshot (nothing follows it) never flushed — leaving
+                    // the UI stuck "working".
+                    var buf = Data()
+                    for try await b in bytes {
+                        buf.append(b)
+                        guard b == 0x0A, buf.count >= 2,
+                              buf[buf.index(buf.endIndex, offsetBy: -2)] == 0x0A else { continue }
+                        let block = buf.prefix(buf.count - 2)
+                        if let s = String(data: block, encoding: .utf8) { Self.process(s, onEvent) }
+                        buf.removeAll(keepingCapacity: true)
                     }
                 } catch {
                     onStatus(false)
@@ -63,6 +61,24 @@ final class RealtimeStream {
     func disconnect() {
         task?.cancel()
         task = nil
+    }
+
+    /// Parse one SSE event block (the text between `\n\n` terminators) into its
+    /// `event:` type + joined `data:` payload, then emit it.
+    private static func process(_ block: String, _ onEvent: (StreamEvent) -> Void) {
+        var event = "message"
+        var data = ""
+        for raw in block.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(raw)
+            if line.hasPrefix("event:") {
+                event = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+            } else if line.hasPrefix("data:") {
+                let chunk = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                data += data.isEmpty ? chunk : "\n" + chunk
+            }
+        }
+        guard !data.isEmpty else { return }
+        emit(event, data, onEvent)
     }
 
     private static func emit(_ event: String, _ data: String, _ onEvent: (StreamEvent) -> Void) {
