@@ -105,6 +105,19 @@ struct IconButton: View {
     }
 }
 
+/// A softly blinking holo dot (live "thinking" indicator).
+struct PulseDot: View {
+    @Environment(\.theme) private var theme
+    @State private var on = false
+    var body: some View {
+        Circle().fill(theme.holoSoft).frame(width: 6, height: 6)
+            .shadow(color: theme.holo(0.8), radius: 4)
+            .opacity(on ? 0.3 : 1)
+            .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: on)
+            .onAppear { on = true }
+    }
+}
+
 /// A circular iOS 26 Liquid Glass icon button (gear / back / close). Interactive
 /// glass gives the press-morph; a faint holo tint keeps it in Nero's palette.
 struct GlassIconButton: View {

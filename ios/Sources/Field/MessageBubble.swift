@@ -103,36 +103,64 @@ extension MarkdownUI.Theme {
     }
 }
 
-/// A collapsed row of Nero's tool activity for the in-flight turn.
+/// Nero's tool activity for a turn: a holo card with a status dot + name per step,
+/// each expandable to its result (mirrors the web ToolGroup). `live` brightens it.
 struct ToolGroup: View {
     @Environment(\.theme) private var theme
     let activities: [Activity]
+    var live = false
+    @State private var open: Set<String> = []
 
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(activities.suffix(4)) { a in
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(color(a.status))
-                        .frame(width: 5, height: 5)
-                    Text(a.displayName ?? a.tool ?? "tool")
-                        .font(Typeface.mono(10))
-                        .foregroundStyle(theme.textDim)
-                        .lineLimit(1)
+        VStack(alignment: .leading, spacing: 0) {
+            if activities.count > 1 {
+                Text("\(activities.count) steps")
+                    .font(Typeface.mono(9.5)).tracking(1.6).textCase(.uppercase)
+                    .foregroundStyle(theme.textFaint)
+                    .padding(.horizontal, 9).padding(.top, 5).padding(.bottom, 6)
+            }
+            ForEach(activities) { a in
+                Button { if a.result != nil { toggle(a.id) } } label: {
+                    HStack(spacing: 10) {
+                        Circle().fill(dot(a.status)).frame(width: 6, height: 6)
+                            .shadow(color: dot(a.status).opacity(0.7), radius: a.status == "running" ? 5 : 3)
+                        Text(a.displayName ?? a.tool ?? "tool")
+                            .font(Typeface.mono(12)).foregroundStyle(theme.textDim).lineLimit(1)
+                        Spacer(minLength: 4)
+                        if a.result != nil {
+                            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(theme.textFaint)
+                                .rotationEffect(.degrees(open.contains(a.id) ? 90 : 0))
+                        }
+                    }
+                    .padding(.horizontal, 9).padding(.vertical, 7)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(theme.holo(0.05), in: Capsule())
-                .overlay(Capsule().strokeBorder(theme.holo(0.15)))
+                .buttonStyle(.plain)
+                if let r = a.result, open.contains(a.id) {
+                    Text(r)
+                        .font(Typeface.mono(11)).foregroundStyle(theme.textDim)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .padding(.horizontal, 9).padding(.bottom, 6)
+                }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minWidth: 220, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(6)
+        .background(theme.holo(live ? 0.05 : 0.03), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.holo(live ? 0.22 : 0.1)))
     }
 
-    private func color(_ status: String?) -> Color {
+    private func toggle(_ id: String) {
+        if open.contains(id) { open.remove(id) } else { open.insert(id) }
+    }
+    private func dot(_ status: String?) -> Color {
         switch status {
-        case "success": return theme.holo()
-        case "error": return theme.holo2()
+        case "success", "complete": return theme.holo()
+        case "error": return Color(hex: 0xf87171)
         default: return theme.holoSoft
         }
     }

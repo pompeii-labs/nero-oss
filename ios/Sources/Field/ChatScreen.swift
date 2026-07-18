@@ -54,13 +54,8 @@ struct ChatScreen: View {
                     ForEach(bubbles) { m in
                         MessageBubble(role: m.role ?? "assistant", text: m.content ?? "").id(m.id)
                     }
-                    if let d = store.liveDispatch {
-                        if let acts = d.activities, !acts.isEmpty { ToolGroup(activities: acts) }
-                        if let t = d.streaming_text, !t.isEmpty {
-                            MessageBubble(role: "assistant", text: t)
-                        } else {
-                            Text("thinking…").font(Typeface.mono(12)).tracking(1).foregroundStyle(theme.textFaint)
-                        }
+                    if let t = store.liveDispatch?.streaming_text, !t.isEmpty {
+                        MessageBubble(role: "assistant", text: t)
                     }
                     Color.clear.frame(height: 8).id("bottom")
                 }
@@ -76,8 +71,33 @@ struct ChatScreen: View {
         }
     }
 
+    @ViewBuilder private func liveStatus(_ d: DispatchState) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let acts = d.activities, !acts.isEmpty {
+                ToolGroup(activities: acts, live: true)
+            }
+            if (d.streaming_text ?? "").isEmpty {
+                HStack(spacing: 8) {
+                    PulseDot()
+                    Text(statusLabel(d.status)).font(Typeface.mono(12)).tracking(1).foregroundStyle(theme.textFaint)
+                }
+                .padding(.leading, 4)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, 2)
+    }
+
+    private func statusLabel(_ s: String?) -> String {
+        switch s {
+        case "running": return "working…"
+        case "compacting": return "compacting…"
+        default: return "thinking…"
+        }
+    }
+
     @ViewBuilder private var dock: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 10) {
             if hasDecision {
                 ScrollView(.vertical, showsIndicators: false) {
                     if let q = pendingQuestion {
@@ -94,6 +114,7 @@ struct ChatScreen: View {
                 }
                 .frame(maxHeight: 440)
             } else {
+                if let d = store.liveDispatch { liveStatus(d) }
                 Composer(
                     draft: $draft,
                     busy: store.liveDispatch != nil,
