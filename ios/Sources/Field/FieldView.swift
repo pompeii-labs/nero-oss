@@ -146,30 +146,35 @@ struct HomeScreen: View {
 
     @ViewBuilder private var bottomControls: some View {
         if voiceOn {
-            HStack(spacing: 24) {
-                Button { voice.toggleMute() } label: {
-                    Image(systemName: voice.muted ? "mic.slash.fill" : "mic.fill")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(voice.muted ? theme.holo2() : theme.holoSoft)
-                        .frame(width: 60, height: 60)
-                        .glassEffect(.regular.tint(theme.holo(voice.muted ? 0.03 : 0.10)).interactive(), in: .circle)
-                }
-                .buttonStyle(PressableButtonStyle())
-
+            HStack(spacing: 18) {
+                voiceCtl(voice.muted ? "mic.slash.fill" : "mic.fill",
+                         tint: voice.muted ? theme.holo2() : theme.holoSoft) { voice.toggleMute() }
+                voiceCtl(voice.output == .speaker ? "speaker.wave.2.fill" : "ear.fill",
+                         tint: theme.holoSoft) { voice.toggleOutput() }
+                RoutePickerButton()
                 Button { voice.stop() } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 24, weight: .medium))
+                        .font(.system(size: 22, weight: .medium))
                         .foregroundStyle(theme.holo2())
-                        .frame(width: 72, height: 72)
+                        .frame(width: 68, height: 68)
                         .glassEffect(.regular.tint(theme.holo2(0.18)).interactive(), in: .circle)
                 }
                 .buttonStyle(PressableButtonStyle())
-
-                RoutePickerButton()
             }
         } else {
             GlassPillButton(system: "text.bubble", title: "Message Nero", action: onType)
         }
+    }
+
+    private func voiceCtl(_ system: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system)
+                .font(.system(size: 19, weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: 58, height: 58)
+                .glassEffect(.regular.tint(theme.holo(0.10)).interactive(), in: .circle)
+        }
+        .buttonStyle(PressableButtonStyle())
     }
 
     private func toggleVoice() {

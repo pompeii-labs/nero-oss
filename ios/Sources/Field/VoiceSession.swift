@@ -13,6 +13,8 @@ final class VoiceSession: ObservableObject {
     @Published var activity: String?
     @Published var errorText: String?
     @Published var muted = false
+    @Published var output: Output = .speaker
+    enum Output { case speaker, receiver }
 
     private let base: URL
     private var ws: URLSessionWebSocketTask?
@@ -55,12 +57,12 @@ final class VoiceSession: ObservableObject {
     // MARK: audio graph
     private func configureAudio() throws {
         let session = AVAudioSession.sharedInstance()
-        // videoChat keeps echo cancellation (for barge-in) but defaults to the speaker,
-        // not the earpiece. allowBluetooth(A2DP) exposes headsets in the route picker.
-        try session.setCategory(.playAndRecord, mode: .videoChat,
+        // voiceChat is the audible, echo-cancelled config (videoChat produced silence
+        // on-device). allowBluetooth(A2DP) exposes headsets in the route picker.
+        try session.setCategory(.playAndRecord, mode: .voiceChat,
                                 options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
         try session.setActive(true)
-        try? session.overrideOutputAudioPort(.speaker)
+        applyOutput()
 
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: playFormat)
@@ -77,6 +79,19 @@ final class VoiceSession: ObservableObject {
     }
 
     func toggleMute() { DispatchQueue.main.async { self.muted.toggle() } }
+
+    /// Toggle built-in speaker vs earpiece. Bluetooth/AirPlay is handled separately by
+    /// the system route picker (which overrides this while a headset is connected).
+    func toggleOutput() {
+        DispatchQueue.main.async {
+            self.output = self.output == .speaker ? .receiver : .speaker
+            self.applyOutput()
+        }
+    }
+    private func applyOutput() {
+        let port: AVAudioSession.PortOverride = output == .speaker ? .speaker : .none
+        try? AVAudioSession.sharedInstance().overrideOutputAudioPort(port)
+    }
 
     private func handleMic(_ buffer: AVAudioPCMBuffer) {
         guard let converter, !speaking, !muted, let ws else { return }
