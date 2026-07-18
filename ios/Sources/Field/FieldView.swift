@@ -22,21 +22,75 @@ struct FieldView: View {
         return .thinking
     }
 
+    // MARK: docked cards
+
+    private var pendingQuestion: Question? { store.questions.first { $0.isPending } }
+    private var approvalProject: Project? { store.projects.first { $0.status == "awaiting_approval" } }
+    private var mergeProject: Project? { store.projects.first { $0.merge_conflict != nil } }
+    private var dashboardProjects: [Project] {
+        store.projects.filter { ["running", "paused", "done"].contains($0.status ?? "") && !($0.dismissed ?? false) }
+    }
+
+    /// The bottom dock: a pending question or project decision replaces the composer.
+    @ViewBuilder private var dock: some View {
+        if let q = pendingQuestion {
+            cardScroll {
+                AskCard(
+                    question: q,
+                    onSubmit: { answers in Task { await store.client.answer(q.id, answers: answers) } },
+                    onDismiss: { Task { await store.client.answer(q.id, answers: [], dismiss: true) } }
+                )
+            }
+        } else if let p = approvalProject {
+            cardScroll { ProjectApprovalCard(project: p, store: store) }
+        } else if let p = mergeProject {
+            cardScroll { MergeApprovalCard(project: p, store: store) }
+        } else {
+            Composer(
+                draft: $draft,
+                busy: store.liveDispatch != nil,
+                onSend: { store.send(draft); draft = "" },
+                onStop: { store.cancel() }
+            )
+        }
+    }
+
+    private func cardScroll<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        ScrollView(.vertical, showsIndicators: false) { content() }
+            .frame(maxHeight: 460)
+    }
+
+    /// A compact horizontal rail of live project dashboards.
+    @ViewBuilder private var dashboardRail: some View {
+        if !dashboardProjects.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(dashboardProjects) { p in
+                        ProjectDashboardCard(
+                            project: p,
+                            tasks: store.tasks.filter { $0.project_id == p.id },
+                            store: store
+                        )
+                        .frame(width: 300)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
     var body: some View {
         ZStack {
             Atmosphere()
             VStack(spacing: 0) {
                 header
+                dashboardRail
                 PanelStack(store: store)
                 thread
-                Composer(
-                    draft: $draft,
-                    busy: store.liveDispatch != nil,
-                    onSend: { store.send(draft); draft = "" },
-                    onStop: { store.cancel() }
-                )
-                .padding(.horizontal, 16)
-                .padding(.bottom, 6)
+                dock
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 6)
             }
         }
         .task { store.start() }
