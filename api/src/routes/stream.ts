@@ -11,12 +11,22 @@ interface DispatchRow {
     updated_at: number | null;
 }
 
+/** Tables the native Field mirrors. The web subscribes to each via Lux `.live()`;
+ *  here we poll server-side and emit per-row deltas so a native client never needs
+ *  a Lux client. `event` is the SSE event name the app switches on. */
+const WATCHED: { table: string; event: string; order: string; limit: number }[] = [
+    { table: 'panels', event: 'panel', order: 'updated_at', limit: 50 },
+    { table: 'questions', event: 'question', order: 'created_at', limit: 20 },
+    { table: 'projects', event: 'project', order: 'updated_at', limit: 20 },
+    { table: 'project_tasks', event: 'task', order: 'updated_at', limit: 100 },
+];
+
 /**
- * Native-client realtime bridge. The web subscribes to Lux tables directly with
- * `.live()`; native apps get the same stream here as SSE, so they never need a Lux
- * client. Emits `message` events (chat history, then new rows) and `dispatch`
- * events (the live in-flight turn: streaming_text, activities, status). Polls Lux
- * server-side, which is fine for Nero's single-user model.
+ * Native-client realtime bridge. Emits `message` (chat history, then new rows),
+ * `dispatch` (the live in-flight turn), and per-row `panel`/`question`/`project`/`task`
+ * events. A row is (re)emitted whenever its JSON snapshot changes; the app upserts by
+ * id and reads `status` to drop closed/finished rows. Single-user model, so polling
+ * Lux at 250ms is fine.
  */
 export function streamRoutes(): Hono {
     const app = new Hono();
@@ -28,7 +38,6 @@ export function streamRoutes(): Hono {
                 open = false;
             });
 
-            // Backfill recent history, then follow.
             const history = await Message.getSessionHistory({ limit: 200 });
             let lastId = 0;
             for (const m of history) {
@@ -38,6 +47,9 @@ export function streamRoutes(): Hono {
             await stream.writeSSE({ event: 'ready', data: '{}' });
 
             let lastDispatch = '';
+            const caches: Record<string, Map<string, string>> = {};
+            for (const w of WATCHED) caches[w.table] = new Map();
+
             while (open) {
                 try {
                     const fresh = await Message.getSessionHistory({ since: lastId });
@@ -46,20 +58,43 @@ export function streamRoutes(): Hono {
                         lastId = Math.max(lastId, m.id);
                     }
 
-                    const rows = unwrap(
+                    const drows = unwrap(
                         await getLux()
                             .table('dispatches')
                             .select()
                             .order('updated_at', { ascending: false })
                             .limit(1),
                     ) as DispatchRow[];
-                    if (rows.length) {
-                        const snap = JSON.stringify(rows[0]);
+                    if (drows.length) {
+                        const snap = JSON.stringify(drows[0]);
                         if (snap !== lastDispatch) {
                             lastDispatch = snap;
                             await stream.writeSSE({ event: 'dispatch', data: snap });
                         }
                     }
+
+                    for (const w of WATCHED) {
+                        try {
+                            const rows = unwrap(
+                                await getLux()
+                                    .table(w.table)
+                                    .select()
+                                    .order(w.order, { ascending: false })
+                                    .limit(w.limit),
+                            ) as { id: string }[];
+                            const cache = caches[w.table];
+                            for (const row of rows) {
+                                const snap = JSON.stringify(row);
+                                if (cache.get(row.id) !== snap) {
+                                    cache.set(row.id, snap);
+                                    await stream.writeSSE({ event: w.event, data: snap });
+                                }
+                            }
+                        } catch {
+                            // one bad table shouldn't kill the whole stream
+                        }
+                    }
+
                     await stream.sleep(250);
                 } catch {
                     break; // connection closed mid-write
