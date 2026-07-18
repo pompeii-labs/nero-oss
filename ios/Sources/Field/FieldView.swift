@@ -27,6 +27,7 @@ struct FieldView: View {
             Atmosphere()
             VStack(spacing: 0) {
                 header
+                PanelStack(store: store)
                 thread
                 Composer(
                     draft: $draft,
