@@ -3,7 +3,7 @@
  * the containerized api forwards to it (fs + exec against real repos/toolchains/git/gh).
  * It IS a HostRunner behind an authenticated HTTP surface. Started by `nero start`.
  */
-import { HostRunner, type ExecOpts } from '@nero/shared/runner';
+import { HostRunner, type ExecOpts, type DaemonSpec } from '@nero/shared/runner';
 import { startMdns } from '../mdns';
 
 const runner = new HostRunner();
@@ -17,6 +17,9 @@ interface PathBody {
 interface WriteBody {
     path: string;
     content: string;
+}
+interface IdBody {
+    id: string;
 }
 
 async function handle(op: string, body: unknown): Promise<unknown | undefined> {
@@ -35,6 +38,14 @@ async function handle(op: string, body: unknown): Promise<unknown | undefined> {
             return { ok: true };
         case 'readdir':
             return { entries: await runner.readdir((body as PathBody).path) };
+        case 'spawn-daemon':
+            await runner.spawnDaemon(body as DaemonSpec);
+            return { ok: true };
+        case 'stop-daemon':
+            await runner.stopDaemon((body as IdBody).id);
+            return { ok: true };
+        case 'daemon-status':
+            return { running: await runner.daemonRunning((body as IdBody).id) };
         default:
             return undefined;
     }

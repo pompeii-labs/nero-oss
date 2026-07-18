@@ -23,7 +23,8 @@ ${c.bold('Lifecycle')}
 
 ${c.bold('Integrations')}
   mcp [list]                     list MCP connections
-  mcp add <name> <url>           ${c.dim('--transport http|sse|stdio  --key <token>  --header k=v')}
+  mcp add <name> <url>           ${c.dim('--transport http|sse|stdio  --key <token>  --header k=v  --secret NAME,NAME')}
+  mcp secret <name> <NAME,NAME>  ${c.dim('inject vault secrets into a stdio server’s env')}
   mcp remove <name>
   mcp reconnect <name>
 
@@ -70,11 +71,27 @@ async function runMcp(rest: string[]): Promise<void> {
                 const i = flags.header.indexOf('=');
                 if (i > 0) header[flags.header.slice(0, i)] = flags.header.slice(i + 1);
             }
+            const secrets =
+                typeof flags.secret === 'string'
+                    ? flags.secret
+                          .split(',')
+                          .map((s) => s.trim())
+                          .filter(Boolean)
+                    : undefined;
             return cmd.mcpAdd(pos[1], pos[2], {
                 transport: flags.transport as 'http' | 'sse' | 'stdio' | undefined,
                 key: typeof flags.key === 'string' ? flags.key : undefined,
                 header,
+                secrets,
             });
+        }
+        case 'secret':
+        case 'secrets': {
+            const names = (pos[2] ?? '')
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
+            return cmd.mcpSecret(pos[1], names);
         }
         case 'remove':
         case 'rm':

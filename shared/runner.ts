@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { exec, spawn, type ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
@@ -30,6 +30,17 @@ export interface DirEntry {
     dir: boolean;
 }
 
+/** A long-lived process the runner supervises on its own machine (e.g. an MCP
+ *  server that must run host-side for host toolchains). `env` is provided per
+ *  spawn and kept in process memory, never written to disk. */
+export interface DaemonSpec {
+    id: string;
+    command: string;
+    args?: string[];
+    cwd?: string;
+    env?: Record<string, string>;
+}
+
 /** The filesystem + exec surface that code-projects touch. In dev it runs in-process
  *  on the host; in the container it forwards to the host-runner daemon. */
 export interface Runner {
@@ -38,6 +49,17 @@ export interface Runner {
     writeFile(path: string, content: string): Promise<void>;
     mkdir(path: string): Promise<void>;
     readdir(path: string): Promise<DirEntry[]>;
+    spawnDaemon(spec: DaemonSpec): Promise<void>;
+    stopDaemon(id: string): Promise<void>;
+    daemonRunning(id: string): Promise<boolean>;
+}
+
+interface DaemonRec {
+    spec: DaemonSpec;
+    child: ChildProcess | null;
+    stopped: boolean;
+    restarts: number;
+    timer?: ReturnType<typeof setTimeout>;
 }
 
 /** Runs directly on this machine. Used in dev, and inside the host-runner daemon. */
@@ -76,6 +98,54 @@ export class HostRunner implements Runner {
         const es = await readdir(expandPath(path), { withFileTypes: true });
         return es.map((e) => ({ name: e.name, dir: e.isDirectory() }));
     }
+
+    private daemons = new Map<string, DaemonRec>();
+
+    async spawnDaemon(spec: DaemonSpec): Promise<void> {
+        await this.stopDaemon(spec.id);
+        const rec: DaemonRec = { spec, child: null, stopped: false, restarts: 0 };
+        this.daemons.set(spec.id, rec);
+        this.launchDaemon(rec);
+    }
+
+    private launchDaemon(rec: DaemonRec): void {
+        const { spec } = rec;
+        const child = spawn(expandPath(spec.command), spec.args ?? [], {
+            cwd: spec.cwd ? expandPath(spec.cwd) : undefined,
+            env: { ...process.env, ...(spec.env ?? {}) },
+            // No stdin (never fall into an stdio-MCP read); logs flow to the daemon.
+            stdio: ['ignore', 'inherit', 'inherit'],
+        });
+        rec.child = child;
+        console.log(`[daemon ${spec.id}] started pid ${child.pid}`);
+        child.on('exit', (code) => {
+            if (rec.stopped) return;
+            if (rec.restarts >= 20) {
+                console.error(`[daemon ${spec.id}] exited (${code}); gave up after 20 restarts`);
+                return;
+            }
+            rec.restarts++;
+            const delay = Math.min(1000 * rec.restarts, 15_000);
+            console.error(`[daemon ${spec.id}] exited (${code}); restarting in ${delay}ms`);
+            rec.timer = setTimeout(() => {
+                if (!rec.stopped) this.launchDaemon(rec);
+            }, delay);
+        });
+    }
+
+    async stopDaemon(id: string): Promise<void> {
+        const rec = this.daemons.get(id);
+        if (!rec) return;
+        rec.stopped = true;
+        if (rec.timer) clearTimeout(rec.timer);
+        rec.child?.kill('SIGTERM');
+        this.daemons.delete(id);
+    }
+
+    async daemonRunning(id: string): Promise<boolean> {
+        const rec = this.daemons.get(id);
+        return !!rec?.child && rec.child.exitCode === null && !rec.stopped;
+    }
 }
 
 /** Forwards each op to the host-runner daemon over HTTP (container -> host). */
@@ -107,6 +177,15 @@ export class RemoteRunner implements Runner {
     }
     async readdir(path: string): Promise<DirEntry[]> {
         return (await this.call<{ entries: DirEntry[] }>('readdir', { path })).entries;
+    }
+    async spawnDaemon(spec: DaemonSpec): Promise<void> {
+        await this.call('spawn-daemon', spec);
+    }
+    async stopDaemon(id: string): Promise<void> {
+        await this.call('stop-daemon', { id });
+    }
+    async daemonRunning(id: string): Promise<boolean> {
+        return (await this.call<{ running: boolean }>('daemon-status', { id })).running;
     }
 }
 

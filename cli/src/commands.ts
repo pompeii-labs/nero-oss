@@ -17,6 +17,7 @@ import {
     httpsEnabled,
 } from './home';
 import { ensureCert, lanIps } from './tls';
+import { installRunnerService, stopRunnerService, runnerServiceActive } from './hostrunner/service';
 import { loadConfig } from '@nero/shared/config';
 
 // ---- host-runner: a host-side daemon (not a container) the api proxies code ops to ----
@@ -36,8 +37,16 @@ function runnerPid(): number | null {
 }
 
 function startRunner(): void {
+    // Prefer a real OS service (survives reboots/logout). Falls back to a detached
+    // process where a service can't be installed (headless session, unknown platform).
+    if (runnerServiceActive()) return;
+    if (installRunnerService()) {
+        // A managed service supersedes any leftover detached process.
+        stopDetachedRunner();
+        return;
+    }
     if (runnerPid()) return;
-    // Dev: run the source with bun. Shipped: a compiled binary via NERO_RUNNER_BIN.
+    // Dev / fallback: run the source with bun. Shipped: a compiled binary via NERO_RUNNER_BIN.
     const bin = process.env.NERO_RUNNER_BIN;
     const server = join(import.meta.dir, 'hostrunner', 'server.ts');
     const child = spawn(bin ?? 'bun', bin ? [] : [server], {
@@ -49,7 +58,7 @@ function startRunner(): void {
     if (child.pid) writeFileSync(RUNNER_PID, String(child.pid));
 }
 
-function stopRunner(): void {
+function stopDetachedRunner(): void {
     const pid = runnerPid();
     if (!pid) return;
     try {
@@ -62,6 +71,11 @@ function stopRunner(): void {
     } catch {
         /* ok */
     }
+}
+
+function stopRunner(): void {
+    stopRunnerService();
+    stopDetachedRunner();
 }
 
 export interface StartOpts {
@@ -188,7 +202,11 @@ export function status(): void {
     const env = readEnv();
     line();
     kv('lux', luxMode(env) === 'bundled' ? 'bundled engine' : 'external');
-    kv('host-runner', runnerPid() ? `up (pid ${runnerPid()})` : 'stopped');
+    const svc = runnerServiceActive();
+    kv(
+        'host-runner',
+        svc ? `up (${svc} service)` : runnerPid() ? `up (pid ${runnerPid()})` : 'stopped',
+    );
     const wp = env.NERO_WEB_PORT || '80';
     kv('url', wp === '80' ? 'http://localhost' : `http://localhost:${wp}`);
     kv('home', HOME);
@@ -222,21 +240,39 @@ export interface McpAddOpts {
     transport?: 'http' | 'sse' | 'stdio';
     header?: Record<string, string>;
     key?: string;
+    secrets?: string[];
 }
 
 export async function mcpAdd(name: string, url: string, opts: McpAddOpts): Promise<void> {
     if (!name || !url)
-        die('Usage: nero mcp add <name> <url> [--transport http|sse|stdio] [--key <token>]');
+        die(
+            'Usage: nero mcp add <name> <url> [--transport http|sse|stdio] [--key <token>] [--secret NAME,NAME]',
+        );
     const { McpConnection } = await import('../../api/src/models/mcp-connection');
+    type McpExtraConfig = import('../../api/src/models/mcp-connection').McpExtraConfig;
+    const config: McpExtraConfig = {};
+    if (opts.header && Object.keys(opts.header).length) config.headers = opts.header;
+    if (opts.secrets?.length) config.secrets = opts.secrets;
     await McpConnection.upsert({
         name,
         url,
         transport: opts.transport ?? 'http',
         auth: opts.key ? { apiKey: opts.key } : null,
-        config: opts.header && Object.keys(opts.header).length ? { headers: opts.header } : null,
+        config: Object.keys(config).length ? config : null,
         disabled: false,
     });
     ok(`Saved ${c.bold(name)}. Nero will connect it on its next reconcile.`);
+}
+
+export async function mcpSecret(name: string, names: string[]): Promise<void> {
+    if (!name || !names.length) die('Usage: nero mcp secret <name> <SECRET_NAME[,SECRET_NAME]>');
+    const { McpConnection } = await import('../../api/src/models/mcp-connection');
+    const conn = await McpConnection.getByName(name);
+    if (!conn) die(`No MCP connection named ${c.bold(name)}.`);
+    await McpConnection.upsert({ name, config: { ...(conn!.config ?? {}), secrets: names } });
+    ok(
+        `${c.bold(name)} will get ${names.map((n) => c.bold(n)).join(', ')} injected into its env. Reconnect it to apply: ${c.dim(`nero mcp reconnect ${name}`)}`,
+    );
 }
 
 export async function mcpRemove(name: string): Promise<void> {
@@ -320,7 +356,8 @@ export async function doctor(): Promise<void> {
         /* unreachable */
     }
     check('Lux reachable', luxReachable, luxReachable ? '' : 'is the stack up? `nero start`');
-    check('host-runner', !!runnerPid(), runnerPid() ? '' : '`nero start` launches it');
+    const runnerUp = runnerServiceActive() ? 'service' : runnerPid() ? 'process' : '';
+    check('host-runner', !!runnerUp, runnerUp ? runnerUp : '`nero start` launches it');
 
     line();
     if (bad) warn(`${bad} issue${bad > 1 ? 's' : ''} to fix.`);

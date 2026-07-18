@@ -15,6 +15,21 @@ export interface McpExtraConfig {
     args?: string[];
     env?: Record<string, string>;
     headers?: Record<string, string>;
+    /** Vault secret names injected into a stdio server's process env at launch,
+     *  as same-named env vars. Scoped: only these reach the process, not the
+     *  whole vault. ${NAME} refs inside `env` values resolve from the vault too. */
+    secrets?: string[];
+    /** Run this stdio server on the host via the sidecar, serving HTTP (Path B),
+     *  instead of in-process in the container. The server must honor MCP_HTTP_PORT.
+     *  Requires a wired sidecar (NERO_RUNNER_URL); ignored in dev. */
+    host?: boolean;
+    /** Working directory for a host-launched stdio server (so it resolves its own
+     *  node_modules). Paths may use ~ (resolved on the host). */
+    cwd?: string;
+    /** HTTP port assigned to a host-launched server (Path B: the sidecar runs it on
+     *  the host serving HTTP, the api connects over host.docker.internal:<port>).
+     *  Assigned once on first launch and reused. */
+    port?: number;
 }
 
 export interface McpConnectionData {
