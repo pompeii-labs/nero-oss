@@ -44,7 +44,7 @@ export class DataModel<T extends GenericData> {
             await getLux()
                 .table(this.tableName as never)
                 .insert(fields as never),
-        ) as T;
+        ) as unknown as T;
         return new this(row);
     }
 
@@ -56,7 +56,7 @@ export class DataModel<T extends GenericData> {
             await getLux()
                 .table(this.tableName as never)
                 .insert(fields as never),
-        ) as T[];
+        ) as unknown as T[];
         return rows.map((r) => new this(r));
     }
 
