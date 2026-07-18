@@ -36,12 +36,14 @@ final class RealtimeStream {
 
                     var event = "message"
                     var data = ""
+                    // Flush on a blank line (spec) OR on the next `event:` — Swift's
+                    // `bytes.lines` doesn't reliably yield the blank separator, so
+                    // relying on it alone drops every event.
                     for try await line in bytes.lines {
                         if line.isEmpty {
-                            if !data.isEmpty { Self.emit(event, data, onEvent) }
-                            event = "message"
-                            data = ""
+                            if !data.isEmpty { Self.emit(event, data, onEvent); data = ""; event = "message" }
                         } else if line.hasPrefix("event:") {
+                            if !data.isEmpty { Self.emit(event, data, onEvent); data = "" }
                             event = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
                         } else if line.hasPrefix("data:") {
                             let chunk = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
