@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Device } from '../models/device';
 import { Presence } from '../models/presence';
+import { userHeartbeat } from '../services/user-presence';
 import { error } from '../util/errors';
 
 /** Device + presence writes. Reads/subscriptions happen straight from Lux in the
@@ -75,6 +76,17 @@ export function displayRoutes(): Hono {
         } catch (err) {
             return error(c, 500, err);
         }
+    });
+
+    // User foreground heartbeat: a surface (iOS/web) pings while Nero is on-screen so
+    // notify() can suppress push. Fire-and-forget; never fail the caller.
+    app.post('/v1/presence/heartbeat', async (c) => {
+        try {
+            await userHeartbeat();
+        } catch {
+            /* ignore */
+        }
+        return c.json({ ok: true });
     });
 
     return app;

@@ -11,11 +11,13 @@ import type { Medium, Notification } from './types';
 export const apnsMedium: Medium = {
     name: 'apns',
     displayName: 'Push (iOS)',
+    interruptive: true,
     available: () => isLuxConnected(),
     async send(n: Notification) {
         const enqueued = await sendPush({
             title: n.title,
             body: n.body,
+            sound: 'nero.caf', // custom Nero tone (bundled in the app); falls back to default
             data: n.url ? { url: n.url } : undefined,
         });
         if (enqueued === 0) throw new Error('push enqueued to 0 devices');

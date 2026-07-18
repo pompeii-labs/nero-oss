@@ -29,6 +29,9 @@ struct NeroClient {
     }
     func cancel() async { _ = try? await post("/v1/nero/cancel", [:]) }
 
+    /// Foreground heartbeat so the server knows a surface is on-screen (suppresses push).
+    func heartbeat() async { _ = try? await post("/v1/presence/heartbeat", [:]) }
+
     // MARK: commands
     func getModel() async -> String? {
         (try? await getJSON("/v1/settings", SettingsResponse.self))?.model

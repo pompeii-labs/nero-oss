@@ -10,7 +10,7 @@ export class NotifyUtility {
     @tool({
         name: 'notify',
         description:
-            "Reach the user off-screen with a push notification. Use only when something genuinely needs them while they're away (a long job you finished, a deadline approaching, a reply they asked you to watch for) - keep it rare and worth the buzz, never for chit-chat. If no channel is set up this will tell you; then ask the user to set one (they pick an ntfy topic, install the ntfy app and subscribe, then set the NTFY_TOPIC secret - you can stage it with request_secret).",
+            "Reach the user off-screen with a push notification (delivered to their Nero app). Use only when something genuinely needs them while they're away (a long job you finished, a deadline approaching, a reply they asked you to watch for) - keep it rare and worth the buzz, never for chit-chat. If it reports no device, the user hasn't opened the app / allowed notifications yet.",
     })
     @toolparam({
         key: 'title',
@@ -38,7 +38,7 @@ export class NotifyUtility {
 
         const statuses = await Mediums.statuses();
         if (!statuses.some((s) => s.available)) {
-            return 'No notification channel is set up. Ask the user to pick an ntfy topic, install the ntfy app and subscribe to it, then set the NTFY_TOPIC secret (you can stage it with request_secret).';
+            return 'Push is not available (Lux not connected).';
         }
 
         const urgency = ['low', 'normal', 'high'].includes(a.str('urgency'))
