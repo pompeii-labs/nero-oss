@@ -20,6 +20,19 @@ async function getClient(): Promise<LuxProjectClient> {
             // URL to the local engine.
             const base = luxUrl || `${location.origin}/lux`;
             const lux = createBrowserClient(base, luxPublishableKey);
+            // A cached anon session is bound to the engine that minted it. If the
+            // publishable key changed (host swap, DB migration, key rotation), that
+            // session is dead — using it makes the live socket 401 and the app hangs
+            // on "connecting". Detect the swap and clear the stale session first.
+            try {
+                const K = 'nero.lux.pubkey';
+                if (localStorage.getItem(K) && localStorage.getItem(K) !== luxPublishableKey) {
+                    await lux.auth.signOut().catch(() => {});
+                }
+                localStorage.setItem(K, luxPublishableKey);
+            } catch {
+                /* private mode / no storage */
+            }
             const { data } = await lux.auth.getSession();
             if (!data?.session) await lux.auth.signInAnonymously();
             return lux;
@@ -63,6 +76,8 @@ export interface DeviceRow {
     screen_h: number | null;
     connected: boolean | null;
     last_seen: number | null;
+    ambient: boolean | null;
+    room: string | null;
 }
 
 export interface PresenceRow {

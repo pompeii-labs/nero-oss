@@ -8,6 +8,7 @@
     import Message from '$lib/components/field/Message.svelte';
     import ToolGroup from '$lib/components/field/ToolGroup.svelte';
     import Composer, { type PendingFile } from '$lib/components/field/Composer.svelte';
+    import Settings from '$lib/components/field/Settings.svelte';
     import ThemeSwitch from '$lib/components/field/ThemeSwitch.svelte';
     import type { WakewordListener } from '$lib/wakeword';
     import {
@@ -67,6 +68,7 @@
         registerDevice,
         heartbeatDevice,
         bringNeroHere,
+        setAmbient,
     } from '$lib/device';
     import { getServerUrl } from '$lib/actions/helpers';
     import { executeCommand, type CommandResult } from '$lib/commands';
@@ -129,6 +131,15 @@
     const neroDeviceName = $derived(devices.find((d) => d.id === neroDevice)?.name ?? null);
     // This screen's server-assigned name (main / a callsign / ?name=).
     const myDeviceName = $derived(devices.find((d) => d.id === myDeviceId)?.name ?? '');
+
+    // Presence tier for THIS screen. focus: Nero is here (conversation + voice).
+    // ambient: opted-in, shows a glanceable orb + listens for the wakeword even when
+    // Nero is elsewhere. dormant: a plain screen with a summon button.
+    const amAmbient = $derived(devices.find((d) => d.id === myDeviceId)?.ambient ?? false);
+    const myTier = $derived(neroIsHere ? 'focus' : amAmbient ? 'ambient' : 'dormant');
+    function toggleAmbient() {
+        void setAmbient(!amAmbient);
+    }
 
     // Travel animation: when Nero moves, the screen he leaves streaks him out and
     // the one he arrives on streaks him in (both fire off the same presence change).
@@ -633,11 +644,13 @@
     // here and opens voice. Listening pauses during a live call to free the mic, then the
     // reactive guard below re-arms it when the call ends.
     let wakewordOn = $state(false);
+    let settingsOpen = $state(false);
     let wakewordStatus = $state<'off' | 'arming' | 'on' | 'error' | 'insecure'>('off');
     let wakeword: WakewordListener | null = null;
 
     $effect(() => {
-        const shouldListen = wakewordOn && neroIsHere && !insecureContext && !engaged;
+        const shouldListen =
+            wakewordOn && (neroIsHere || amAmbient) && !insecureContext && !engaged;
         if (shouldListen && !wakeword) void armWakeword();
         else if (!shouldListen && wakeword) disarmWakeword();
     });
@@ -670,7 +683,7 @@
         wakewordStatus = 'arming';
         const { WakewordListener } = await import('$lib/wakeword');
         const w = new WakewordListener({
-            threshold: 0.5,
+            threshold: 0.6,
             onDetect: () => {
                 chime([660, 880]);
                 if (!neroIsHere) void bringNeroHere();
@@ -891,13 +904,25 @@
             <Orb size={132} state={waitingOnUser ? 'idle' : engaged ? voiceOrbState : orbState} />
         </div>
     {:else if !neroIsHere && travel !== 'out'}
-        <button class="elsewhere" onclick={() => bringNeroHere()}>
-            <span class="ghost-orb"></span>
-            <span class="elsewhere-text">
-                Nero is on <strong>{neroDeviceName ?? 'another screen'}</strong>
-                <span class="bring">bring him here</span>
-            </span>
-        </button>
+        <div class="presence-away" class:is-ambient={amAmbient}>
+            <button class="elsewhere" onclick={() => bringNeroHere()}>
+                {#if amAmbient}
+                    <span class="ambient-orb"><Orb size={116} state="idle" /></span>
+                    <span class="elsewhere-text">
+                        ambient · tap or say <strong>“Hey Nero”</strong>
+                    </span>
+                {:else}
+                    <span class="ghost-orb"></span>
+                    <span class="elsewhere-text">
+                        Nero is on <strong>{neroDeviceName ?? 'another screen'}</strong>
+                        <span class="bring">bring him here</span>
+                    </span>
+                {/if}
+            </button>
+            <button class="ambient-toggle" onclick={toggleAmbient}>
+                {amAmbient ? 'stop ambient' : 'make this an ambient display'}
+            </button>
+        </div>
     {/if}
 
     <!-- the traveling orb: the ONLY orb shown mid-hop. It flies off one screen and
@@ -941,14 +966,18 @@
             <span class="wordmark">NERO</span>
             <span class="stat">
                 {#if connected}
-                    <i class="dot"></i> {myDeviceName}{neroIsHere ? ' · present' : ''}
+                    <i class="dot"></i> {myDeviceName}{myTier === 'focus'
+                        ? ' · present'
+                        : myTier === 'ambient'
+                          ? ' · ambient'
+                          : ''}
                 {:else}
                     <i class="dot off"></i> {connectionError ? 'offline: ' + connectionError.slice(0, 90) : 'connecting'}
                 {/if}
             </span>
         </div>
-        {#if neroIsHere}
-            <div class="bar-actions">
+        <div class="bar-actions">
+            {#if neroIsHere}
                 {#if !presenceMode}
                     <button
                         class="voice-enter"
@@ -998,10 +1027,33 @@
                         <path d="M6 6a8 8 0 0 0 0 12M18 6a8 8 0 0 1 0 12" opacity="0.5" />
                     </svg>
                 </button>
-                <a class="ws" href="/protocols">Protocols</a>
+            {/if}
+                <button
+                    class="ws-btn"
+                    onclick={() => (settingsOpen = true)}
+                    aria-label="Settings"
+                    title="Settings"
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        width="16"
+                        height="16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <circle cx="12" cy="12" r="3" />
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+                        />
+                    </svg>
+                </button>
             </div>
-        {/if}
     </header>
+
+    <Settings bind:open={settingsOpen} />
 
     <!-- The interaction surface (chat + composer) lives ONLY where the orb is.
          Other screens show just the device name + the orb hole + any panels. -->
@@ -1141,6 +1193,25 @@
         letter-spacing: 0.06em;
         color: var(--text-dim);
         text-decoration: none;
+    }
+    .ws-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        background: none;
+        border: none;
+        color: var(--text-dim);
+        cursor: pointer;
+        border-radius: 8px;
+        transition:
+            color 0.2s ease,
+            background 0.2s ease;
+    }
+    .ws-btn:hover {
+        color: rgb(var(--holo-soft));
+        background: rgb(var(--holo) / 0.08);
     }
     .ws:hover {
         color: var(--text);
@@ -1305,12 +1376,18 @@
     }
 
     /* Nero is on another screen: an empty socket where the orb would be, centered. */
-    .elsewhere {
+    .presence-away {
         position: fixed;
         left: 50%;
         top: 50%;
         transform: translate(-50%, -50%);
         z-index: 20;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+    }
+    .elsewhere {
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -1328,6 +1405,35 @@
     }
     .elsewhere:hover {
         opacity: 0.75;
+    }
+    /* ambient tier: Nero isn't focused here but the screen is alive, dimmed orb,
+       more presence than a dormant screen, and it's listening for the wakeword. */
+    .presence-away.is-ambient .elsewhere {
+        opacity: 0.72;
+    }
+    .ambient-orb {
+        opacity: 0.5;
+        filter: saturate(0.85);
+        transition: opacity 0.3s ease;
+        animation: ghost-pulse 6s ease-in-out infinite;
+    }
+    .presence-away.is-ambient:hover .ambient-orb {
+        opacity: 0.82;
+    }
+    .ambient-toggle {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--text-dim);
+        font-family: var(--font-mono);
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        opacity: 0.3;
+        transition: opacity 0.2s ease;
+    }
+    .ambient-toggle:hover {
+        opacity: 0.7;
     }
     /* a clear hole at the real orb's size: faint ring, recessed dark center */
     .ghost-orb {
