@@ -2,8 +2,12 @@ name: Nero
 options:
   bundleIdPrefix: com.pompeii
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "26.0"
   createIntermediateGroups: true
+packages:
+  MarkdownUI:
+    url: https://github.com/gonzalezreal/swift-markdown-ui
+    from: "2.4.0"
 settings:
   base:
     MARKETING_VERSION: "0.1.0"
@@ -17,6 +21,9 @@ targets:
     configFiles:
       Debug: Local.xcconfig
       Release: Local.xcconfig
+    dependencies:
+      - package: MarkdownUI
+        product: MarkdownUI
     sources:
       - path: Sources
       - path: Resources

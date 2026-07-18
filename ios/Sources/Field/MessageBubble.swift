@@ -1,6 +1,8 @@
 import SwiftUI
+import MarkdownUI
 
-/// User = right-aligned glass bubble; assistant = left-aligned markdown prose.
+/// User = right-aligned Liquid Glass bubble; assistant = full markdown prose
+/// (headings, code blocks, lists, blockquotes) via the Nero markdown theme.
 struct MessageBubble: View {
     @Environment(\.theme) private var theme
     let role: String       // "user" | "assistant"
@@ -8,9 +10,9 @@ struct MessageBubble: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            if role == "user" { Spacer(minLength: 44) }
+            if role == "user" { Spacer(minLength: 52) }
             content
-            if role == "assistant" { Spacer(minLength: 44) }
+            if role == "assistant" { Spacer(minLength: 24) }
         }
     }
 
@@ -19,27 +21,85 @@ struct MessageBubble: View {
             Text(text)
                 .font(Typeface.ui(15))
                 .foregroundStyle(theme.text)
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 15)
                 .padding(.vertical, 10)
-                .background(theme.holo(0.08), in: bubbleShape)
-                .overlay(bubbleShape.strokeBorder(theme.holo(0.22)))
+                .glassEffect(.regular.tint(theme.holo(0.16)), in: bubbleShape)
         } else {
-            Text(markdown(text))
-                .font(Typeface.ui(15))
-                .foregroundStyle(theme.text.opacity(0.92))
+            Markdown(text)
+                .markdownTheme(.nero(theme))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .lineSpacing(3)
         }
     }
 
     private var bubbleShape: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16, bottomTrailingRadius: 4, topTrailingRadius: 16, style: .continuous)
+        UnevenRoundedRectangle(topLeadingRadius: 17, bottomLeadingRadius: 17, bottomTrailingRadius: 5, topTrailingRadius: 17, style: .continuous)
     }
+}
 
-    private func markdown(_ s: String) -> AttributedString {
-        (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-            ?? AttributedString(s)
+extension MarkdownUI.Theme {
+    /// Nero's Obsidian markdown theme: system prose, holo inline code + links, dark
+    /// bordered code blocks, a holo rule on blockquotes.
+    @MainActor
+    static func nero(_ t: Theme) -> MarkdownUI.Theme {
+        MarkdownUI.Theme()
+            .text {
+                FontFamilyVariant(.normal)
+                FontSize(15)
+                ForegroundColor(t.text.opacity(0.92))
+            }
+            .strong { FontWeight(.semibold) }
+            .emphasis { FontStyle(.italic) }
+            .link { ForegroundColor(t.holoSoft) }
+            .code {
+                FontFamily(.system(.monospaced))
+                FontSize(.em(0.86))
+                ForegroundColor(t.holoSoft)
+                BackgroundColor(t.holo(0.10))
+            }
+            .heading1 { c in
+                c.label
+                    .markdownMargin(top: 14, bottom: 6)
+                    .markdownTextStyle { FontWeight(.semibold); FontSize(21); ForegroundColor(t.text) }
+            }
+            .heading2 { c in
+                c.label
+                    .markdownMargin(top: 12, bottom: 5)
+                    .markdownTextStyle { FontWeight(.semibold); FontSize(18); ForegroundColor(t.text) }
+            }
+            .heading3 { c in
+                c.label
+                    .markdownMargin(top: 10, bottom: 4)
+                    .markdownTextStyle { FontWeight(.semibold); FontSize(15.5); ForegroundColor(t.text) }
+            }
+            .paragraph { c in
+                c.label
+                    .lineSpacing(3)
+                    .markdownMargin(top: 0, bottom: 10)
+            }
+            .listItem { c in
+                c.label.markdownMargin(top: 2, bottom: 2)
+            }
+            .codeBlock { c in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    c.label
+                        .markdownTextStyle { FontFamily(.system(.monospaced)); FontSize(13); ForegroundColor(t.text) }
+                        .padding(12)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(t.holo(0.14)))
+                .markdownMargin(top: 6, bottom: 10)
+            }
+            .blockquote { c in
+                c.label
+                    .padding(.leading, 12)
+                    .foregroundStyle(t.textDim)
+                    .overlay(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 1).fill(t.holo(0.45)).frame(width: 2)
+                    }
+                    .markdownMargin(top: 6, bottom: 10)
+            }
     }
 }
 

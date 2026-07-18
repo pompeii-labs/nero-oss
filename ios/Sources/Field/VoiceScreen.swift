@@ -27,7 +27,7 @@ struct VoiceScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                IconButton(system: "chevron.down", size: 40, iconSize: 17, circle: true) { close() }
+                GlassIconButton(system: "chevron.down", size: 40, iconSize: 17) { close() }
                 Spacer()
                 Kicker(text: "voice", color: theme.textDim)
                 Spacer()
@@ -72,8 +72,7 @@ struct VoiceScreen: View {
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(theme.holo2())
                     .frame(width: 66, height: 66)
-                    .background(theme.holo2(0.1), in: Circle())
-                    .overlay(Circle().strokeBorder(theme.holo2(0.3)))
+                    .glassEffect(.regular.tint(theme.holo2(0.18)).interactive(), in: .circle)
             }
             .buttonStyle(PressableButtonStyle())
             .padding(.bottom, 34)

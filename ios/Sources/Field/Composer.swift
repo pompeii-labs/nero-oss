@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// The input dock, faithful to web Composer.svelte: a glass slab (radius 16, the
-/// 3-part shadow, holo border that brightens on focus), a `›` mono prompt, a growing
-/// field, and 34×34 rounded-square buttons (holo-gradient send / soft-holo stop).
+/// The input dock as an iOS 26 Liquid Glass field: a tinted glass surface, a growing
+/// text field, and a circular send (holo gradient) / stop (ember glass) control.
 struct Composer: View {
     @Environment(\.theme) private var theme
     @Binding var draft: String
@@ -15,51 +14,47 @@ struct Composer: View {
     private var isFocused: Bool { focused.wrappedValue }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            Text("›")
-                .font(Typeface.mono(15))
-                .foregroundStyle(theme.holo())
-                .padding(.bottom, 8)
-
+        HStack(alignment: .bottom, spacing: 8) {
             TextField("Message Nero", text: $draft, axis: .vertical)
-                .font(Typeface.ui(14))
+                .font(Typeface.ui(15))
                 .foregroundStyle(theme.text)
                 .tint(theme.holo())
                 .lineLimit(1...6)
                 .focused(focused)
-                .padding(.vertical, 6)
+                .padding(.leading, 10)
+                .padding(.vertical, 9)
 
             if busy {
-                squareButton(icon: "square.fill", iconSize: 13, fg: theme.text, bg: theme.holo(0.12), glow: false, action: onStop)
+                Button(action: onStop) {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(theme.holo2())
+                        .frame(width: 34, height: 34)
+                        .background(theme.holo2(0.16), in: Circle())
+                        .overlay(Circle().strokeBorder(theme.holo2(0.3)))
+                }
+                .buttonStyle(PressableButtonStyle())
             } else {
                 Button(action: onSend) {
                     Image(systemName: "arrow.up")
-                        .font(.system(size: 15, weight: .regular))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(theme.void_)
                         .frame(width: 34, height: 34)
                         .background(
                             LinearGradient(colors: [theme.holoSoft, theme.holo()], startPoint: .top, endPoint: .bottom),
-                            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            in: Circle()
                         )
-                        .shadow(color: theme.holo(canSend ? 0.6 : 0), radius: 8)
-                        .opacity(canSend ? 1 : 0.4)
+                        .shadow(color: theme.holo(canSend ? 0.55 : 0), radius: 8)
+                        .opacity(canSend ? 1 : 0.35)
                 }
                 .buttonStyle(PressableButtonStyle())
                 .disabled(!canSend)
             }
         }
-        .padding(.leading, 16).padding(.trailing, 10).padding(.vertical, 10)
-        .slab(focused: isFocused)
+        .padding(4)
+        .glassEffect(.regular.tint(theme.holo(isFocused ? 0.10 : 0.05)), in: shape)
+        .animation(.easeOut(duration: 0.2), value: isFocused)
     }
 
-    private func squareButton(icon: String, iconSize: CGFloat, fg: Color, bg: Color, glow: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: iconSize, weight: .medium))
-                .foregroundStyle(fg)
-                .frame(width: 34, height: 34)
-                .background(bg, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-        .buttonStyle(PressableButtonStyle())
-    }
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 24, style: .continuous) }
 }

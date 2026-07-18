@@ -105,6 +105,49 @@ struct IconButton: View {
     }
 }
 
+/// A circular iOS 26 Liquid Glass icon button (gear / back / close). Interactive
+/// glass gives the press-morph; a faint holo tint keeps it in Nero's palette.
+struct GlassIconButton: View {
+    @Environment(\.theme) private var theme
+    let system: String
+    var size: CGFloat = 40
+    var iconSize: CGFloat = 16
+    var tint: Color?
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: system)
+                .font(.system(size: iconSize, weight: .medium))
+                .foregroundStyle(tint ?? theme.text.opacity(0.85))
+                .frame(width: size, height: size)
+                .glassEffect(.regular.tint(theme.holo(0.10)).interactive(), in: .circle)
+        }
+        .buttonStyle(PressableButtonStyle(haptic: true))
+    }
+}
+
+/// A pill iOS 26 Liquid Glass button with a leading SF Symbol + label (the home
+/// "enter chat" affordance). Tinted interactive glass, not an input bar.
+struct GlassPillButton: View {
+    @Environment(\.theme) private var theme
+    let system: String
+    let title: String
+    var tint: Color?
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: system).font(.system(size: 15, weight: .medium))
+                Text(title).font(Typeface.ui(15))
+            }
+            .foregroundStyle(tint ?? theme.holoSoft)
+            .padding(.horizontal, 26).padding(.vertical, 15)
+            .glassEffect(.regular.tint(theme.holo(0.12)).interactive(), in: .capsule)
+        }
+        .buttonStyle(PressableButtonStyle())
+    }
+}
+
 /// The Nero settings surface: a mono kicker over a rounded holo-tinted card whose
 /// rows are separated by inset hairlines (no divider on the first row).
 struct SettingsSection<Content: View>: View {

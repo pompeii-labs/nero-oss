@@ -74,9 +74,9 @@ struct HomeScreen: View {
                     }
                 }
                 Spacer()
-                IconButton(system: "gearshape", size: 30, iconSize: 15, radius: 8, action: onSettings)
+                GlassIconButton(system: "gearshape", size: 40, iconSize: 16, action: onSettings)
             }
-            .padding(.horizontal, 22).padding(.top, 6)
+            .padding(.horizontal, 20).padding(.top, 6)
 
             Spacer()
             Button(action: onTalk) { Orb(state: orbState, size: 216) }
@@ -87,18 +87,8 @@ struct HomeScreen: View {
                 .padding(.top, 22)
             Spacer()
 
-            Button(action: onType) {
-                HStack(spacing: 10) {
-                    Text("›").font(Typeface.mono(15)).foregroundStyle(theme.holo(0.7))
-                    Text("Message Nero").font(Typeface.ui(14)).foregroundStyle(theme.textFaint)
-                    Spacer()
-                    Image(systemName: "keyboard").font(.system(size: 14)).foregroundStyle(theme.textFaint)
-                }
-                .padding(.leading, 16).padding(.trailing, 14).padding(.vertical, 13)
-                .slab()
-            }
-            .buttonStyle(PressableButtonStyle(haptic: false))
-            .padding(.horizontal, 16).padding(.bottom, 8)
+            GlassPillButton(system: "text.bubble", title: "Message Nero", action: onType)
+                .padding(.bottom, 20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { Atmosphere() }
