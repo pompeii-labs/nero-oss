@@ -1,0 +1,4 @@
+// Copy this to `Local.xcconfig` (gitignored) and set your Apple Developer Team ID.
+// This survives `xcodegen generate`, so your signing never gets wiped.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+CODE_SIGN_STYLE = Automatic

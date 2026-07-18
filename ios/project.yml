@@ -14,6 +14,9 @@ targets:
   Nero:
     type: application
     platform: iOS
+    configFiles:
+      Debug: Local.xcconfig
+      Release: Local.xcconfig
     sources:
       - path: Sources
       - path: Resources
