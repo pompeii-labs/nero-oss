@@ -56,6 +56,8 @@ final class VoiceSession: ObservableObject {
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
         try session.setActive(true)
+        // voiceChat routes to the earpiece by default; force the speaker so Nero is audible.
+        try? session.overrideOutputAudioPort(.speaker)
 
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: playFormat)
