@@ -133,8 +133,10 @@ struct ChatScreen: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.holo(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.holo(0.16)))
+        .background(theme.void_, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(theme.holo(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.holo(0.2)))
+        .shadow(color: .black.opacity(0.5), radius: 16, y: 6)
     }
 
     private func resultCard(_ text: String) -> some View {
