@@ -17,7 +17,7 @@ export const apnsMedium: Medium = {
         const enqueued = await sendPush({
             title: n.title,
             body: n.body,
-            sound: 'nero.caf', // custom Nero tone (bundled in the app); falls back to default
+            sound: 'default', // the user's system notification tone
             data: n.url ? { url: n.url } : undefined,
         });
         if (enqueued === 0) throw new Error('push enqueued to 0 devices');
