@@ -1,0 +1,75 @@
+import Foundation
+import SwiftUI
+
+/// Owns the realtime connection and all Field state. Views observe it; writes go
+/// through `client`. Rows arrive as `event`s and are upserted by id.
+@MainActor
+final class NeroStore: ObservableObject {
+    @Published private(set) var connected = false
+    @Published private(set) var messages: [ChatMessage] = []
+    @Published private(set) var dispatch: DispatchState?
+    @Published private(set) var questions: [Question] = []
+    @Published private(set) var projects: [Project] = []
+    @Published private(set) var tasks: [ProjectTask] = []
+    @Published private(set) var panels: [Panel] = []
+
+    let client: NeroClient
+    private let stream = RealtimeStream()
+
+    init(base: URL) { client = NeroClient(base: base) }
+
+    func start() {
+        stream.connect(
+            base: client.base,
+            onEvent: { [weak self] ev in Task { @MainActor in self?.apply(ev) } },
+            onStatus: { [weak self] c in Task { @MainActor in self?.connected = c } }
+        )
+    }
+    func stop() { stream.disconnect() }
+
+    // MARK: writes
+    func send(_ text: String) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        Task { try? await client.send(t) }
+    }
+    func cancel() { Task { await client.cancel() } }
+
+    /// The in-flight assistant bubble: the active dispatch, unless a persisted
+    /// assistant message for it already landed (then the message takes over).
+    var liveDispatch: DispatchState? {
+        guard let d = dispatch, d.isActive || !(d.streaming_text ?? "").isEmpty else { return nil }
+        if messages.contains(where: { $0.dispatch_id == d.id && $0.isAssistant }) { return nil }
+        return d
+    }
+
+    // MARK: event application
+    private func apply(_ ev: StreamEvent) {
+        switch ev {
+        case .ready: break
+        case .message(let m): upsertMessage(m)
+        case .dispatch(let d): dispatch = d
+        case .question(let q): upsert(&questions, q)
+        case .project(let p): upsert(&projects, p)
+        case .task(let t): upsert(&tasks, t)
+        case .panel(let data):
+            if let p = try? JSONDecoder().decode(Panel.self, from: data) { upsert(&panels, p) }
+        }
+    }
+
+    private func upsertMessage(_ m: ChatMessage) {
+        if let i = messages.firstIndex(where: { $0.id == m.id }) { messages[i] = m }
+        else {
+            messages.append(m)
+            messages.sort { $0.id < $1.id }
+        }
+    }
+
+    private func upsert<T: Identifiable & Equatable>(_ arr: inout [T], _ row: T) {
+        if let i = arr.firstIndex(where: { $0.id == row.id }) {
+            if arr[i] != row { arr[i] = row }
+        } else {
+            arr.append(row)
+        }
+    }
+}
