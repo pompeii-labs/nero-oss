@@ -13,6 +13,7 @@ import { secretRoutes } from './routes/secrets';
 import { askRoutes } from './routes/ask';
 import { projectRoutes } from './routes/projects';
 import { mediumRoutes } from './routes/mediums';
+import { pushRoutes } from './routes/push';
 import { browserRoutes } from './routes/browser';
 import { Dispatcher } from './services/harness/dispatch';
 
@@ -39,6 +40,7 @@ export function createApp(deps: Partial<NeroDeps> = {}, upgradeWebSocket?: Upgra
     app.route('/', askRoutes());
     app.route('/', projectRoutes());
     app.route('/', mediumRoutes());
+    app.route('/', pushRoutes());
     if (upgradeWebSocket) {
         app.route('/', voiceRoutes(upgradeWebSocket));
         app.route('/', browserRoutes(upgradeWebSocket));

@@ -1,6 +1,7 @@
 import { Secret } from '../../models/secret';
 import { MediumActivity } from '../../models/medium-activity';
 import { pushMedium } from './push';
+import { apnsMedium } from './apns';
 import type { Medium, Notification } from './types';
 
 export interface MediumStatus {
@@ -17,7 +18,7 @@ export interface NotifyResult {
 /** The outbound notification layer: every channel Nero can reach the user through,
  *  plus delivery + audit. Add a medium to `channels` to wire it in. */
 export class Mediums {
-    static readonly channels: Medium[] = [pushMedium];
+    static readonly channels: Medium[] = [pushMedium, apnsMedium];
 
     static async statuses(): Promise<MediumStatus[]> {
         const secrets = await Secret.loadMap();

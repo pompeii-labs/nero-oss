@@ -1,0 +1,1 @@
+TCREATE push_tokens id UUID PRIMARY KEY DEFAULT uuid(), token TEXT, platform TEXT DEFAULT 'ios', bundle_id TEXT, created_at INT DEFAULT now()
