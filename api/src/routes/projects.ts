@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Project } from '../models/project';
 import { deliverApproval, deliverMergeApproval } from '../services/projects/approval';
-import { scheduleReady } from '../services/projects/runner';
+import { scheduleReady, launchProject } from '../services/projects/runner';
 import { openPr } from '../services/projects/git';
 import { getQueue } from '../lib/queue';
 import { error } from '../util/errors';
@@ -23,15 +23,24 @@ export function projectRoutes(): Hono {
             const p = await Project.get(id);
             if (!p) return error(c, 404);
 
+            // If the plan's in-memory waiter is gone (the API restarted since planning),
+            // drive the outcome directly — the plan + tasks are persisted, so the worker
+            // can run without the original plan turn. Otherwise the waiter handles it.
             if (b.action === 'run') {
                 const budgetUsd = Number(b.budgetUsd);
                 if (!Number.isFinite(budgetUsd) || budgetUsd <= 0)
                     return error(c, 400, 'budget required');
-                deliverApproval(id, { kind: 'run', budgetUsd });
+                if (!deliverApproval(id, { kind: 'run', budgetUsd })) {
+                    await launchProject(id, budgetUsd);
+                }
             } else if (b.action === 'tweak') {
-                deliverApproval(id, { kind: 'tweak', note: String(b.note ?? '').trim() });
+                if (!deliverApproval(id, { kind: 'tweak', note: String(b.note ?? '').trim() })) {
+                    await Project.update(id, { status: 'cancelled' });
+                }
             } else {
-                deliverApproval(id, { kind: 'cancel' });
+                if (!deliverApproval(id, { kind: 'cancel' })) {
+                    await Project.update(id, { status: 'cancelled' });
+                }
             }
             return c.json({ ok: true });
         } catch (err) {
