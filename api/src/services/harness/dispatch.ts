@@ -9,6 +9,7 @@ import { fileBase64 } from '../files/store';
 import { Dispatch } from '../../models/dispatch';
 import { Message } from '../../models/message';
 import { Settings } from '../../models/settings';
+import { Mediums } from '../mediums/registry';
 import { Logger } from '@nero/shared/logger';
 import type { AttachmentRef } from '../../models/message';
 import type { AgentActivity } from './activity';
@@ -190,11 +191,22 @@ export class Dispatcher {
             if (entry.cancelled) {
                 await emitter.status('cancelled');
             } else {
+                const reply = (final?.content ?? '').trim();
                 await emitter.status('compacting');
                 await foldThread().catch((e) =>
                     log.error('compaction failed', { error: String(e) }),
                 );
                 await emitter.status('done');
+                // Reply-when-away: nudge the user if no surface is on-screen. notify()'s
+                // presence gate suppresses this while you're looking at Nero, so it only
+                // buzzes when you've left. Push channel only (not other mediums).
+                if (reply) {
+                    const body = reply.length > 300 ? reply.slice(0, 297) + '…' : reply;
+                    void Mediums.notify(
+                        { title: 'Nero', body, urgency: 'normal', url: '/' },
+                        { only: ['apns'] },
+                    ).catch(() => {});
+                }
             }
         } catch (err) {
             if (entry.cancelled) {

@@ -2,6 +2,7 @@ import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
 import { Mediums } from './registry';
+import { Message } from '../../models/message';
 import type { Urgency } from './types';
 import { Args } from '../../util/args';
 
@@ -44,8 +45,12 @@ export class NotifyUtility {
         const urgency = ['low', 'normal', 'high'].includes(a.str('urgency'))
             ? (call.fn_args.urgency as Urgency)
             : 'normal';
-        const res = await Mediums.notify({ title: title || 'Nero', body: body || title, urgency });
-        if (res.delivered.length) return `Sent via ${res.delivered.join(', ')}.`;
-        return `Could not send: ${res.failed.map((f) => `${f.name} (${f.error})`).join('; ')}`;
+        const text = body || title;
+        // Leave the message in the conversation so it's there when they open the app,
+        // then push (gated by presence). Standalone message -> its own dispatch id.
+        await Message.insertAgentText(text, crypto.randomUUID()).catch(() => {});
+        const res = await Mediums.notify({ title: title || 'Nero', body: text, urgency });
+        if (res.delivered.length) return `Sent to your app (via ${res.delivered.join(', ')}).`;
+        return `Saved to the thread; push not delivered: ${res.failed.map((f) => `${f.name} (${f.error})`).join('; ') || 'no device registered'}.`;
     }
 }
