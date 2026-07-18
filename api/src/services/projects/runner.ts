@@ -515,13 +515,11 @@ export async function launchProject(projectId: string, budgetUsd: number): Promi
     await scheduleReady(projectId);
 }
 
-/** On boot: interrupted projects resume; abandoned approvals are cancelled. */
+/** On boot: interrupted projects resume. Plans still `awaiting_approval` are LEFT
+ *  as-is — the approve route drives them without the (now dead) in-memory waiter, so
+ *  a restart no longer loses a pending plan. */
 export async function resumeProjects(): Promise<number> {
     let n = 0;
-    for (const p of await Project.listByStatus('awaiting_approval')) {
-        await Project.update(p.id, { status: 'cancelled' }); // waiter died with the process
-        n++;
-    }
     const running = await Project.listByStatus('running');
     const fresh: typeof running = [];
     for (const p of running) {
