@@ -6,8 +6,7 @@ struct NeroApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .ignoresSafeArea()
+            RootView()
         }
     }
 }

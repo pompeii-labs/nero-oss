@@ -1,125 +1,130 @@
 import SwiftUI
 
-struct ContentView: View {
+/// App root. Onboarding when no server URL is stored, otherwise the chat UI.
+struct RootView: View {
     @AppStorage(PushRegistration.serverURLKey) private var serverURL: String = ""
+    @StateObject private var client = NeroClient()
+    @State private var showSettings = false
 
-    @State private var showOnboarding = false
-    @State private var reloadTrigger = 0
-    @State private var navigateURL: URL?
-
-    private var resolvedURL: URL? {
-        let trimmed = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return URL(string: trimmed)
+    private var hasServer: Bool {
+        NeroClient.normalize(serverURL) != nil
     }
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            if let url = resolvedURL, !showOnboarding {
-                WebView(url: url, reloadTrigger: $reloadTrigger, navigateURL: $navigateURL)
-                    .ignoresSafeArea()
-                    .overlay(alignment: .topTrailing) {
-                        Button {
-                            showOnboarding = true
-                        } label: {
-                            Image(systemName: "gearshape.fill")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.7))
-                                .padding(10)
-                                .background(.ultraThinMaterial, in: Circle())
+        Group {
+            if hasServer {
+                NavigationStack {
+                    ChatView(client: client, baseURL: client.baseURL)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button {
+                                    showSettings = true
+                                } label: {
+                                    Image(systemName: "gearshape")
+                                }
+                            }
                         }
-                        .padding(.top, 8)
-                        .padding(.trailing, 12)
-                    }
-            } else {
-                OnboardingView(serverURL: $serverURL) {
-                    showOnboarding = false
-                    reloadTrigger += 1
-                    PushRegistration.reregister()
+                        .navigationTitle("Nero")
+                        .navigationBarTitleDisplayMode(.inline)
                 }
+                .sheet(isPresented: $showSettings) {
+                    SettingsView(serverURL: $serverURL)
+                }
+            } else {
+                OnboardingView(serverURL: $serverURL)
             }
         }
-        .onAppear {
-            if resolvedURL == nil {
-                showOnboarding = true
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .neroOpenURL)) { note in
-            if let url = note.object as? URL {
-                showOnboarding = false
-                navigateURL = url
-            }
+        .preferredColorScheme(.dark)
+        .onAppear { syncClient() }
+        .onChange(of: serverURL) { syncClient() }
+    }
+
+    private func syncClient() {
+        if hasServer {
+            client.configure(baseURLString: serverURL)
+            PushRegistration.reregister()
+        } else {
+            client.disconnect()
         }
     }
 }
 
+/// First-run setup: enter a server URL, validate via health, store it.
 struct OnboardingView: View {
     @Binding var serverURL: String
-    var onConnect: () -> Void
-
-    @State private var draft: String = ""
+    @State private var draft = ""
+    @State private var checking = false
+    @State private var errorText: String?
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 24) {
+                Spacer()
+                VStack(spacing: 8) {
+                    Text("Nero")
+                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                    Text("Connect to your Nero server")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.6))
+                }
 
-            VStack(spacing: 8) {
-                Text("Nero")
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                Text("Connect to your Nero server")
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.6))
-            }
+                VStack(alignment: .leading, spacing: 12) {
+                    TextField("https://nero-rig.tailXXXX.ts.net", text: $draft)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .keyboardType(.URL)
+                        .submitLabel(.go)
+                        .padding()
+                        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                        .onSubmit(connect)
 
-            VStack(alignment: .leading, spacing: 12) {
-                TextField(
-                    "https://nero-rig.tailXXXX.ts.net",
-                    text: $draft
-                )
-                .textFieldStyle(.plain)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-                .keyboardType(.URL)
-                .submitLabel(.go)
-                .padding()
-                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                .foregroundStyle(.white)
-                .onSubmit(connect)
+                    if let errorText {
+                        Text(errorText)
+                            .font(.footnote)
+                            .foregroundStyle(.red.opacity(0.9))
+                    }
 
-                Button(action: connect) {
-                    Text("Connect")
-                        .font(.headline)
+                    Button(action: connect) {
+                        HStack {
+                            if checking { ProgressView().tint(.white) }
+                            Text(checking ? "Connecting…" : "Connect")
+                                .font(.headline)
+                        }
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(isValid ? Color.accentColor : Color.gray.opacity(0.4))
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .disabled(!isValid || checking)
                 }
-                .disabled(!isValid)
+                .padding(.horizontal, 24)
+                Spacer()
             }
-            .padding(.horizontal, 24)
-
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.ignoresSafeArea())
-        .onAppear {
-            draft = serverURL
         }
     }
 
     private var isValid: Bool {
-        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed), let scheme = url.scheme else { return false }
-        return (scheme == "http" || scheme == "https") && url.host != nil
+        NeroClient.normalize(draft) != nil
     }
 
     private func connect() {
-        guard isValid else { return }
-        serverURL = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        onConnect()
+        guard isValid, !checking else { return }
+        checking = true
+        errorText = nil
+        Task {
+            let ok = await NeroClient.checkHealth(baseURLString: draft)
+            await MainActor.run {
+                checking = false
+                if ok {
+                    serverURL = NeroClient.normalize(draft)?.absoluteString ?? draft
+                } else {
+                    errorText = "Could not reach a Nero server at that URL."
+                }
+            }
+        }
     }
 }
