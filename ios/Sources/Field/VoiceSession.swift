@@ -57,10 +57,12 @@ final class VoiceSession: ObservableObject {
     // MARK: audio graph
     private func configureAudio() throws {
         let session = AVAudioSession.sharedInstance()
-        // voiceChat is the audible, echo-cancelled config (videoChat produced silence
-        // on-device). allowBluetooth(A2DP) exposes headsets in the route picker.
-        try session.setCategory(.playAndRecord, mode: .voiceChat,
-                                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
+        // Plain .default mode (no voiceChat/videoChat): voiceChat ignores the speaker
+        // override (always earpiece) and videoChat produced silence on-device. We don't
+        // need hardware echo cancellation because the mic is gated while Nero speaks
+        // (half-duplex). No .defaultToSpeaker so override(.none) gives a real earpiece.
+        try session.setCategory(.playAndRecord, mode: .default,
+                                options: [.allowBluetooth, .allowBluetoothA2DP])
         try session.setActive(true)
         applyOutput()
 
