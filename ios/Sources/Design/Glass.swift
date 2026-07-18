@@ -65,7 +65,6 @@ struct Atmosphere: View {
                 startRadius: 0,
                 endRadius: 900
             )
-            .ignoresSafeArea()
 
             cloud(theme.holo(0.07), size: 520)
                 .offset(x: drift ? -60 : -110, y: drift ? -140 : -80)
@@ -78,9 +77,13 @@ struct Atmosphere: View {
                 startRadius: 240,
                 endRadius: 640
             )
-            .ignoresSafeArea()
             .blendMode(.multiply)
         }
+        // Clamp to the screen + clip: the oversized clouds must NOT expand the layout,
+        // or they'd widen the whole view and shove edge content off-screen.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .ignoresSafeArea()
         .onAppear {
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 46).repeatForever(autoreverses: true)) { drift = true }

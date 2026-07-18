@@ -69,7 +69,9 @@ struct Orb: View {
 
             reticle
         }
-        .frame(width: size * 1.6, height: size * 1.6)
+        // Layout footprint is the diameter; the bloom + reticle overflow visually
+        // (not clipped) so the orb doesn't push surrounding layout off-screen.
+        .frame(width: size, height: size)
         .scaleEffect(breathe ? 1.025 : 1.0)
         .onAppear(perform: run)
         .onChange(of: state) { _, _ in run() }
