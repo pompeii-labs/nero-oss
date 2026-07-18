@@ -59,12 +59,14 @@ export interface Settings {
 }
 
 export interface Devices {
+    ambient: boolean | null;
     connected: boolean | null;
     created_at: number | null;
     id: string;
     kind: string | null;
     last_seen: number | null;
     name: string | null;
+    room: string | null;
     screen_h: number | null;
     screen_w: number | null;
 }

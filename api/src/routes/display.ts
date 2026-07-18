@@ -41,6 +41,22 @@ export function displayRoutes(): Hono {
         }
     });
 
+    // Opt a display into/out of ambient presence (glanceable orb + wakeword when not focused).
+    app.post('/v1/devices/ambient', async (c) => {
+        try {
+            const b = (await c.req.json().catch(() => ({}))) as {
+                id?: string;
+                ambient?: boolean;
+                room?: string | null;
+            };
+            if (!b.id) return error(c, 400, 'id required');
+            await Device.setAmbient(b.id, !!b.ambient, b.room);
+            return c.json({ ok: true, ambient: !!b.ambient });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
     // Bring Nero (the orb) to a device.
     app.post('/v1/presence', async (c) => {
         try {

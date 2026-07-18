@@ -1,0 +1,2 @@
+TALTER devices ADD ambient BOOL DEFAULT false
+TALTER devices ADD room TEXT

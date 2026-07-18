@@ -63,3 +63,9 @@ export async function heartbeatDevice(): Promise<void> {
 export async function bringNeroHere(): Promise<void> {
     await post('/v1/presence', { deviceId: deviceId() });
 }
+
+/** Opt this display into (or out of) ambient presence: a glanceable orb + wakeword
+ *  listening even when Nero isn't focused here. */
+export async function setAmbient(ambient: boolean, room?: string | null): Promise<void> {
+    await post('/v1/devices/ambient', { id: deviceId(), ambient, room });
+}

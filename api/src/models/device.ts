@@ -10,6 +10,11 @@ export interface DeviceData {
     screen_h: number;
     connected: boolean;
     last_seen: number;
+    /** Opted into ambient presence: shows a glanceable orb + listens for the wakeword
+     *  even when Nero isn't focused here. */
+    ambient: boolean;
+    /** Optional room/zone grouping for co-located displays. */
+    room: string | null;
 }
 
 export interface RegisterInput {
@@ -82,6 +87,8 @@ export class Device extends DataModel<DeviceData> {
     screen_h!: number;
     connected!: boolean;
     last_seen!: number;
+    ambient!: boolean;
+    room!: string | null;
 
     constructor(data: DeviceData) {
         super();
@@ -127,6 +134,8 @@ export class Device extends DataModel<DeviceData> {
             screen_h: input.screen_h,
             connected: true,
             last_seen: Date.now(),
+            ambient: existing?.ambient ?? false,
+            room: existing?.room ?? null,
         };
         if (existing) unwrap(await t.update(body as never).eq('id', input.id));
         else unwrap(await t.insert(body as never));
@@ -144,6 +153,13 @@ export class Device extends DataModel<DeviceData> {
 
     static async setConnected(id: string, connected: boolean): Promise<void> {
         await Device.update(id, { connected });
+    }
+
+    /** Opt a display into (or out of) ambient presence. */
+    static async setAmbient(id: string, ambient: boolean, room?: string | null): Promise<void> {
+        const patch: Partial<DeviceData> = { ambient };
+        if (room !== undefined) patch.room = room;
+        await Device.update(id, patch);
     }
 
     static async listAll(): Promise<Device[]> {
