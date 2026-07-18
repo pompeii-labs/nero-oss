@@ -3,7 +3,7 @@ import SwiftUI
 /// Onboarding until a server URL is set, then the Field. `.id(serverURL)` rebuilds
 /// the store (and its realtime connection) when the server changes.
 struct RootView: View {
-    @AppStorage(NeroConfig.serverKey) private var serverURL: String = ""
+    @AppStorage(NeroConfig.serverKey) private var serverURL: String = NeroConfig.defaultURL
     @AppStorage("nero.theme") private var themeId: String = "obsidian"
 
     var body: some View {

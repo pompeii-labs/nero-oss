@@ -2,14 +2,20 @@ import Foundation
 
 enum NeroConfig {
     static let serverKey = "nero.serverURL"
+    /// Baked-in default so a fresh install skips onboarding (works on/off LAN with
+    /// Tailscale on). Disconnecting in Settings clears it and returns to onboarding.
+    static let defaultURL = "https://nero-rig.tail37322a.ts.net"
+
     static var serverURL: URL? {
-        guard let s = UserDefaults.standard.string(forKey: serverKey), let u = URL(string: s) else { return nil }
+        // Unset -> the default; explicitly cleared ("") -> nil (back to onboarding).
+        let s = UserDefaults.standard.string(forKey: serverKey) ?? defaultURL
+        guard !s.isEmpty, let u = URL(string: s) else { return nil }
         return u
     }
     static func setServer(_ s: String) {
         UserDefaults.standard.set(s.trimmingCharacters(in: .whitespaces), forKey: serverKey)
     }
-    static func clear() { UserDefaults.standard.removeObject(forKey: serverKey) }
+    static func clear() { UserDefaults.standard.set("", forKey: serverKey) }
 }
 
 /// Thin HTTP wrapper over Nero's API. All realtime comes from RealtimeStream; this
