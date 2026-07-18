@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Device } from '../models/device';
 import { Presence } from '../models/presence';
 import { userHeartbeat } from '../services/user-presence';
+import { getLux } from '@nero/shared/lux';
 import { error } from '../util/errors';
 
 /** Device + presence writes. Reads/subscriptions happen straight from Lux in the
@@ -87,6 +88,23 @@ export function displayRoutes(): Hono {
             /* ignore */
         }
         return c.json({ ok: true });
+    });
+
+    // TEMP debug: what does exec return for RESP SET/GET/EXISTS?
+    app.get('/v1/presence/debug', async (c) => {
+        const out: Record<string, unknown> = {};
+        const run = async (k: string, cmd: string) => {
+            try {
+                out[k] = await getLux().exec(cmd);
+            } catch (e) {
+                out[k + 'Err'] = String(e);
+            }
+        };
+        await run('set', 'SET nero:dbg hello EX 60');
+        await run('get', 'GET nero:dbg');
+        await run('existsHit', 'EXISTS nero:dbg');
+        await run('existsMiss', 'EXISTS nero:definitely-not-here');
+        return c.json(out);
     });
 
     return app;
