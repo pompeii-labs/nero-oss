@@ -69,6 +69,11 @@ export class NeroAgent extends MagmaAgent {
     /** The model this run actually uses (Lux override or env default). */
     private resolvedModel: string;
     private voice: boolean;
+    /** Frozen at construction (one agent == one turn) so the system prompt's "now" is
+     *  identical across every LLM call in the turn's loop. Keeps the cache prefix
+     *  (tools + system + history) byte-stable so the provider auto-caches it instead of
+     *  re-billing the full context on every step. */
+    private clock = new Date();
 
     constructor(opts: NeroAgentOpts = {}) {
         const cfg = loadConfig();
@@ -180,7 +185,7 @@ export class NeroAgent extends MagmaAgent {
 
     getSystemPrompts() {
         const cfg = loadConfig();
-        const now = new Date();
+        const now = this.clock;
         const human = now.toLocaleString('en-US', {
             timeZone: cfg.timezone,
             weekday: 'long',
