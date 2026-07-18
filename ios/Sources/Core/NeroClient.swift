@@ -29,6 +29,21 @@ struct NeroClient {
     }
     func cancel() async { _ = try? await post("/v1/nero/cancel", [:]) }
 
+    // MARK: commands
+    func getModel() async -> String? {
+        (try? await getJSON("/v1/settings", SettingsResponse.self))?.model
+    }
+    func setModel(_ slug: String) async -> Bool {
+        (try? await post("/v1/settings", ["model": slug])) != nil
+    }
+    func compact() async -> String {
+        guard let d = try? await post("/v1/compact", [:]),
+              let r = try? JSONDecoder().decode(CompactResponse.self, from: d) else {
+            return "Failed to compact."
+        }
+        return r.compacted ? "Memory compacted, older history folded into the summary." : "Already compact."
+    }
+
     // MARK: panels
     func panelInteract(_ id: String, control: String, intent: String?, value: Any?) async {
         var body: [String: Any] = ["control": control]
@@ -113,3 +128,5 @@ struct SecretMeta: Codable, Identifiable { var id: String { key }; let key: Stri
 struct SecretsResponse: Codable { let secrets: [SecretMeta] }
 struct McpServer: Codable, Identifiable { var id: String { name }; let name: String; let url: String?; let connected: Bool; let tools: [String]? }
 struct McpListResponse: Codable { let integrations: [McpServer] }
+struct SettingsResponse: Codable { let model: String? }
+struct CompactResponse: Codable { let compacted: Bool; let summary: String? }

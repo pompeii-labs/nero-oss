@@ -7,9 +7,15 @@ struct ChatScreen: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var store: NeroStore
     @State private var draft = ""
+    @State private var cmdResult: String?
     @FocusState private var focused: Bool
 
     private var bubbles: [ChatMessage] { store.messages.filter(\.isBubble) }
+    private var slashPartial: String? {
+        guard draft.hasPrefix("/"), !draft.contains(" ") else { return nil }
+        return String(draft.dropFirst())
+    }
+    private var suggestions: [SlashCommand] { slashPartial.map { Slash.suggestions($0) } ?? [] }
     private var pendingQuestion: Question? { store.questions.first { $0.isPending } }
     private var approvalProject: Project? { store.projects.first { $0.status == "awaiting_approval" } }
     private var mergeProject: Project? { store.projects.first { $0.merge_conflict != nil } }
@@ -71,6 +77,68 @@ struct ChatScreen: View {
         }
     }
 
+    private func handleSend() {
+        let text = draft
+        if text.hasPrefix("/") {
+            draft = ""
+            guard let (cmd, args) = Slash.parse(text) else {
+                cmdResult = "Unknown command. Type /help for the list."
+                return
+            }
+            Task {
+                let r = await cmd.run(store, args)
+                await MainActor.run { cmdResult = r }
+            }
+        } else {
+            store.send(text)
+            draft = ""
+        }
+    }
+
+    private var suggestionList: some View {
+        VStack(spacing: 0) {
+            ForEach(suggestions) { c in
+                Button {
+                    draft = "/\(c.name)"
+                    handleSend()
+                } label: {
+                    HStack(spacing: 10) {
+                        Text("/\(c.name)").font(Typeface.mono(13)).foregroundStyle(theme.holoSoft)
+                        Text(c.description).font(Typeface.ui(12)).foregroundStyle(theme.textDim)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .overlay(alignment: .top) {
+                    if c.id != suggestions.first?.id {
+                        Rectangle().fill(theme.holo(0.08)).frame(height: 1).padding(.leading, 12)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.holo(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.holo(0.16)))
+    }
+
+    private func resultCard(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ScrollView { Text(text).font(Typeface.mono(12)).foregroundStyle(theme.textDim).frame(maxWidth: .infinity, alignment: .leading) }
+                .frame(maxHeight: 220)
+            Button { cmdResult = nil } label: {
+                Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).foregroundStyle(theme.textFaint)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.holo(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.holo(0.18)))
+    }
+
     @ViewBuilder private func liveStatus(_ d: DispatchState) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             if let acts = d.activities, !acts.isEmpty {
@@ -114,12 +182,14 @@ struct ChatScreen: View {
                 }
                 .frame(maxHeight: 440)
             } else {
+                if let r = cmdResult { resultCard(r) }
+                if !suggestions.isEmpty { suggestionList }
                 if let d = store.liveDispatch { liveStatus(d) }
                 Composer(
                     draft: $draft,
                     busy: store.liveDispatch != nil,
                     focused: $focused,
-                    onSend: { store.send(draft); draft = "" },
+                    onSend: { handleSend() },
                     onStop: { store.cancel() }
                 )
             }
