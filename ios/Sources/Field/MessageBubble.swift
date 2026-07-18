@@ -7,17 +7,59 @@ struct MessageBubble: View {
     @Environment(\.theme) private var theme
     let role: String       // "user" | "assistant"
     let text: String
+    var images: [Attachment] = []
+    var base: URL?
+
+    private var isUser: Bool { role == "user" }
 
     var body: some View {
         HStack(spacing: 0) {
-            if role == "user" { Spacer(minLength: 52) }
-            content
-            if role == "assistant" { Spacer(minLength: 24) }
+            if isUser { Spacer(minLength: 52) }
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 7) {
+                if !images.isEmpty { imageStack }
+                if !text.isEmpty { content }
+            }
+            if !isUser { Spacer(minLength: 24) }
         }
     }
 
+    private var imageStack: some View {
+        VStack(alignment: isUser ? .trailing : .leading, spacing: 6) {
+            ForEach(images) { img in
+                AsyncImage(url: fileURL(img.id)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFit()
+                    case .failure:
+                        placeholder(icon: "photo")
+                    default:
+                        placeholder(icon: nil)
+                    }
+                }
+                .frame(maxWidth: 240, maxHeight: 300)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(theme.holo(0.18)))
+            }
+        }
+    }
+
+    private func placeholder(icon: String?) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(theme.holo(0.06))
+            .frame(width: 200, height: 150)
+            .overlay {
+                if let icon { Image(systemName: icon).font(.system(size: 22)).foregroundStyle(theme.textFaint) }
+                else { ProgressView().tint(theme.holoSoft) }
+            }
+    }
+
+    private func fileURL(_ id: String) -> URL? {
+        guard let base else { return nil }
+        return URL(string: "/v1/files/\(id)", relativeTo: base)
+    }
+
     @ViewBuilder private var content: some View {
-        if role == "user" {
+        if isUser {
             Text(text)
                 .font(Typeface.ui(15))
                 .foregroundStyle(theme.text)

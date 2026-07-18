@@ -66,7 +66,8 @@ struct ChatScreen: View {
                             if m.isAssistant, let acts = store.toolsByDispatch[m.dispatch_id ?? ""], !acts.isEmpty {
                                 ToolGroup(activities: acts)
                             }
-                            MessageBubble(role: m.role ?? "assistant", text: m.content ?? "")
+                            MessageBubble(role: m.role ?? "assistant", text: m.content ?? "",
+                                          images: m.images, base: store.client.base)
                         }
                         .id(m.id)
                     }
@@ -90,7 +91,7 @@ struct ChatScreen: View {
         }
     }
 
-    private func handleSend() {
+    private func handleSend(_ images: [PendingImage] = []) {
         let text = draft
         if text.hasPrefix("/") {
             draft = ""
@@ -103,7 +104,7 @@ struct ChatScreen: View {
                 await MainActor.run { cmdResult = r }
             }
         } else {
-            store.send(text)
+            store.send(text, images: images)
             draft = ""
         }
     }
@@ -197,7 +198,7 @@ struct ChatScreen: View {
                     draft: $draft,
                     busy: store.liveDispatch != nil,
                     focused: $focused,
-                    onSend: { handleSend() },
+                    onSend: { imgs in handleSend(imgs) },
                     onStop: { store.cancel() }
                 )
             }

@@ -31,10 +31,11 @@ final class NeroStore: ObservableObject {
     func stop() { stream.disconnect() }
 
     // MARK: writes
-    func send(_ text: String) {
+    func send(_ text: String, images: [PendingImage] = []) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty else { return }
-        Task { try? await client.send(t) }
+        guard !t.isEmpty || !images.isEmpty else { return }
+        let uploads = images.map { NeroClient.Upload(data: $0.data, mime: $0.mime, name: $0.name) }
+        Task { try? await client.send(t, attachments: uploads) }
     }
     func cancel() { Task { await client.cancel() } }
 

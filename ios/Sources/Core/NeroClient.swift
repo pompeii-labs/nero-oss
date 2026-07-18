@@ -24,8 +24,16 @@ struct NeroClient {
     let base: URL
 
     // MARK: chat
-    func send(_ text: String) async throws {
-        _ = try await post("/v1/nero", ["text": text])
+    struct Upload { let data: Data; let mime: String; let name: String }
+
+    func send(_ text: String, attachments: [Upload] = []) async throws {
+        var body: [String: Any] = ["text": text]
+        if !attachments.isEmpty {
+            body["attachments"] = attachments.map {
+                ["data": $0.data.base64EncodedString(), "mimeType": $0.mime, "name": $0.name]
+            }
+        }
+        _ = try await post("/v1/nero", body)
     }
     func cancel() async { _ = try? await post("/v1/nero/cancel", [:]) }
 

@@ -37,18 +37,35 @@ enum JSONValue: Codable, Equatable {
 
 // MARK: - Chat
 
+/// An image the user picked in the composer, not yet sent.
+struct PendingImage: Identifiable, Equatable {
+    let id = UUID()
+    let data: Data
+    let mime: String
+    let name: String
+}
+
+struct Attachment: Codable, Equatable, Identifiable {
+    let id: String
+    let mime: String
+    let name: String
+    var isImage: Bool { mime.hasPrefix("image/") }
+}
+
 struct ChatMessage: Codable, Identifiable, Equatable {
     let id: Int
     let role: String?     // user | assistant | system
     let type: String?     // message | agent_text | tool_call | interaction
     let content: String?
     let dispatch_id: String?
+    let attachments: [Attachment]?
     let created_at: Int?
 
     var isUser: Bool { role == "user" }
     var isAssistant: Bool { role == "assistant" }
     /// Rows we render as chat bubbles (not tool_call / interaction plumbing).
     var isBubble: Bool { (type == "message" || type == "agent_text") && (isUser || isAssistant) }
+    var images: [Attachment] { (attachments ?? []).filter(\.isImage) }
 }
 
 struct Activity: Codable, Identifiable, Equatable {

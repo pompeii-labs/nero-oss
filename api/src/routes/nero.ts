@@ -20,12 +20,13 @@ export function neroRoutes(deps: NeroDeps): Hono {
                 text?: unknown;
                 attachments?: Array<{ data?: string; name?: string; mimeType?: string }>;
             };
-            if (typeof body.text !== 'string' || !body.text.trim()) {
-                return error(c, 400, 'text required');
+            const hasAttachments = Array.isArray(body.attachments) && body.attachments.length > 0;
+            if (typeof body.text !== 'string' || (!body.text.trim() && !hasAttachments)) {
+                return error(c, 400, 'text or an attachment required');
             }
 
             let attachments: AttachmentRef[] | undefined;
-            if (Array.isArray(body.attachments) && body.attachments.length > 0) {
+            if (hasAttachments && Array.isArray(body.attachments)) {
                 attachments = [];
                 for (const a of body.attachments) {
                     if (!a?.data) continue;
