@@ -12,6 +12,7 @@ final class VoiceSession: ObservableObject {
     @Published var transcript = ""
     @Published var activity: String?
     @Published var errorText: String?
+    @Published var muted = false
 
     private let base: URL
     private var ws: URLSessionWebSocketTask?
@@ -54,9 +55,11 @@ final class VoiceSession: ObservableObject {
     // MARK: audio graph
     private func configureAudio() throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
+        // videoChat keeps echo cancellation (for barge-in) but defaults to the speaker,
+        // not the earpiece. allowBluetooth(A2DP) exposes headsets in the route picker.
+        try session.setCategory(.playAndRecord, mode: .videoChat,
+                                options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
         try session.setActive(true)
-        // voiceChat routes to the earpiece by default; force the speaker so Nero is audible.
         try? session.overrideOutputAudioPort(.speaker)
 
         engine.attach(player)
@@ -73,8 +76,10 @@ final class VoiceSession: ObservableObject {
         player.play()
     }
 
+    func toggleMute() { DispatchQueue.main.async { self.muted.toggle() } }
+
     private func handleMic(_ buffer: AVAudioPCMBuffer) {
-        guard let converter, !speaking, let ws else { return }
+        guard let converter, !speaking, !muted, let ws else { return }
         let ratio = sendFormat.sampleRate / buffer.format.sampleRate
         let cap = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1024
         guard let out = AVAudioPCMBuffer(pcmFormat: sendFormat, frameCapacity: cap) else { return }

@@ -146,14 +146,27 @@ struct HomeScreen: View {
 
     @ViewBuilder private var bottomControls: some View {
         if voiceOn {
-            Button { voice.stop() } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(theme.holo2())
-                    .frame(width: 68, height: 68)
-                    .glassEffect(.regular.tint(theme.holo2(0.18)).interactive(), in: .circle)
+            HStack(spacing: 24) {
+                Button { voice.toggleMute() } label: {
+                    Image(systemName: voice.muted ? "mic.slash.fill" : "mic.fill")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(voice.muted ? theme.holo2() : theme.holoSoft)
+                        .frame(width: 60, height: 60)
+                        .glassEffect(.regular.tint(theme.holo(voice.muted ? 0.03 : 0.10)).interactive(), in: .circle)
+                }
+                .buttonStyle(PressableButtonStyle())
+
+                Button { voice.stop() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 24, weight: .medium))
+                        .foregroundStyle(theme.holo2())
+                        .frame(width: 72, height: 72)
+                        .glassEffect(.regular.tint(theme.holo2(0.18)).interactive(), in: .circle)
+                }
+                .buttonStyle(PressableButtonStyle())
+
+                RoutePickerButton()
             }
-            .buttonStyle(PressableButtonStyle())
         } else {
             GlassPillButton(system: "text.bubble", title: "Message Nero", action: onType)
         }

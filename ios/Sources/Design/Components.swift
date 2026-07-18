@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import AVKit
 
 /// Scale + light haptic on press. Apply to every tappable (mirrors Pompeii's
 /// PressableButtonStyle) for a consistent tactile feel.
@@ -103,6 +104,31 @@ struct IconButton: View {
             }
         }
     }
+}
+
+/// The system audio-route picker (speaker / iPhone receiver / Bluetooth / AirPlay)
+/// wrapped in a glass circle to match the voice controls.
+struct RoutePickerButton: View {
+    @Environment(\.theme) private var theme
+    var body: some View {
+        RoutePickerRep(tint: UIColor(theme.holoSoft))
+            .frame(width: 26, height: 26)
+            .frame(width: 60, height: 60)
+            .glassEffect(.regular.tint(theme.holo(0.10)).interactive(), in: .circle)
+    }
+}
+
+private struct RoutePickerRep: UIViewRepresentable {
+    let tint: UIColor
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let v = AVRoutePickerView()
+        v.tintColor = tint
+        v.activeTintColor = tint
+        v.backgroundColor = .clear
+        v.prioritizesVideoDevices = false
+        return v
+    }
+    func updateUIView(_ v: AVRoutePickerView, context: Context) { v.tintColor = tint }
 }
 
 /// A softly blinking holo dot (live "thinking" indicator).
