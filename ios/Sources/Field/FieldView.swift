@@ -48,7 +48,10 @@ struct FieldView: View {
     var body: some View {
         ZStack {
             Atmosphere()
-            if mode == .presence { presence } else { conversation }
+            Group {
+                if mode == .presence { presence } else { conversation }
+            }
+            .frame(width: screenWidth)
         }
         .task { store.start() }
         .onDisappear { store.stop(); voice.stop() }
@@ -76,7 +79,6 @@ struct FieldView: View {
             Spacer(minLength: 0)
             bottomBar.padding(.horizontal, 16)
         }
-        .frame(width: screenWidth)
         .padding(.top, 6)
         .padding(.bottom, 8)
     }
