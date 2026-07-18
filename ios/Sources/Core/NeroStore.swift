@@ -38,9 +38,14 @@ final class NeroStore: ObservableObject {
     /// The in-flight assistant bubble: the active dispatch, unless a persisted
     /// assistant message for it already landed (then the message takes over).
     var liveDispatch: DispatchState? {
-        guard let d = dispatch, d.isActive || !(d.streaming_text ?? "").isEmpty else { return nil }
-        if messages.contains(where: { $0.dispatch_id == d.id && $0.isAssistant }) { return nil }
-        return d
+        guard let d = dispatch else { return nil }
+        // While the turn is in-flight, always surface it (status + tool cards).
+        if d.isActive { return d }
+        // Done, but the persisted assistant message hasn't landed yet: keep showing the
+        // trailing streaming bubble until it does (avoids a flash of empty then dupe).
+        if !(d.streaming_text ?? "").isEmpty,
+           !messages.contains(where: { $0.dispatch_id == d.id && $0.isAssistant }) { return d }
+        return nil
     }
 
     // MARK: event application
