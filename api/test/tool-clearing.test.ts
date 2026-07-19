@@ -5,8 +5,8 @@ import type { MagmaMessage } from '@pompeii-labs/magma/types';
 
 const stubClient = new OpenAI({ apiKey: 'test-key', baseURL: 'http://localhost:1' });
 
-function agentWith(window: number): NeroAgent {
-    const a = new NeroAgent({ client: stubClient });
+function agentWith(window: number, model?: string): NeroAgent {
+    const a = new NeroAgent({ client: stubClient, model });
     a.contextWindow = window;
     return a;
 }
@@ -89,15 +89,15 @@ describe('NeroAgent.getMessages tool-output clearing', () => {
 
 describe('NeroAgent.getSystemPrompts', () => {
     test('caches the stable block and puts memories/time in a fresh block', () => {
-        const a = agentWith(128_000);
+        // Anthropic models honor cache_control, so the stable block gets the breakpoint.
+        const a = agentWith(128_000, 'anthropic/claude-sonnet-4');
         a.currentMemories = 'MEMORY: the user likes terse replies';
         const [sys] = a.getSystemPrompts();
         expect(sys.role).toBe('system');
         const blocks = sys.blocks as { text: string; cache?: boolean }[];
         const stable = blocks[0];
         const volatile = blocks[1];
-        // stable instructions are the cache breakpoint (default model is anthropic/);
-        // memories/time are not cached
+        // stable instructions are the cache breakpoint; memories/time are not cached
         expect(stable.cache).toBe(true);
         expect(stable.text).not.toContain('{{MEMORIES}}');
         expect(stable.text).not.toContain('the user likes terse replies');
@@ -105,5 +105,12 @@ describe('NeroAgent.getSystemPrompts', () => {
         expect(volatile.text).toContain('the user likes terse replies');
         expect(volatile.text).toContain('Right now it is');
         expect(volatile.text).toContain(String(new Date().getFullYear()));
+    });
+
+    test('no cache breakpoint on non-Anthropic models (OpenRouter caches those itself)', () => {
+        const a = agentWith(128_000, 'openai/gpt-5.6-terra');
+        const [sys] = a.getSystemPrompts();
+        const blocks = sys.blocks as { cache?: boolean }[];
+        expect(blocks[0].cache).toBeFalsy();
     });
 });
