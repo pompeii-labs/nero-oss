@@ -25,7 +25,7 @@ import { waitForMergeApproval } from './approval';
 import { buildWorkerUtilities } from '../../tools';
 import { Memory } from '../../models/memory';
 import { Mediums } from '../mediums/registry';
-import { loadConfig } from '@nero/shared/config';
+import { Settings } from '../../models/settings';
 import { getQueue, luxRedis, projectConcurrency, PROJECT_QUEUE } from '../../lib/queue';
 import { Pricing } from './pricing';
 import { Logger } from '@nero/shared/logger';
@@ -35,8 +35,6 @@ import { Message } from '../../models/message';
 import type { AgentActivity } from '../harness/activity';
 
 const log = new Logger('projects');
-
-const workerModel = () => process.env.NERO_WORKER_MODEL || loadConfig().model;
 
 /** Wall-clock ceiling for a single task agent. A hung tool loop fails the task
  *  instead of stalling the whole project forever. */
@@ -176,7 +174,7 @@ async function resolveConflictAgent(
     intWt: string,
     files: string[],
 ): Promise<void> {
-    const model = workerModel();
+    const model = await Settings.resolveSubagentModel();
     const agent = new NeroAgent({ model, utilities: buildWorkerUtilities(intWt) });
     await agent.setup();
     const usage = { input: 0, output: 0 };
@@ -250,7 +248,7 @@ async function processJob(job: Job): Promise<void> {
         .map((d) => `### ${d.title}\n${d.result ?? '(no result)'}`)
         .join('\n\n');
 
-    const model = workerModel();
+    const model = await Settings.resolveSubagentModel();
     let streamed = '';
     const acts = new Map<string, TaskActivity>();
     const usage = { input: 0, output: 0 };

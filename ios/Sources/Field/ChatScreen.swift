@@ -7,6 +7,7 @@ struct ChatScreen: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var store: NeroStore
     var onOpenProject: () -> Void = {}
+    var onOpenSettings: () -> Void = {}
     @State private var draft = ""
     @State private var cmdResult: String?
     @State private var showDecision = false
@@ -155,6 +156,7 @@ struct ChatScreen: View {
                 cmdResult = "Unknown command. Type /help for the list."
                 return
             }
+            if cmd.name == "model" { onOpenSettings(); return }
             Task {
                 let r = await cmd.run(store, args)
                 await MainActor.run { cmdResult = r }

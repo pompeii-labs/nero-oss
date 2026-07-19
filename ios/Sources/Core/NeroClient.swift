@@ -44,8 +44,13 @@ struct NeroClient {
     func getModel() async -> String? {
         (try? await getJSON("/v1/settings", SettingsResponse.self))?.model
     }
-    func setModel(_ slug: String) async -> Bool {
-        (try? await post("/v1/settings", ["model": slug])) != nil
+    /// All four model roles (base / voice / planning / subagents).
+    func getModels() async -> ModelsConfig? {
+        try? await getJSON("/v1/settings", ModelsConfig.self)
+    }
+    /// Set one role. `role` is the API key: model | voiceModel | planModel | subagentModel.
+    func setModel(role: String, _ slug: String) async {
+        _ = try? await post("/v1/settings", [role: slug])
     }
     func compact() async -> String {
         guard let d = try? await post("/v1/compact", [:]),
@@ -140,4 +145,10 @@ struct SecretsResponse: Codable { let secrets: [SecretMeta] }
 struct McpServer: Codable, Identifiable { var id: String { name }; let name: String; let url: String?; let connected: Bool; let tools: [String]? }
 struct McpListResponse: Codable { let integrations: [McpServer] }
 struct SettingsResponse: Codable { let model: String? }
+struct ModelsConfig: Codable {
+    let model: String?
+    let voiceModel: String?
+    let planModel: String?
+    let subagentModel: String?
+}
 struct CompactResponse: Codable { let compacted: Bool; let summary: String? }

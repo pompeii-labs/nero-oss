@@ -1,15 +1,20 @@
 /**
- * Nero configuration. Single-user, env-driven. Lux connection comes from
- * `.env.local` (written by `lux start`); the OpenRouter key from `.env`.
+ * The single default every model role (base / voice / planning / subagents) falls
+ * back to. Per-role overrides live in the `settings` table (no env). See
+ * `Settings.resolve*Model()`.
+ */
+export const DEFAULT_MODEL = 'openai/gpt-5.6-terra';
+
+/**
+ * Nero configuration. Single-user. LLM connection is env-driven; model *selection*
+ * is not — it lives in the `settings` table (see Settings.resolve*Model).
  */
 export interface NeroConfig {
-    // The chat/voice LLM. OpenAI-compatible, so it can point at OpenRouter (default)
-    // or a local server (ollama, llama-server): set NERO_LLM_BASE_URL + NERO_MODEL.
+    // The LLM connection. OpenAI-compatible, so it can point at OpenRouter (default)
+    // or a local server (ollama, llama-server): set NERO_LLM_BASE_URL.
     llm: { apiKey: string; baseUrl: string };
+    // The base-model fallback (== DEFAULT_MODEL). Per-role overrides live in settings.
     model: string;
-    // Voice needs low time-to-first-token, so it uses its own model, a fast one by
-    // default (Haiku on OpenRouter), overridable with NERO_VOICE_MODEL.
-    voiceModel: string;
     // Embeddings stay separate from the LLM: a local LLM server usually has no
     // embedding model, so memory recall keeps using OpenRouter unless overridden.
     embed: { apiKey: string; baseUrl: string; model: string };
@@ -38,18 +43,12 @@ export function loadConfig(): NeroConfig {
     if (cached) return cached;
     const llmBaseUrl =
         env('NERO_LLM_BASE_URL') || env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1');
-    const chatModel = env('NERO_MODEL', 'anthropic/claude-sonnet-4.5');
     cached = {
         llm: {
             apiKey: env('NERO_LLM_API_KEY') || env('OPENROUTER_API_KEY'),
             baseUrl: llmBaseUrl,
         },
-        model: chatModel,
-        // Fast model for voice on OpenRouter; on a local server, reuse the chat model
-        // (an Anthropic slug wouldn't exist there).
-        voiceModel:
-            env('NERO_VOICE_MODEL') ||
-            (llmBaseUrl.includes('openrouter.ai') ? 'anthropic/claude-haiku-4.5' : chatModel),
+        model: DEFAULT_MODEL,
         embed: {
             apiKey: env('NERO_EMBED_API_KEY') || env('OPENROUTER_API_KEY'),
             baseUrl:

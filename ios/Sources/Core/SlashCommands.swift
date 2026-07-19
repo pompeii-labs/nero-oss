@@ -19,15 +19,11 @@ enum Slash {
                 return "/\(c.name)\(a) — \(c.description)"
             }.joined(separator: "\n")
         },
-        SlashCommand(name: "model", aliases: ["m"], description: "Show or set the model (OpenRouter slug)") { store, args in
-            if args.isEmpty {
-                let m = await store.client.getModel()
-                return m.map { "Current model: \($0)" } ?? "Failed to read the model."
-            }
-            let slug = args.joined(separator: "/")
-            return await store.client.setModel(slug)
-                ? "Model set to \(slug). Takes effect on your next message."
-                : "Failed to set the model."
+        // Opens the Models settings (base / voice / planning / subagents). Intercepted
+        // in the composer's send handler to open Settings; the closure is a fallback.
+        SlashCommand(name: "model", aliases: ["m", "models"], description: "Open model settings") { store, _ in
+            let m = await store.client.getModel()
+            return m.map { "Base model: \($0). Open Settings › Models to change roles." } ?? "Open Settings › Models."
         },
         SlashCommand(name: "mcp", aliases: ["integrations", "tools"], description: "Show connected integrations") { store, _ in
             let list = await store.client.mcpList()

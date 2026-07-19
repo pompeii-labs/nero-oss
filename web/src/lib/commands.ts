@@ -2,7 +2,7 @@ import { reloadConfig, getHealth, getContext, getUsage, installSlack } from './a
 import { getAllowedTools, revokeAllowedTool } from './actions/settings';
 import { getMemories } from './actions/memories';
 import { listIntegrations } from './actions/mcp';
-import { getModel, getSettings, setModel, updateSettings } from './actions/settings';
+import { getSettings, updateSettings } from './actions/settings';
 import { compactContext, streamThink, abortChat, type ToolActivity } from './actions/chat';
 import {
     getSkills,
@@ -148,6 +148,7 @@ export interface CommandContext {
     setLoading: (message: string | null) => void;
     log: (message: string) => void;
     navigateTo: (path: string) => void;
+    openSettings?: (tab?: string) => void;
     addActivity?: (activity: ToolActivity) => void;
     addAssistantMessage?: (content: string) => void;
 }
@@ -302,24 +303,11 @@ export const commands: SlashCommand[] = [
     },
     {
         name: 'model',
-        aliases: ['m'],
-        description: 'Show or change the model (any OpenRouter slug)',
-        execute: async (args, ctx) => {
-            if (args.length === 0) {
-                const res = await getModel();
-                return res.success
-                    ? { message: `Current model: ${res.data.model}` }
-                    : { error: 'Failed to read the model' };
-            }
-
-            const slug = args.join('/');
-            ctx.setLoading('Setting model');
-            const res = await setModel(slug);
-            ctx.setLoading(null);
-
-            return res.success
-                ? { message: `Model set to ${res.data.model}. Takes effect on your next message.` }
-                : { error: 'Failed to set the model' };
+        aliases: ['m', 'models'],
+        description: 'Open model settings (base / voice / planning / subagents)',
+        execute: async (_, ctx) => {
+            ctx.openSettings?.('models');
+            return { message: 'Opening model settings…' };
         },
     },
     {

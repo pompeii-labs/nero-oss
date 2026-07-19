@@ -7,7 +7,7 @@ import { buildUtilities } from '../../tools';
 import type { AgentActivity } from '../harness/activity';
 import { Message } from '../../models/message';
 import { Dispatch } from '../../models/dispatch';
-import { loadConfig } from '@nero/shared/config';
+import { Settings } from '../../models/settings';
 
 /** Recent-message window carried into a voice turn. Bounds prefill so
  *  time-to-first-token stays low; recency over completeness for spoken context. */
@@ -47,11 +47,11 @@ export async function runVoiceTurn(
     // agent setup + session assembly.
     const recall = Memory.recallForPrompt(transcript).catch(() => '');
 
-    const model = loadConfig().voiceModel;
+    const model = await Settings.resolveVoiceModel();
     const agent = new NeroAgent({
         model,
         voice: true,
-        utilities: buildUtilities({ includeMcp: false }),
+        utilities: buildUtilities({ includeMcp: true }),
     });
     // Barge-in: if the user talks over Nero, kill the in-flight generation.
     signal?.addEventListener('abort', () => agent.kill(), { once: true });

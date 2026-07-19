@@ -1,7 +1,6 @@
 import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
-import { loadConfig } from '@nero/shared/config';
 import { Project } from '../../models/project';
 import { ProjectTask, type TaskKind } from '../../models/project-task';
 import { Settings } from '../../models/settings';
@@ -10,8 +9,6 @@ import { launchProject } from './runner';
 import { Args } from '../../util/args';
 
 const APPROVAL_TIMEOUT_MS = 10 * 60 * 1000;
-
-const workerModel = () => process.env.NERO_WORKER_MODEL || loadConfig().model;
 
 interface PlanTask {
     title: string;
@@ -126,7 +123,7 @@ export class ProjectUtility {
         const project = await Project.create({
             title,
             goal,
-            model: workerModel(),
+            model: await Settings.resolvePlanModel(),
             est_cost_usd: estTotal,
             status: 'awaiting_approval',
             repo_path: repoPath,

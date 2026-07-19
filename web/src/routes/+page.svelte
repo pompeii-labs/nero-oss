@@ -645,6 +645,7 @@
     // reactive guard below re-arms it when the call ends.
     let wakewordOn = $state(false);
     let settingsOpen = $state(false);
+    let settingsTab = $state<'models' | 'secrets' | 'mcp'>('secrets');
     let wakewordStatus = $state<'off' | 'arming' | 'on' | 'error' | 'insecure'>('off');
     let wakeword: WakewordListener | null = null;
 
@@ -793,6 +794,10 @@
             setLoading: (m) => (commandLoading = m),
             log: (m) => pushNotice(m),
             navigateTo: (path) => goto(path),
+            openSettings: (t) => {
+                settingsTab = (t as 'models' | 'secrets' | 'mcp') ?? 'models';
+                settingsOpen = true;
+            },
         }).catch((e): CommandResult => ({ error: e instanceof Error ? e.message : String(e) }));
         commandLoading = null;
         if (res.shouldClear) commandNotices = [];
@@ -1053,7 +1058,7 @@
             </div>
     </header>
 
-    <Settings bind:open={settingsOpen} />
+    <Settings bind:open={settingsOpen} bind:tab={settingsTab} />
 
     <!-- The interaction surface (chat + composer) lives ONLY where the orb is.
          Other screens show just the device name + the orb hole + any panels. -->

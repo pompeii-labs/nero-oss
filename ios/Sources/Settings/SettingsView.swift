@@ -12,9 +12,16 @@ struct SettingsView: View {
     @State private var secrets: [SecretMeta] = []
     @State private var mcp: [McpServer] = []
     @State private var edits: [String: String] = [:]
+    @State private var models: [String: String] = [:]
+    @State private var modelEdits: [String: String] = [:]
     @State private var newKey = ""
     @State private var newValue = ""
     @State private var busy = false
+
+    /// API key -> label for the four model roles.
+    private let modelRoles: [(key: String, label: String)] = [
+        ("model", "Base"), ("voiceModel", "Voice"), ("planModel", "Planning"), ("subagentModel", "Subagents"),
+    ]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +29,7 @@ struct SettingsView: View {
             ScrollView {
                 VStack(spacing: 22) {
                     connectionSection
+                    modelsSection
                     appearanceSection
                     secretsSection
                     mcpSection
@@ -32,6 +40,41 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { Atmosphere() }
         .task { await reload() }
+    }
+
+    private var modelsSection: some View {
+        SettingsSection(title: "Models") {
+            ForEach(Array(modelRoles.enumerated()), id: \.element.key) { i, r in
+                SettingsRow(first: i == 0) { modelRow(r.key, r.label) }
+            }
+        }
+    }
+
+    private func modelRow(_ key: String, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(label).font(Typeface.mono(11.5)).tracking(0.5).foregroundStyle(theme.textDim)
+                Spacer()
+                Text(models[key] ?? "…").font(Typeface.mono(10.5)).foregroundStyle(theme.textFaint)
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            HStack(spacing: 8) {
+                NeroField(placeholder: "provider/model-slug", text: modelBinding(key))
+                GhostPill(title: "save", disabled: (modelEdits[key] ?? "").trimmingCharacters(in: .whitespaces).isEmpty || busy) {
+                    saveModel(key)
+                }
+            }
+        }
+    }
+
+    private func modelBinding(_ key: String) -> Binding<String> {
+        Binding(get: { modelEdits[key] ?? "" }, set: { modelEdits[key] = $0 })
+    }
+
+    private func saveModel(_ key: String) {
+        let v = (modelEdits[key] ?? "").trimmingCharacters(in: .whitespaces)
+        guard !v.isEmpty else { return }
+        Task { busy = true; await store.client.setModel(role: key, v); modelEdits[key] = ""; await reload(); busy = false }
     }
 
     private var header: some View {
@@ -176,6 +219,13 @@ struct SettingsView: View {
     private func reload() async {
         async let s = store.client.secrets()
         async let m = store.client.mcpList()
+        async let mods = store.client.getModels()
         secrets = await s; mcp = await m
+        if let c = await mods {
+            models = [
+                "model": c.model ?? "", "voiceModel": c.voiceModel ?? "",
+                "planModel": c.planModel ?? "", "subagentModel": c.subagentModel ?? "",
+            ]
+        }
     }
 }

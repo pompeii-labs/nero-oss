@@ -1,10 +1,38 @@
 <script lang="ts">
     import { get, post, del } from '$lib/actions/helpers';
 
-    let { open = $bindable(false) }: { open?: boolean } = $props();
+    type Tab = 'models' | 'secrets' | 'mcp';
+    let { open = $bindable(false), tab = $bindable<Tab>('secrets') }: { open?: boolean; tab?: Tab } =
+        $props();
 
-    type Tab = 'secrets' | 'mcp';
-    let tab = $state<Tab>('secrets');
+    type Models = { model: string; voiceModel: string; planModel: string; subagentModel: string };
+    let models = $state<Models>({ model: '', voiceModel: '', planModel: '', subagentModel: '' });
+    let modelEdits = $state<Record<string, string>>({});
+    const modelRoles: { key: keyof Models; label: string }[] = [
+        { key: 'model', label: 'Base' },
+        { key: 'voiceModel', label: 'Voice' },
+        { key: 'planModel', label: 'Planning' },
+        { key: 'subagentModel', label: 'Subagents' },
+    ];
+    async function loadModels() {
+        const r = await get<Models>('/v1/settings');
+        if (r.success)
+            models = {
+                model: r.data.model ?? '',
+                voiceModel: r.data.voiceModel ?? '',
+                planModel: r.data.planModel ?? '',
+                subagentModel: r.data.subagentModel ?? '',
+            };
+    }
+    async function saveModel(role: string) {
+        const v = (modelEdits[role] ?? '').trim();
+        if (!v) return;
+        busy = 'model:' + role;
+        await post('/v1/settings', { [role]: v });
+        modelEdits[role] = '';
+        await loadModels();
+        busy = '';
+    }
 
     type SecretMeta = {
         key: string;
@@ -41,6 +69,7 @@
     }
     $effect(() => {
         if (open) {
+            void loadModels();
             void loadSecrets();
             void loadMcp();
         }
@@ -107,12 +136,30 @@
             <button class="s-close" onclick={() => (open = false)} aria-label="Close settings">✕</button>
         </header>
         <nav class="s-nav">
+            <button class:active={tab === 'models'} onclick={() => (tab = 'models')}>Models</button>
             <button class:active={tab === 'secrets'} onclick={() => (tab = 'secrets')}>Secrets</button>
             <button class:active={tab === 'mcp'} onclick={() => (tab = 'mcp')}>MCP</button>
         </nav>
 
         <div class="s-body">
-            {#if tab === 'secrets'}
+            {#if tab === 'models'}
+                {#each modelRoles as r (r.key)}
+                    <div class="s-item">
+                        <div class="s-item-head">
+                            <span class="s-key">{r.label}</span>
+                            <span class="s-status">{models[r.key] || '…'}</span>
+                        </div>
+                        <div class="s-row">
+                            <input
+                                placeholder="provider/model-slug"
+                                bind:value={modelEdits[r.key]}
+                                onkeydown={(e) => e.key === 'Enter' && saveModel(r.key)}
+                            />
+                            <button disabled={busy === 'model:' + r.key} onclick={() => saveModel(r.key)}>save</button>
+                        </div>
+                    </div>
+                {/each}
+            {:else if tab === 'secrets'}
                 {#if secrets.length === 0}<p class="s-empty">No secrets yet.</p>{/if}
                 {#each secrets as s (s.key)}
                     <div class="s-item" class:placeholder={s.isPlaceholder}>

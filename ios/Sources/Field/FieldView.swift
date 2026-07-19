@@ -33,7 +33,9 @@ struct FieldView: View {
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .chat:
-                    ChatScreen(store: store, onOpenProject: { showProject = true })
+                    ChatScreen(store: store,
+                               onOpenProject: { showProject = true },
+                               onOpenSettings: { showSettings = true })
                         .environment(\.theme, theme)
                         .toolbar(.hidden, for: .navigationBar)
                 }
