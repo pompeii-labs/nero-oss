@@ -109,12 +109,20 @@ export function projectRoutes(): Hono {
     // Resolve a blocked merge: the worker staged a conflict resolution and is waiting.
     app.post('/v1/projects/:id/merge-approve', async (c) => {
         try {
+            const id = c.req.param('id');
             const b = (await c.req.json().catch(() => ({}))) as { action?: 'approve' | 'reject' };
-            const ok = deliverMergeApproval(
-                c.req.param('id'),
-                b.action === 'reject' ? 'reject' : 'approve',
-            );
-            return c.json({ ok });
+            const ok = deliverMergeApproval(id, b.action === 'reject' ? 'reject' : 'approve');
+            if (!ok) {
+                // Waiter died with the process (API restarted). The merge lane can't be
+                // resumed mid-flight, so clear the conflict to unblock the card and flag
+                // the project for a re-run instead of leaving dead buttons.
+                await Project.update(id, {
+                    merge_conflict: null,
+                    status: 'error',
+                    error: 'Merge approval was lost on a restart — re-run the project.',
+                });
+            }
+            return c.json({ ok: true });
         } catch (err) {
             return error(c, 500, err);
         }
