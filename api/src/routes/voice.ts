@@ -133,6 +133,22 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                 }
             };
 
+            // Barge-in: the user talked over Nero (or while he was thinking). Kill the
+            // in-flight turn + TTS, stop gating, and tell the client to flush playout so
+            // he goes quiet immediately; the new utterance runs as the next turn.
+            const barge = (ws: WSLike) => {
+                if (!turnActive && Date.now() >= speakingUntil) return;
+                turnAbort?.abort();
+                turnActive = false;
+                speakingUntil = 0;
+                if (listenTimer) {
+                    clearTimeout(listenTimer);
+                    listenTimer = null;
+                }
+                ws.send(JSON.stringify({ type: 'turn', state: 'listening' }));
+                ws.send(JSON.stringify({ type: 'barge' }));
+            };
+
             return {
                 onOpen(_evt, ws) {
                     flux = new DeepgramFluxSTT({
@@ -140,8 +156,10 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                         eagerEotThreshold: 0.4,
                     });
                     flux.onSpeechDetected = () => {
-                        if (!isBusy())
-                            ws.send(JSON.stringify({ type: 'turn', state: 'listening' }));
+                        // Talking while Nero is thinking or speaking = barge-in. Otherwise
+                        // it's the start of a fresh utterance; just flip the UI to listening.
+                        if (isBusy()) barge(ws);
+                        else ws.send(JSON.stringify({ type: 'turn', state: 'listening' }));
                     };
                     flux.onEagerEndOfTurn = (text: string) => {
                         ws.send(JSON.stringify({ type: 'transcript', text, final: false }));
@@ -179,9 +197,10 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                     ws.send(JSON.stringify({ type: 'ready' }));
                 },
                 onMessage(evt, ws) {
-                    // Binary = mic PCM (48 kHz s16). Half-duplex: drop it while Nero speaks.
+                    // Binary = mic PCM (48 kHz s16). Full-duplex: always feed Flux, even
+                    // while Nero speaks, so the user can barge in (AEC on the client keeps
+                    // his own voice out of the mic).
                     if (typeof evt.data !== 'string') {
-                        if (Date.now() < speakingUntil) return;
                         flux?.input(Buffer.from(evt.data as ArrayBuffer));
                         return;
                     }
@@ -195,6 +214,10 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
                     try {
                         msg = JSON.parse(evt.data);
                     } catch {
+                        return;
+                    }
+                    if (msg.type === 'barge') {
+                        barge(ws);
                         return;
                     }
                     if (msg.type === 'interact' && msg.panelId) {

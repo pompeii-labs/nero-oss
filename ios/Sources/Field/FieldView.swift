@@ -79,7 +79,8 @@ struct HomeScreen: View {
         if voiceOn {
             switch voice.phase {
             case .speaking: return .speaking
-            case .thinking, .connecting: return .thinking
+            case .thinking, .connecting:
+                return voice.activities.contains(where: { $0.status == "running" }) ? .tool : .thinking
             default: return .idle
             }
         }
@@ -103,7 +104,13 @@ struct HomeScreen: View {
         VStack(spacing: 0) {
             topBar
             Spacer()
-            if voiceOn, let a = voice.activity { activityChip(a).padding(.bottom, 22) }
+            if voiceOn, !voice.activities.isEmpty {
+                ToolGroup(activities: voice.activities, live: orbState == .tool)
+                    .frame(maxWidth: 320)
+                    .padding(.bottom, 22)
+                    .transition(.opacity)
+                    .animation(Motion.glide, value: voice.activities)
+            }
             Button { toggleVoice() } label: { Orb(state: orbState, size: 216) }
                 .buttonStyle(PressableButtonStyle(haptic: true))
             caption(view: caption)
@@ -155,15 +162,6 @@ struct HomeScreen: View {
                 .transition(.opacity)
                 .animation(.easeInOut, value: voice.transcript)
         }
-    }
-
-    private func activityChip(_ a: String) -> some View {
-        HStack(spacing: 6) {
-            Circle().fill(theme.holoSoft).frame(width: 5, height: 5)
-            Text(a).font(Typeface.mono(11)).foregroundStyle(theme.textDim)
-        }
-        .padding(.horizontal, 12).padding(.vertical, 6)
-        .glassEffect(.regular.tint(theme.holo(0.10)), in: .capsule)
     }
 
     @ViewBuilder private var bottomControls: some View {

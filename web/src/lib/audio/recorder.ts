@@ -23,6 +23,7 @@ export class AudioRecorder {
                 channelCount: 1,
                 echoCancellation: true,
                 noiseSuppression: true,
+                autoGainControl: true,
             },
         });
 

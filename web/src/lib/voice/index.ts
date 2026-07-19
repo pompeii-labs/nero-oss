@@ -12,7 +12,7 @@ export type TurnPhase = 'listening' | 'thinking' | 'speaking';
 export interface VoiceActivity {
     id: string;
     status: 'running' | 'success' | 'error';
-    details?: { display_name?: string; fn_name?: string };
+    details?: { display_name?: string; fn_name?: string; result?: string };
 }
 
 export interface VoiceEvents {
@@ -42,8 +42,11 @@ const MIC_CHUNK = 960; // 20 ms of 48 kHz mono, batched before sending
  * Open a voice session over ONE WebSocket (no WebRTC): capture the mic and stream
  * 48kHz s16 PCM up (binary), receive Nero's TTS PCM down (binary) and play it through
  * a Web Audio ring buffer, which stays smooth on bursty TTS (a WebRTC jitter buffer
- * underran and glitched). Half-duplex: we stop sending the mic while Nero speaks.
+ * underran and glitched). Full-duplex with barge-in: the mic streams even while Nero
+ * speaks (getUserMedia AEC keeps his voice out of it), and talking over him flushes
+ * playout + sends `{type:'barge'}`.
  */
+const BARGE_RMS = 0.045; // mic RMS (0..1) above which speech during playout = a barge
 export async function startVoice(events: VoiceEvents): Promise<VoiceSession> {
     const { onState, onTranscript, onTurn, onActivity } = events;
     onState('connecting');
@@ -59,8 +62,17 @@ export async function startVoice(events: VoiceEvents): Promise<VoiceSession> {
     await player.connect();
     const recorder = new AudioRecorder();
 
-    let speaking = false; // Nero is speaking -> hold the mic (half-duplex)
+    let speaking = false; // Nero is speaking -> mic stays open, VAD may barge
     let micBuf: number[] = [];
+
+    // Kill playout immediately + tell the server to abort, without a round-trip wait.
+    function bargeLocally() {
+        if (!speaking) return;
+        speaking = false;
+        player.clear();
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'barge' }));
+        onTurn?.('listening');
+    }
 
     const wsUrl = getServerUrl('/v1/voice').replace(/^http/, 'ws');
     const ws = new WebSocket(wsUrl);
@@ -80,6 +92,10 @@ export async function startVoice(events: VoiceEvents): Promise<VoiceSession> {
             } else if (msg.type === 'turn') {
                 speaking = msg.state === 'speaking';
                 onTurn?.(msg.state);
+            } else if (msg.type === 'barge') {
+                speaking = false;
+                player.clear();
+                onTurn?.('listening');
             } else if (msg.type === 'activity') {
                 onActivity?.(msg.activity);
             } else if (msg.type === 'error') {
@@ -93,8 +109,9 @@ export async function startVoice(events: VoiceEvents): Promise<VoiceSession> {
 
     ws.onopen = async () => {
         try {
-            await recorder.start((data) => {
-                if (speaking || ws.readyState !== WebSocket.OPEN) return;
+            await recorder.start((data, rms) => {
+                if (ws.readyState !== WebSocket.OPEN) return;
+                if (speaking && rms > BARGE_RMS) bargeLocally();
                 for (let i = 0; i < data.length; i++) {
                     const s = data[i] > 1 ? 1 : data[i] < -1 ? -1 : data[i];
                     micBuf.push(s * 32767);

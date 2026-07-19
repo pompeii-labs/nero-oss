@@ -727,12 +727,17 @@
     let voiceToolHold = $state(false);
     let voiceToolTimer: ReturnType<typeof setTimeout> | null = null;
     let seenVoiceTools = 0;
-    // Derived (not effect-assigned) so it's populated in the SAME render the orb
-    // flips to 'tool', no one-frame gap where the chip is blank.
-    const voiceToolName = $derived(
-        voiceActivities.length
-            ? (voiceActivities[voiceActivities.length - 1].details?.display_name ?? 'Working')
-            : null,
+    // Map the live voice activities to the shared ToolGroup shape so voice shows the
+    // same expandable tool cards the chat does (status 'success' -> the group's 'complete').
+    const voiceTools = $derived(
+        voiceActivities.map((a) => ({
+            id: a.id,
+            tool: a.details?.fn_name ?? '',
+            displayName: a.details?.display_name ?? a.details?.fn_name ?? 'tool',
+            args: {},
+            status: a.status === 'success' ? 'complete' : a.status,
+            result: a.details?.result,
+        })) as ToolActivityType[],
     );
     $effect(() => {
         const n = voiceActivities.length;
@@ -943,10 +948,9 @@
         <button class="presence-exit" onclick={exitPresence} aria-label="Exit presence">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
         </button>
-        {#if engaged && voiceToolActive && voiceToolName}
-            <div class="voice-activity">
-                <span class="va-pulse"></span>
-                {voiceToolName}
+        {#if engaged && voiceTools.length}
+            <div class="voice-tools">
+                <ToolGroup tools={voiceTools} live={voiceToolActive} />
             </div>
         {/if}
         {#if engaged && liveTranscript}
@@ -1569,41 +1573,19 @@
         color: rgb(var(--holo-soft));
     }
 
-    /* live tool readout: a holo chip floating above the orb while Nero acts */
-    .voice-activity {
+    /* live tool cards floating above the orb while Nero acts */
+    .voice-tools {
         position: fixed;
         left: 50%;
-        top: calc(50% - 150px);
+        bottom: calc(50% + 130px);
         transform: translateX(-50%);
         z-index: 20;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 6px 14px;
-        border: 1px solid rgb(var(--holo) / 0.28);
-        border-radius: 999px;
-        background: rgb(var(--holo) / 0.06);
-        backdrop-filter: blur(6px);
-        box-shadow: 0 0 24px rgb(var(--holo) / 0.12);
-        font-family: var(--font-mono);
-        font-size: 11px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: rgb(var(--holo-soft));
-        white-space: nowrap;
+        display: flex;
+        justify-content: center;
+        width: min(360px, 82vw);
+        max-height: 40vh;
+        overflow-y: auto;
         animation: enter 0.3s ease;
-    }
-    .va-pulse {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: rgb(var(--holo));
-        box-shadow: 0 0 8px rgb(var(--holo));
-        animation: va-blink 1.1s ease-in-out infinite;
-    }
-    @keyframes va-blink {
-        0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.35; transform: scale(0.7); }
     }
 
     .hero {

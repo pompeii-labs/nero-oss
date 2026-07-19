@@ -3,14 +3,15 @@ import AVFoundation
 
 /// A live voice call to Nero over `/v1/voice`: mic -> 48k mono Int16 PCM (binary up),
 /// TTS PCM (binary down) -> playback, plus JSON control (turn/transcript/activity).
-/// Half-duplex: the mic is gated while Nero speaks. Not @MainActor — the audio tap
-/// runs on the audio thread; UI state is published on main.
+/// Full-duplex with barge-in: the mic streams even while Nero speaks (hardware AEC keeps
+/// his own voice out of it), and talking over him flushes playout + sends `{type:'barge'}`.
+/// Not @MainActor — the audio tap runs on the audio thread; UI state is published on main.
 final class VoiceSession: ObservableObject {
     enum Phase: String { case idle, connecting, listening, thinking, speaking }
 
     @Published var phase: Phase = .idle
     @Published var transcript = ""
-    @Published var activity: String?
+    @Published var activities: [Activity] = []
     @Published var errorText: String?
     @Published var muted = false
     @Published var output: Output = .speaker
@@ -23,8 +24,11 @@ final class VoiceSession: ObservableObject {
     private var converter: AVAudioConverter?
     private let sendFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48000, channels: 1, interleaved: true)!
     private let playFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48000, channels: 1, interleaved: false)!
-    private var speaking = false      // half-duplex gate (benign cross-thread read)
+    private var speaking = false      // true while Nero's TTS is playing (drives barge VAD)
     private var running = false
+    /// Int16 RMS above which mic energy during playout counts as the user barging in.
+    /// AEC removes most of Nero's own voice from the mic, so real speech clears this.
+    private let bargeThreshold: Double = 2200
 
     init(base: URL) { self.base = base }
 
@@ -51,25 +55,29 @@ final class VoiceSession: ObservableObject {
         if engine.isRunning { engine.stop() }
         engine.inputNode.removeTap(onBus: 0)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        set { $0.phase = .idle; $0.transcript = ""; $0.activity = nil }
+        set { $0.phase = .idle; $0.transcript = ""; $0.activities = [] }
     }
 
     // MARK: audio graph
     private func configureAudio() throws {
         let session = AVAudioSession.sharedInstance()
-        // Plain .default mode (no voiceChat/videoChat): voiceChat ignores the speaker
-        // override (always earpiece) and videoChat produced silence on-device. We don't
-        // need hardware echo cancellation because the mic is gated while Nero speaks
-        // (half-duplex). No .defaultToSpeaker so override(.none) gives a real earpiece.
+        // Plain .default mode (not .voiceChat, which forces the earpiece and ignores the
+        // speaker override). Echo cancellation comes from the engine's voice-processing
+        // I/O unit below instead of the session mode, so `overrideOutputAudioPort(.speaker)`
+        // keeps working while AEC lets the mic stay open during playout (barge-in).
         try session.setCategory(.playAndRecord, mode: .default,
                                 options: [.allowBluetooth, .allowBluetoothA2DP])
         try session.setActive(true)
         applyOutput()
 
+        let input = engine.inputNode
+        // Enable AEC/AGC/noise-suppression on the input node (references the engine's
+        // output as the echo source) before wiring the graph or reading the input format.
+        try? input.setVoiceProcessingEnabled(true)
+
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: playFormat)
 
-        let input = engine.inputNode
         let inFormat = input.inputFormat(forBus: 0)
         converter = AVAudioConverter(from: inFormat, to: sendFormat)
         input.installTap(onBus: 0, bufferSize: 4800, format: inFormat) { [weak self] buf, _ in
@@ -96,7 +104,7 @@ final class VoiceSession: ObservableObject {
     }
 
     private func handleMic(_ buffer: AVAudioPCMBuffer) {
-        guard let converter, !speaking, !muted, let ws else { return }
+        guard let converter, !muted, let ws else { return }
         let ratio = sendFormat.sampleRate / buffer.format.sampleRate
         let cap = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1024
         guard let out = AVAudioPCMBuffer(pcmFormat: sendFormat, frameCapacity: cap) else { return }
@@ -109,8 +117,29 @@ final class VoiceSession: ObservableObject {
             return buffer
         }
         guard err == nil, out.frameLength > 0, let ch = out.int16ChannelData else { return }
-        let data = Data(bytes: ch[0], count: Int(out.frameLength) * 2)
+        let n = Int(out.frameLength)
+        let data = Data(bytes: ch[0], count: n * 2)
         ws.send(.data(data)) { _ in }
+        // Barge-in: if the user's own voice (post-AEC) is loud while Nero is speaking,
+        // flush playout locally and tell the server to abort, without a round-trip wait.
+        if speaking {
+            var sum = 0.0
+            for i in 0..<n { let v = Double(ch[0][i]); sum += v * v }
+            if (sum / Double(max(1, n))).squareRoot() > bargeThreshold { bargeLocally() }
+        }
+    }
+
+    private func flushPlayout() {
+        player.stop()
+        player.play()
+    }
+
+    private func bargeLocally() {
+        guard speaking else { return }
+        speaking = false
+        flushPlayout()
+        ws?.send(.string("{\"type\":\"barge\"}")) { _ in }
+        set { $0.phase = .listening }
     }
 
     private func playPCM(_ data: Data) {
@@ -165,14 +194,33 @@ final class VoiceSession: ObservableObject {
         case "turn":
             let state = obj["state"] as? String ?? "listening"
             speaking = (state == "speaking")
-            set { $0.phase = Phase(rawValue: state) ?? .listening; if state != "speaking" { $0.activity = nil } }
+            set {
+                $0.phase = Phase(rawValue: state) ?? .listening
+                // A new turn begins at "thinking"; keep tool cards through speaking so the
+                // user can see what he did, then clear them when the next turn starts.
+                if state == "thinking" { $0.activities = [] }
+            }
+        case "barge":
+            speaking = false
+            flushPlayout()
+            set { $0.phase = .listening }
         case "transcript":
             let text = obj["text"] as? String ?? ""
             set { $0.transcript = text }
         case "activity":
-            let a = obj["activity"] as? [String: Any]
-            let name = (a?["displayName"] as? String) ?? (a?["tool"] as? String)
-            set { $0.activity = name }
+            guard let a = obj["activity"] as? [String: Any], let id = a["id"] as? String else { break }
+            let details = a["details"] as? [String: Any]
+            let act = Activity(
+                id: id,
+                tool: details?["fn_name"] as? String,
+                displayName: details?["display_name"] as? String,
+                status: a["status"] as? String,
+                result: details?["result"] as? String
+            )
+            set {
+                if let i = $0.activities.firstIndex(where: { $0.id == id }) { $0.activities[i] = act }
+                else { $0.activities.append(act) }
+            }
         case "error":
             set { $0.errorText = obj["message"] as? String }
         default: break
