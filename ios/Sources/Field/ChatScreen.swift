@@ -9,6 +9,8 @@ struct ChatScreen: View {
     var onOpenProject: () -> Void = {}
     @State private var draft = ""
     @State private var cmdResult: String?
+    @State private var showDecision = false
+    @State private var decisionDismissed = false
     @FocusState private var focused: Bool
 
     private var bubbles: [ChatMessage] { store.messages.filter(\.isBubble) }
@@ -21,6 +23,23 @@ struct ChatScreen: View {
     private var approvalProject: Project? { store.projects.first { $0.status == "awaiting_approval" } }
     private var mergeProject: Project? { store.projects.first { $0.merge_conflict != nil } }
     private var hasDecision: Bool { pendingQuestion != nil || approvalProject != nil || mergeProject != nil }
+    private var decisionLabel: String {
+        if pendingQuestion != nil { return "answer" }
+        if approvalProject != nil { return "review plan" }
+        return "resolve merge"
+    }
+
+    private var decisionChip: some View {
+        Button { decisionDismissed = false; showDecision = true } label: {
+            HStack(spacing: 5) {
+                Circle().fill(theme.holo2()).frame(width: 6, height: 6).shadow(color: theme.holo2(0.7), radius: 3)
+                Text(decisionLabel).font(Typeface.mono(10)).tracking(0.4).foregroundStyle(theme.holo2())
+            }
+            .padding(.horizontal, 11).padding(.vertical, 6)
+            .glassEffect(.regular.tint(theme.holo2(0.14)).interactive(), in: .capsule)
+        }
+        .buttonStyle(PressableButtonStyle())
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,7 +49,43 @@ struct ChatScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { Atmosphere() }
         .safeAreaInset(edge: .bottom, spacing: 0) { dock }
-        .onAppear { if bubbles.isEmpty { focused = true } }
+        .onAppear {
+            if bubbles.isEmpty && !hasDecision { focused = true }
+            if hasDecision { showDecision = true }
+        }
+        .onChange(of: hasDecision) { _, has in
+            if has { if !decisionDismissed { showDecision = true } }
+            else { showDecision = false; decisionDismissed = false }
+        }
+        .onChange(of: showDecision) { _, show in if show { focused = false } }
+        .sheet(isPresented: $showDecision, onDismiss: { if hasDecision { decisionDismissed = true } }) {
+            decisionSheet
+        }
+    }
+
+    @ViewBuilder private var decisionSheet: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                if let q = pendingQuestion {
+                    AskCard(
+                        question: q,
+                        onSubmit: { a in showDecision = false; Task { await store.client.answer(q.id, answers: a) } },
+                        onDismiss: { showDecision = false; Task { await store.client.answer(q.id, answers: [], dismiss: true) } }
+                    )
+                } else if let p = approvalProject {
+                    ProjectApprovalCard(project: p, store: store)
+                } else if let p = mergeProject {
+                    MergeApprovalCard(project: p, store: store)
+                }
+            }
+            .padding(16)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(theme.void_.ignoresSafeArea())
+        .presentationDetents([.medium, .large])
+        .presentationBackground(theme.void_)
+        .presentationDragIndicator(.visible)
+        .environment(\.theme, theme)
     }
 
     private var header: some View {
@@ -38,6 +93,7 @@ struct ChatScreen: View {
             GlassIconButton(system: "chevron.left", size: 38, iconSize: 15) { dismiss() }
             Text("NERO").font(Typeface.display(19)).tracking(2).foregroundStyle(theme.text)
             Spacer()
+            if hasDecision && !showDecision { decisionChip }
             if let p = store.activeProject {
                 ProjectIndicator(project: p, onTap: onOpenProject)
             }
@@ -175,33 +231,16 @@ struct ChatScreen: View {
 
     @ViewBuilder private var dock: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if hasDecision {
-                ScrollView(.vertical, showsIndicators: false) {
-                    if let q = pendingQuestion {
-                        AskCard(
-                            question: q,
-                            onSubmit: { a in Task { await store.client.answer(q.id, answers: a) } },
-                            onDismiss: { Task { await store.client.answer(q.id, answers: [], dismiss: true) } }
-                        )
-                    } else if let p = approvalProject {
-                        ProjectApprovalCard(project: p, store: store)
-                    } else if let p = mergeProject {
-                        MergeApprovalCard(project: p, store: store)
-                    }
-                }
-                .frame(maxHeight: 440)
-            } else {
-                if let r = cmdResult { resultCard(r) }
-                if !suggestions.isEmpty { suggestionList }
-                if let d = store.liveDispatch { liveStatus(d) }
-                Composer(
-                    draft: $draft,
-                    busy: store.liveDispatch != nil,
-                    focused: $focused,
-                    onSend: { imgs in handleSend(imgs) },
-                    onStop: { store.cancel() }
-                )
-            }
+            if let r = cmdResult { resultCard(r) }
+            if !suggestions.isEmpty { suggestionList }
+            if let d = store.liveDispatch { liveStatus(d) }
+            Composer(
+                draft: $draft,
+                busy: store.liveDispatch != nil,
+                focused: $focused,
+                onSend: { imgs in handleSend(imgs) },
+                onStop: { store.cancel() }
+            )
         }
         .padding(.horizontal, 14).padding(.top, 10).padding(.bottom, 6)
         .background(

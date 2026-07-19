@@ -10,6 +10,7 @@ struct FieldView: View {
     @State private var path = NavigationPath()
     @State private var showSettings = false
     @State private var showProject = false
+    @ObservedObject private var router = AppRouter.shared
 
     enum Route: Hashable { case chat }
 
@@ -40,6 +41,12 @@ struct FieldView: View {
         }
         .tint(theme.holoSoft)
         .task { store.start() }
+        .onChange(of: router.route) { _, r in
+            if r == .chat {
+                if path.isEmpty { path.append(Route.chat) }
+                router.route = nil
+            }
+        }
         .onDisappear { store.stop() }
         .sheet(isPresented: $showSettings) {
             SettingsView(store: store).environment(\.theme, theme)

@@ -30,6 +30,7 @@ final class NeroStore: ObservableObject {
     }
     func stop() { stream.disconnect() }
 
+
     // MARK: writes
     func send(_ text: String, images: [PendingImage] = []) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)

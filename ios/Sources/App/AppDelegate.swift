@@ -37,4 +37,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
     }
+
+    /// Tapping a push opens the conversation (replies/proactive nudges live there).
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        AppRouter.shared.open(.chat)
+    }
 }
