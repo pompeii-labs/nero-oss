@@ -16,11 +16,20 @@ export class Presence {
         return rows.length ? (rows[0].device_id ?? null) : null;
     }
 
-    /** Move Nero to a device (the user "bringing him here", or his own move_to tool). */
-    static async set(deviceId: string): Promise<void> {
+    /**
+     * Move Nero to a device. `wake` marks a wakeword-race win: it stamps `wake_at` so
+     * the winning device auto-engages voice. A plain move (user summon / move_to tool)
+     * leaves `wake_at` untouched, so it just relocates the orb.
+     */
+    static async set(deviceId: string, opts: { wake?: boolean } = {}): Promise<void> {
         const t = getLux().table('presence');
         const existing = unwrap(await t.select().eq('id', Presence.NERO).limit(1)) as PresenceRow[];
-        const body = { id: Presence.NERO, device_id: deviceId, updated_at: Date.now() };
+        const body: Record<string, unknown> = {
+            id: Presence.NERO,
+            device_id: deviceId,
+            updated_at: Date.now(),
+        };
+        if (opts.wake) body.wake_at = Date.now();
         if (existing.length) unwrap(await t.update(body as never).eq('id', Presence.NERO));
         else unwrap(await t.insert(body as never));
     }

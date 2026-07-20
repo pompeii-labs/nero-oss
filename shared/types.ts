@@ -75,6 +75,9 @@ export interface Presence {
     device_id: string | null;
     id: string;
     updated_at: number | null;
+    /** Set when a wakeword race put Nero here, so the winning device auto-engages
+     *  voice (vs a plain move, which just relocates the orb). A fresh timestamp. */
+    wake_at: number | null;
 }
 
 export interface Panels {

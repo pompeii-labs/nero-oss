@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Device } from '../models/device';
 import { Presence } from '../models/presence';
+import { wakeArbiter } from '../services/presence/arbiter';
 import { userHeartbeat } from '../services/user-presence';
 import { error } from '../util/errors';
 
@@ -42,6 +43,39 @@ export function displayRoutes(): Hono {
         }
     });
 
+    // All known devices (Settings > Devices). Most-recently-seen first.
+    app.get('/v1/devices', async (c) => {
+        try {
+            return c.json({ devices: await Device.listAll() });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
+    // Rename a device (Settings > Devices). A user name sticks across re-registers.
+    app.post('/v1/devices/rename', async (c) => {
+        try {
+            const b = (await c.req.json().catch(() => ({}))) as { id?: string; name?: string };
+            if (!b.id || !b.name?.trim()) return error(c, 400, 'id and name required');
+            await Device.rename(b.id, b.name);
+            return c.json({ ok: true });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
+    // Forget a device (remove it from the registry).
+    app.post('/v1/devices/forget', async (c) => {
+        try {
+            const b = (await c.req.json().catch(() => ({}))) as { id?: string };
+            if (!b.id) return error(c, 400, 'id required');
+            await Device.forget(b.id);
+            return c.json({ ok: true });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
     // Opt a display into/out of ambient presence (glanceable orb + wakeword when not focused).
     app.post('/v1/devices/ambient', async (c) => {
         try {
@@ -53,6 +87,27 @@ export function displayRoutes(): Hono {
             if (!b.id) return error(c, 400, 'id required');
             await Device.setAmbient(b.id, !!b.ambient, b.room);
             return c.json({ ok: true, ambient: !!b.ambient });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
+    // A device heard the wakeword. It reports its confidence + how loud the phrase was;
+    // the arbiter groups near-simultaneous reports and moves Nero to the loudest (closest).
+    app.post('/v1/wake', async (c) => {
+        try {
+            const b = (await c.req.json().catch(() => ({}))) as {
+                source?: string;
+                score?: number;
+                rms?: number;
+            };
+            if (!b.source) return error(c, 400, 'source required');
+            wakeArbiter.report({
+                source: b.source,
+                score: Number(b.score) || 0,
+                rms: Number(b.rms) || 0,
+            });
+            return c.json({ ok: true });
         } catch (err) {
             return error(c, 500, err);
         }

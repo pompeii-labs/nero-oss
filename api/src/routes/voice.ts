@@ -56,7 +56,10 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
 
     app.get(
         '/v1/voice',
-        upgradeWebSocket(() => {
+        upgradeWebSocket((c) => {
+            // Which device this voice session belongs to, so focus binds to a session
+            // and handoff between rooms can tell sockets apart.
+            const deviceId = c.req.query('device') ?? null;
             let flux: DeepgramFluxSTT | null = null;
             let tts: VoiceTTS | null = null;
 
@@ -151,6 +154,7 @@ export function voiceRoutes(upgradeWebSocket: UpgradeWebSocket): Hono {
 
             return {
                 onOpen(_evt, ws) {
+                    console.log(`[voice] session open device=${deviceId ?? '(none)'}`);
                     flux = new DeepgramFluxSTT({
                         apiKey: process.env.DEEPGRAM_API_KEY,
                         eagerEotThreshold: 0.4,

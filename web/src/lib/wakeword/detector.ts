@@ -35,7 +35,9 @@ export interface DetectorOptions {
     threshold?: number;
     cooldownMs?: number;
     onScore?: (score: number) => void;
-    onDetect?: () => void;
+    /** Fires on a wakeword hit with the peak loudness (RMS) of the wake phrase and the
+     *  model score, so the server can arbitrate "loudest device wins" across rooms. */
+    onDetect?: (rms: number, score: number) => void;
 }
 
 export class WakewordDetector {
@@ -82,6 +84,23 @@ export class WakewordDetector {
         let s = 0;
         for (let i = 0; i < frame.length; i++) s += frame[i] * frame[i];
         return Math.sqrt(s / frame.length);
+    }
+
+    /** Peak per-chunk RMS over the last ~1s of buffered audio (the wake phrase). Used
+     *  as the "how close is the speaker" signal for cross-device arbitration. */
+    private peakRms(): number {
+        const win = this.raw.length > 16000 ? this.raw.subarray(this.raw.length - 16000) : this.raw;
+        let peak = 0;
+        for (let i = 0; i + CHUNK <= win.length; i += CHUNK) {
+            let s = 0;
+            for (let j = 0; j < CHUNK; j++) {
+                const v = win[i + j];
+                s += v * v;
+            }
+            const r = Math.sqrt(s / CHUNK);
+            if (r > peak) peak = r;
+        }
+        return peak;
     }
 
     private async step(frame: Int16Array): Promise<void> {
@@ -166,7 +185,7 @@ export class WakewordDetector {
         const now = performance.now();
         if (s >= this.threshold && now - this.lastFire > this.cooldownMs) {
             this.lastFire = now;
-            this.opts.onDetect?.();
+            this.opts.onDetect?.(this.peakRms(), s);
         }
     }
 }

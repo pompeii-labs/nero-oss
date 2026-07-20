@@ -1,7 +1,7 @@
 import { tool, toolparam } from '@pompeii-labs/magma/decorators';
 import type { MagmaToolCall } from '@pompeii-labs/magma/types';
 import type { MagmaAgent } from '@pompeii-labs/magma';
-import { Device } from '../../models/device';
+import { Device, PHONE_KINDS } from '../../models/device';
 import { Presence } from '../../models/presence';
 import { Panel, type PanelFn, type PanelData } from '../../models/panel';
 import { Args } from '../../util/args';
@@ -86,6 +86,8 @@ export class DisplayUtility {
             (d) => d.id === target || d.name.toLowerCase() === target.toLowerCase(),
         );
         if (!match) return `No device matching "${target}". Use list_devices to see options.`;
+        if (PHONE_KINDS.has(match.kind))
+            return `${match.name} is a phone, a personal surface I can't move to. The user draws me there themselves.`;
         await Presence.set(match.id);
         return `Moved to ${match.name}.`;
     }
@@ -148,6 +150,8 @@ export class DisplayUtility {
         }
         const device = await resolveDevice(args.str('device'));
         if (!device) return 'No target screen. Run list_devices, or move somewhere first.';
+        if (PHONE_KINDS.has(device.kind))
+            return `${device.name} is a phone, panels only go to screens (laptop/ipad/etc).`;
         const p = await Panel.open({
             device_id: device.id,
             title: args.str('title', 'Panel'),
@@ -230,6 +234,7 @@ export class DisplayUtility {
         if (a.device != null) {
             const d = await resolveDevice(args.str('device'));
             if (!d) return `No screen matching "${a.device}".`;
+            if (PHONE_KINDS.has(d.kind)) return `${d.name} is a phone, panels only go to screens.`;
             patch.device_id = d.id;
         }
         await Panel.update(id, patch);

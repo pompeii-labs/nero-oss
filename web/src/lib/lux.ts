@@ -83,6 +83,8 @@ export interface DeviceRow {
 export interface PresenceRow {
     id: string;
     device_id: string | null;
+    /** Fresh timestamp when a wakeword race put Nero here; the winning device engages voice. */
+    wake_at?: number | null;
 }
 
 export interface AskOption {

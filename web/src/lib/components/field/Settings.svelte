@@ -1,9 +1,48 @@
 <script lang="ts">
     import { get, post, del } from '$lib/actions/helpers';
+    import { deviceId, renameDevice, forgetDevice } from '$lib/device';
 
-    type Tab = 'models' | 'secrets' | 'mcp';
+    type Tab = 'models' | 'devices' | 'secrets' | 'mcp';
     let { open = $bindable(false), tab = $bindable<Tab>('secrets') }: { open?: boolean; tab?: Tab } =
         $props();
+
+    type DeviceRow = {
+        id: string;
+        name: string;
+        kind: string;
+        ambient: boolean;
+        room: string | null;
+        last_seen: number;
+    };
+    const myId = deviceId();
+    let devices = $state<DeviceRow[]>([]);
+    let deviceEdits = $state<Record<string, string>>({});
+    const isOnline = (d: DeviceRow) => Date.now() - (d.last_seen ?? 0) < 45_000;
+    async function loadDevices() {
+        const r = await get<{ devices: DeviceRow[] }>('/v1/devices');
+        if (r.success) devices = r.data.devices;
+    }
+    async function saveDeviceName(id: string) {
+        const v = (deviceEdits[id] ?? '').trim();
+        if (!v) return;
+        busy = 'dev:' + id;
+        await renameDevice(id, v);
+        deviceEdits[id] = '';
+        await loadDevices();
+        busy = '';
+    }
+    async function toggleDeviceAmbient(d: DeviceRow) {
+        busy = 'dev:' + d.id;
+        await post('/v1/devices/ambient', { id: d.id, ambient: !d.ambient });
+        await loadDevices();
+        busy = '';
+    }
+    async function removeDevice(id: string) {
+        busy = 'dev:' + id;
+        await forgetDevice(id);
+        await loadDevices();
+        busy = '';
+    }
 
     type Models = { model: string; voiceModel: string; planModel: string; subagentModel: string };
     let models = $state<Models>({ model: '', voiceModel: '', planModel: '', subagentModel: '' });
@@ -70,6 +109,7 @@
     $effect(() => {
         if (open) {
             void loadModels();
+            void loadDevices();
             void loadSecrets();
             void loadMcp();
         }
@@ -137,6 +177,7 @@
         </header>
         <nav class="s-nav">
             <button class:active={tab === 'models'} onclick={() => (tab = 'models')}>Models</button>
+            <button class:active={tab === 'devices'} onclick={() => (tab = 'devices')}>Devices</button>
             <button class:active={tab === 'secrets'} onclick={() => (tab = 'secrets')}>Secrets</button>
             <button class:active={tab === 'mcp'} onclick={() => (tab = 'mcp')}>MCP</button>
         </nav>
@@ -157,6 +198,31 @@
                             />
                             <button disabled={busy === 'model:' + r.key} onclick={() => saveModel(r.key)}>save</button>
                         </div>
+                    </div>
+                {/each}
+            {:else if tab === 'devices'}
+                {#if devices.length === 0}<p class="s-empty">No devices yet.</p>{/if}
+                {#each devices as d (d.id)}
+                    <div class="s-item">
+                        <div class="s-item-head">
+                            <span class="s-key">{d.name}{d.id === myId ? ' (this device)' : ''}</span>
+                            <span class="s-status" class:need={!isOnline(d)}>{isOnline(d) ? d.kind : 'offline'}</span>
+                            {#if d.id !== myId}
+                                <button class="s-del" onclick={() => removeDevice(d.id)} aria-label="Forget">✕</button>
+                            {/if}
+                        </div>
+                        <div class="s-row">
+                            <input
+                                placeholder="rename…"
+                                bind:value={deviceEdits[d.id]}
+                                onkeydown={(e) => e.key === 'Enter' && saveDeviceName(d.id)}
+                            />
+                            <button disabled={busy === 'dev:' + d.id} onclick={() => saveDeviceName(d.id)}>save</button>
+                        </div>
+                        <label class="s-toggle">
+                            <input type="checkbox" checked={d.ambient} onchange={() => toggleDeviceAmbient(d)} />
+                            <span>Ambient (glanceable orb + always listening)</span>
+                        </label>
                     </div>
                 {/each}
             {:else if tab === 'secrets'}
@@ -398,6 +464,19 @@
     }
     .s-row.end {
         justify-content: flex-end;
+    }
+    .s-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        font-size: 11.5px;
+        color: var(--text-dim);
+        cursor: pointer;
+    }
+    .s-toggle input {
+        accent-color: rgb(var(--holo));
+        flex-shrink: 0;
     }
     .s-row input {
         flex: 1;

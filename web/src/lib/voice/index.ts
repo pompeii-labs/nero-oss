@@ -47,7 +47,10 @@ const MIC_CHUNK = 960; // 20 ms of 48 kHz mono, batched before sending
  * playout + sends `{type:'barge'}`.
  */
 const BARGE_RMS = 0.045; // mic RMS (0..1) above which speech during playout = a barge
-export async function startVoice(events: VoiceEvents): Promise<VoiceSession> {
+export async function startVoice(
+    events: VoiceEvents,
+    opts: { deviceId?: string } = {},
+): Promise<VoiceSession> {
     const { onState, onTranscript, onTurn, onActivity } = events;
     onState('connecting');
 
@@ -74,7 +77,8 @@ export async function startVoice(events: VoiceEvents): Promise<VoiceSession> {
         onTurn?.('listening');
     }
 
-    const wsUrl = getServerUrl('/v1/voice').replace(/^http/, 'ws');
+    const q = opts.deviceId ? `?device=${encodeURIComponent(opts.deviceId)}` : '';
+    const wsUrl = getServerUrl('/v1/voice').replace(/^http/, 'ws') + q;
     const ws = new WebSocket(wsUrl);
     ws.binaryType = 'arraybuffer';
 

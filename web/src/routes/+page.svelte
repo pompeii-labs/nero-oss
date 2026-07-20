@@ -69,6 +69,8 @@
         heartbeatDevice,
         bringNeroHere,
         setAmbient,
+        reportWake,
+        isPhone,
     } from '$lib/device';
     import { getServerUrl } from '$lib/actions/helpers';
     import { executeCommand, type CommandResult } from '$lib/commands';
@@ -126,6 +128,9 @@
     // Multi-device presence: the orb is a single entity that lives on one screen.
     const myDeviceId = deviceId();
     let neroDevice = $state<string | null>(null);
+    // Latest wake nonce seen on the presence row; a newer one that lands on ME means I
+    // won a wakeword race and should auto-engage voice.
+    let lastWakeAt = 0;
     let devices = $state<DeviceRow[]>([]);
     const neroIsHere = $derived(neroDevice === myDeviceId);
     const neroDeviceName = $derived(devices.find((d) => d.id === neroDevice)?.name ?? null);
@@ -268,6 +273,9 @@
                 } else if (row && row.id === 'nero') {
                     const prev = neroDevice;
                     neroDevice = row.device_id;
+                    // Seed the wake nonce from the initial snapshot so an old value never
+                    // auto-engages voice on load.
+                    if (c.kind === 'snapshot') lastWakeAt = row.wake_at ?? 0;
                     // A live move (not the initial snapshot): streak him in/out and,
                     // on arrival, default into the orb/presence canvas.
                     if (c.kind === 'upsert' && prev !== row.device_id) {
@@ -275,8 +283,20 @@
                             startTravel('in');
                             presenceMode = true;
                         } else if (prev === myDeviceId) {
+                            // Handoff: focus left this screen, so drop my voice session.
                             startTravel('out');
                             presenceMode = false;
+                            engaged = false;
+                        }
+                    }
+                    // A fresh wake nonce landing on me = I won the wakeword race; engage voice.
+                    if (c.kind === 'upsert' && row.wake_at && row.wake_at > lastWakeAt) {
+                        lastWakeAt = row.wake_at;
+                        if (row.device_id === myDeviceId) {
+                            chime([660, 880]);
+                            presenceMode = true;
+                            engaged = true;
+                            bumpVoiceIdle();
                         }
                     }
                 }
@@ -625,7 +645,7 @@
                     if (i >= 0) voiceActivities[i] = a;
                     else voiceActivities = [...voiceActivities, a];
                 },
-            })
+            }, { deviceId: myDeviceId })
                 .then((s) => (voiceSession = s))
                 .catch(() => (voiceState = 'error'));
         } else if (!engaged && voiceSession) {
@@ -645,7 +665,7 @@
     // reactive guard below re-arms it when the call ends.
     let wakewordOn = $state(false);
     let settingsOpen = $state(false);
-    let settingsTab = $state<'models' | 'secrets' | 'mcp'>('secrets');
+    let settingsTab = $state<'models' | 'devices' | 'secrets' | 'mcp'>('secrets');
     let wakewordStatus = $state<'off' | 'arming' | 'on' | 'error' | 'insecure'>('off');
     let wakeword: WakewordListener | null = null;
 
@@ -685,12 +705,20 @@
         const { WakewordListener } = await import('$lib/wakeword');
         const w = new WakewordListener({
             threshold: 0.6,
-            onDetect: () => {
-                chime([660, 880]);
-                if (!neroIsHere) void bringNeroHere();
-                presenceMode = true;
-                engaged = true;
-                bumpVoiceIdle();
+            onDetect: (rms, score) => {
+                if (isPhone()) {
+                    // A phone never competes in a room race: a wake here is a deliberate
+                    // solo summon (the OS only gives it the mic when it's foreground).
+                    chime([660, 880]);
+                    if (!neroIsHere) void bringNeroHere();
+                    presenceMode = true;
+                    engaged = true;
+                    bumpVoiceIdle();
+                } else {
+                    // Report to the server arbiter with our loudness; if we heard it
+                    // loudest, the presence subscription lands focus here and engages voice.
+                    void reportWake(rms, score);
+                }
             },
         });
         try {
@@ -800,7 +828,7 @@
             log: (m) => pushNotice(m),
             navigateTo: (path) => goto(path),
             openSettings: (t) => {
-                settingsTab = (t as 'models' | 'secrets' | 'mcp') ?? 'models';
+                settingsTab = (t as 'models' | 'devices' | 'secrets' | 'mcp') ?? 'models';
                 settingsOpen = true;
             },
         }).catch((e): CommandResult => ({ error: e instanceof Error ? e.message : String(e) }));

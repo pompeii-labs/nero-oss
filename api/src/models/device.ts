@@ -26,22 +26,27 @@ export interface RegisterInput {
     screen_h: number;
 }
 
-// Old platform-default names that pre-date server naming; treated as "unnamed" so
-// such a device migrates to a real callsign on its next register.
-const LEGACY = new Set([
-    'mac',
-    'phone',
-    'pc',
-    'tablet',
-    'linux',
-    'windows',
-    'screen',
-    'device',
-    '',
-]);
+/** Handheld device kinds. These never compete in wakeword arbitration, can't receive
+ *  panels, and Nero won't `move_to` them: a phone is a personal surface you draw him to. */
+export const PHONE_KINDS = new Set(['iphone', 'android', 'phone']);
 
-// NATO phonetic callsigns: short, distinct, easy to say (good for "move to foxtrot").
-const POOL = [
+/** Human default name per platform kind. The user renames in Settings. */
+const KIND_LABEL: Record<string, string> = {
+    mac: 'mac',
+    laptop: 'laptop',
+    windows: 'windows',
+    pc: 'pc',
+    linux: 'linux',
+    ipad: 'ipad',
+    iphone: 'iphone',
+    android: 'android',
+    phone: 'phone',
+    web: 'screen',
+};
+
+// The old NATO callsigns + platform junk: a device still carrying one of these is
+// treated as "unnamed" so it migrates to a real platform default on its next register.
+const CALLSIGNS = [
     'alpha',
     'bravo',
     'charlie',
@@ -69,6 +74,7 @@ const POOL = [
     'yankee',
     'zulu',
 ];
+const LEGACY = new Set([...CALLSIGNS, 'tablet', 'device', '']);
 
 /** A device counts as online if it heartbeated within this window. The web
  *  heartbeats every 15s, so stale/closed screens drop off. */
@@ -96,11 +102,12 @@ export class Device extends DataModel<DeviceData> {
     }
 
     /** Decide a device's name: an explicit request wins; an already-named device keeps
-     *  its name; otherwise the first display becomes "main" and the rest get a random
-     *  callsign not currently in use by another online device. */
+     *  its name; otherwise the first desktop screen becomes "main" and everything else
+     *  gets a human platform default ("mac", "ipad", "iphone"), deduped with a suffix. */
     private static assignName(
         id: string,
         requested: string | undefined,
+        kind: string,
         all: Device[],
         existing: Device | undefined,
     ): string {
@@ -108,15 +115,18 @@ export class Device extends DataModel<DeviceData> {
         if (existing && !isUnnamed(existing.name)) return existing.name;
 
         const others = all.filter((d) => d.id !== id);
-        if (!others.some((d) => norm(d.name) === 'main')) return 'main';
+        const taken = new Set(others.map((d) => norm(d.name)));
 
-        const cutoff = Date.now() - ONLINE_WINDOW_MS;
-        const takenOnline = new Set(
-            others.filter((d) => d.last_seen >= cutoff).map((d) => norm(d.name)),
-        );
-        const free = POOL.filter((n) => !takenOnline.has(n));
-        const pick = free.length ? free : POOL;
-        return pick[Math.floor(Math.random() * pick.length)];
+        // First desktop screen (not a phone or tablet) becomes "main".
+        const handheld = PHONE_KINDS.has(kind) || kind === 'ipad';
+        if (!handheld && !taken.has('main')) return 'main';
+
+        const base = KIND_LABEL[kind] ?? 'screen';
+        if (!taken.has(base)) return base;
+        for (let i = 2; ; i++) {
+            const n = `${base}-${i}`;
+            if (!taken.has(n)) return n;
+        }
     }
 
     /** Register or refresh a device (web client reports itself on connect/resize). */
@@ -126,10 +136,11 @@ export class Device extends DataModel<DeviceData> {
             (r) => new Device(r as unknown as DeviceData),
         );
         const existing = all.find((d) => d.id === input.id);
+        const kind = input.kind ?? existing?.kind ?? 'web';
         const body = {
             id: input.id,
-            name: Device.assignName(input.id, input.requestedName, all, existing),
-            kind: input.kind ?? 'web',
+            name: Device.assignName(input.id, input.requestedName, kind, all, existing),
+            kind,
             screen_w: input.screen_w,
             screen_h: input.screen_h,
             connected: true,
@@ -153,6 +164,16 @@ export class Device extends DataModel<DeviceData> {
 
     static async setConnected(id: string, connected: boolean): Promise<void> {
         await Device.update(id, { connected });
+    }
+
+    /** User-set name (Settings). Sticks across re-registers since it isn't a legacy/default. */
+    static async rename(id: string, name: string): Promise<void> {
+        await Device.update(id, { name: name.trim() });
+    }
+
+    /** Remove a device from the registry. */
+    static async forget(id: string): Promise<void> {
+        unwrap(await getLux().table('devices').delete().eq('id', id));
     }
 
     /** Opt a display into (or out of) ambient presence. */
