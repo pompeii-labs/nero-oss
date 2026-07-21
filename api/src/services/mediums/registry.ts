@@ -35,13 +35,17 @@ export class Mediums {
      * the user while they're on-screen. `opts.only` restricts to named channels (e.g.
      * a reply nudge that should push but not hit Slack).
      */
-    static async notify(n: Notification, opts?: { only?: string[] }): Promise<NotifyResult> {
+    static async notify(
+        n: Notification,
+        opts?: { only?: string[]; force?: boolean },
+    ): Promise<NotifyResult> {
         const secrets = await Secret.loadMap();
         const delivered: string[] = [];
         const failed: { name: string; error: string }[] = [];
         const urgency = n.urgency ?? 'normal';
         // Only pay the presence check when an interruptive channel might be gated.
-        const present = urgency === 'high' ? false : await isUserPresent();
+        // `force` (a phone errand) treats the user as absent so it always pushes.
+        const present = opts?.force || urgency === 'high' ? false : await isUserPresent();
 
         for (const m of Mediums.channels) {
             if (opts?.only && !opts.only.includes(m.name)) continue;

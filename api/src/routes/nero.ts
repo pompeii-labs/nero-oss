@@ -19,6 +19,7 @@ export function neroRoutes(deps: NeroDeps): Hono {
             const body = (await c.req.json().catch(() => ({}))) as {
                 text?: unknown;
                 attachments?: Array<{ data?: string; name?: string; mimeType?: string }>;
+                errand?: boolean;
             };
             const hasAttachments = Array.isArray(body.attachments) && body.attachments.length > 0;
             if (typeof body.text !== 'string' || (!body.text.trim() && !hasAttachments)) {
@@ -40,7 +41,11 @@ export function neroRoutes(deps: NeroDeps): Hono {
                 }
             }
 
-            const handle = await deps.startDispatch({ text: body.text, attachments });
+            const handle = await deps.startDispatch({
+                text: body.text,
+                attachments,
+                errand: body.errand === true,
+            });
             return c.json({ dispatchId: handle.dispatchId, steered: handle.steered });
         } catch (err) {
             return error(c, 500, err);

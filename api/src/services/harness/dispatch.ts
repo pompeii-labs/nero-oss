@@ -39,6 +39,10 @@ export interface DispatchInput {
     /** A panel interaction (button press), persisted as a labeled event, not as
      *  the user talking. */
     interaction?: boolean;
+    /** A one-off voice errand fired from the phone: always push the result when done,
+     *  even if presence thinks you're around (the whole point is "ping me when it's
+     *  finished"). Normal messages stay presence-gated. */
+    errand?: boolean;
 }
 
 export interface DispatchOpts {
@@ -61,6 +65,8 @@ interface ActiveDispatch {
     /** Messages the user sent mid-run, held here (not persisted) until folded in,
      *  so they land in the transcript AFTER the response they're steering. */
     pendingSteering: string[];
+    /** A phone errand: force the completion push past the presence gate. */
+    errand: boolean;
 }
 
 /** Single-flight dispatch coordinator. One run at a time; concurrent messages
@@ -123,6 +129,7 @@ export class Dispatcher {
             cancelled: false,
             emitter,
             pendingSteering: [],
+            errand: input.errand ?? false,
         };
         Dispatcher.active = entry;
 
@@ -202,9 +209,11 @@ export class Dispatcher {
                 // buzzes when you've left. Push channel only (not other mediums).
                 if (reply) {
                     const body = reply.length > 300 ? reply.slice(0, 297) + '…' : reply;
+                    // A phone errand always pushes its result (forced past the presence
+                    // gate); a normal reply only nudges you when you've left.
                     void Mediums.notify(
                         { title: 'Nero', body, urgency: 'normal', url: '/' },
-                        { only: ['apns'] },
+                        { only: ['apns'], force: entry.errand },
                     ).catch(() => {});
                 }
             }

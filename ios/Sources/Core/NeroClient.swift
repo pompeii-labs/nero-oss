@@ -37,6 +37,12 @@ struct NeroClient {
     }
     func cancel() async { _ = try? await post("/v1/nero/cancel", [:]) }
 
+    /// A one-off voice errand (from the App Intent): fire-and-forget, and Nero always
+    /// pushes the result when he's done, even if you were just in the app.
+    func sendErrand(_ text: String) async throws {
+        _ = try await post("/v1/nero", ["text": text, "errand": true])
+    }
+
     /// Foreground heartbeat so the server knows a surface is on-screen (suppresses push).
     func heartbeat() async { _ = try? await post("/v1/presence/heartbeat", [:]) }
 
