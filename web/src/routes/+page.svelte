@@ -670,8 +670,9 @@
     let wakeword: WakewordListener | null = null;
 
     $effect(() => {
-        const shouldListen =
-            wakewordOn && (neroIsHere || amAmbient) && !insecureContext && !engaged;
+        // The explicit toggle is the opt-in: if you turned it on, listen here (as long as
+        // we're on a secure origin and not already in a call). No ambient/focus gate.
+        const shouldListen = wakewordOn && !insecureContext && !engaged;
         if (shouldListen && !wakeword) void armWakeword();
         else if (!shouldListen && wakeword) disarmWakeword();
     });
@@ -1040,7 +1041,7 @@
                 {/if}
                 <button
                     class="wake-toggle"
-                    class:on={wakewordStatus === 'on'}
+                    class:on={wakewordOn}
                     onclick={toggleWakeword}
                     aria-label="Wakeword"
                     title={wakewordStatus === 'insecure'
