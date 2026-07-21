@@ -2,20 +2,47 @@ import Foundation
 
 enum NeroConfig {
     static let serverKey = "nero.serverURL"
-    /// Baked-in default so a fresh install skips onboarding (works on/off LAN with
-    /// Tailscale on). Disconnecting in Settings clears it and returns to onboarding.
-    static let defaultURL = "https://nero-rig.tail37322a.ts.net"
+    /// Shared across the app + its extensions (Share sheet, widgets, Live Activity) so
+    /// they all resolve the same server without re-onboarding.
+    static let appGroup = "group.com.pompeii.nero"
+    /// Optional baked-in default so a personal build skips onboarding. NOT committed:
+    /// it comes from `NERO_DEFAULT_SERVER_HOST` in the gitignored Local.xcconfig,
+    /// surfaced via Info.plist. Empty in the open-source repo (fresh installs onboard).
+    static var defaultURL: String {
+        let host = Bundle.main.object(forInfoDictionaryKey: "NeroDefaultServerHost") as? String
+        guard let host, !host.isEmpty else { return "" }
+        return "https://\(host)"
+    }
+
+    private static var defaults: UserDefaults {
+        UserDefaults(suiteName: appGroup) ?? .standard
+    }
+
+    /// Copy the effective server URL into the shared App Group suite so the Share sheet,
+    /// widgets, and Live Activity resolve it. Call once at launch.
+    static func primeSharedDefaults() {
+        if let u = serverURL { defaults.set(u.absoluteString, forKey: serverKey) }
+    }
 
     static var serverURL: URL? {
-        // Unset -> the default; explicitly cleared ("") -> nil (back to onboarding).
-        let s = UserDefaults.standard.string(forKey: serverKey) ?? defaultURL
+        // Prefer the shared suite; fall back to the legacy standard store (migration),
+        // then the baked-in default. Explicitly cleared ("") -> nil (back to onboarding).
+        let s =
+            defaults.string(forKey: serverKey)
+            ?? UserDefaults.standard.string(forKey: serverKey)
+            ?? defaultURL
         guard !s.isEmpty, let u = URL(string: s) else { return nil }
         return u
     }
     static func setServer(_ s: String) {
-        UserDefaults.standard.set(s.trimmingCharacters(in: .whitespaces), forKey: serverKey)
+        let v = s.trimmingCharacters(in: .whitespaces)
+        defaults.set(v, forKey: serverKey)
+        UserDefaults.standard.set(v, forKey: serverKey)
     }
-    static func clear() { UserDefaults.standard.set("", forKey: serverKey) }
+    static func clear() {
+        defaults.set("", forKey: serverKey)
+        UserDefaults.standard.set("", forKey: serverKey)
+    }
 }
 
 /// Thin HTTP wrapper over Nero's API. All realtime comes from RealtimeStream; this

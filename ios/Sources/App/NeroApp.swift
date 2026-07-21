@@ -5,6 +5,12 @@ struct NeroApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        // Publish the server URL into the shared App Group so the Share sheet, widgets,
+        // and Live Activity can reach Nero without their own onboarding.
+        NeroConfig.primeSharedDefaults()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -17,6 +23,10 @@ struct NeroApp: App {
                 }
                 .onChange(of: scenePhase) { _, phase in
                     PresenceReporter.shared.setActive(phase == .active)
+                    // Opening the app clears any lingering errand Live Activity.
+                    if phase == .active, #available(iOS 16.2, *) {
+                        Task { await ErrandActivity.endAll() }
+                    }
                 }
         }
     }

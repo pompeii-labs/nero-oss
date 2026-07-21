@@ -4,6 +4,10 @@
 <dict>
     <key>CFBundleDisplayName</key>
     <string>Nero</string>
+    <key>NeroDefaultServerHost</key>
+    <string>$(NERO_DEFAULT_SERVER_HOST)</string>
+    <key>NSSupportsLiveActivities</key>
+    <true/>
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundleIdentifier</key>

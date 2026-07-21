@@ -21,6 +21,8 @@ struct AskNeroIntent: AppIntent {
         guard let base = NeroConfig.serverURL else {
             return .result(dialog: "Nero isn't set up yet. Open the app once first.")
         }
+        // Pop the Dynamic Island presence, then fire the errand.
+        if #available(iOS 16.2, *) { _ = ErrandActivity.start(text) }
         try await NeroClient(base: base).sendErrand(text)
         return .result(dialog: "On it. I'll ping you when it's done.")
     }
