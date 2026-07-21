@@ -45,6 +45,100 @@ function query(params: Record<string, string | number | boolean | undefined>) {
 }
 const encodeId = (v: string) => encodeURIComponent(v);
 
+// ---- Gmail message parsing (keep email READABLE, never dump raw MIME/base64) ----
+
+interface GPart {
+    mimeType?: string;
+    filename?: string;
+    body?: { data?: string; size?: number };
+    parts?: GPart[];
+    headers?: { name: string; value: string }[];
+}
+interface GMessage {
+    id?: string;
+    threadId?: string;
+    snippet?: string;
+    labelIds?: string[];
+    payload?: GPart;
+}
+
+const BODY_CAP = 4000;
+
+function header(part: GPart | undefined, name: string): string {
+    return part?.headers?.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? '';
+}
+
+function decodeB64(data?: string): string {
+    return data ? Buffer.from(data, 'base64url').toString('utf8') : '';
+}
+
+function stripHtml(html: string): string {
+    return html
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<\/(p|div|br|tr|li|h[1-6])>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/[ \t]{2,}/g, ' ')
+        .trim();
+}
+
+/** Find the first non-attachment part of a given mime type, depth-first. */
+function findPart(part: GPart, mime: string): GPart | undefined {
+    if (part.mimeType === mime && part.body?.data && !part.filename) return part;
+    for (const p of part.parts ?? []) {
+        const found = findPart(p, mime);
+        if (found) return found;
+    }
+    return undefined;
+}
+
+/** Prefer text/plain; fall back to stripped text/html; then a single-part body. */
+function extractBody(payload?: GPart): string {
+    if (!payload) return '';
+    const plain = findPart(payload, 'text/plain');
+    if (plain) return decodeB64(plain.body?.data);
+    const html = findPart(payload, 'text/html');
+    if (html) return stripHtml(decodeB64(html.body?.data));
+    return payload.body?.data ? stripHtml(decodeB64(payload.body.data)) : '';
+}
+
+function cap(s: string, n = BODY_CAP): string {
+    return s.length > n ? `${s.slice(0, n)}\n…[truncated, ${s.length} chars total]` : s;
+}
+
+/** A clean, model-friendly view of a message: headers + decoded, capped body. */
+function summarizeMessage(msg: GMessage) {
+    const p = msg.payload;
+    return {
+        id: msg.id,
+        threadId: msg.threadId,
+        from: header(p, 'From'),
+        to: header(p, 'To'),
+        cc: header(p, 'Cc') || undefined,
+        date: header(p, 'Date'),
+        subject: header(p, 'Subject'),
+        labels: msg.labelIds,
+        body: cap(extractBody(p)),
+    };
+}
+
+/** Resolve label names (or ids) to label ids; system labels like INBOX pass through. */
+async function resolveLabels(names?: string[]): Promise<string[]> {
+    if (!names?.length) return [];
+    const { labels = [] } = (await google(`${GMAIL}/labels`)) as {
+        labels?: { id: string; name: string }[];
+    };
+    const byName = new Map(labels.map((l) => [l.name.toLowerCase(), l.id]));
+    return names.map((n) => byName.get(n.toLowerCase()) ?? n);
+}
+
 // Process-local: after a restart, existing Gmail drafts remain in Gmail but can't be
 // sent by this MCP until a fresh draft is created and explicitly approved.
 type DraftRecord = {
@@ -89,33 +183,131 @@ function buildMessage({
 const emailAddress = z.string().email();
 
 function buildServer() {
-    const server = new McpServer({ name: 'google', version: '1.0.0' });
+    const server = new McpServer({ name: 'google', version: '1.1.0' });
 
     server.tool('gmail_profile', 'Show the authorized Gmail account profile.', {}, async () =>
         text(await google(`${GMAIL}/profile`)),
     );
+
     server.tool(
         'gmail_search',
-        'Search Gmail messages using standard Gmail search syntax. Returns message IDs and metadata, not full bodies.',
+        'Search Gmail with standard syntax. Returns a COMPACT list (id, from, subject, date, one-line snippet), never full bodies. Use gmail_get_message to read a specific one, or gmail_get_thread for a conversation.',
         {
             query: z
                 .string()
                 .describe('Examples: is:unread, newer_than:7d, from:someone@example.com'),
-            max_results: z.number().int().min(1).max(50).default(20),
+            max_results: z.number().int().min(1).max(30).default(15),
         },
-        async ({ query: q, max_results }) =>
-            text(await google(`${GMAIL}/messages?${query({ q, maxResults: max_results })}`)),
+        async ({ query: q, max_results }) => {
+            const list = (await google(
+                `${GMAIL}/messages?${query({ q, maxResults: max_results })}`,
+            )) as {
+                messages?: { id: string }[];
+            };
+            const metas = await Promise.all(
+                (list.messages ?? []).map((m) =>
+                    google(
+                        `${GMAIL}/messages/${encodeId(m.id)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+                    ).catch(() => null),
+                ),
+            );
+            const messages = metas.filter(Boolean).map((m) => {
+                const msg = m as GMessage;
+                return {
+                    id: msg.id,
+                    threadId: msg.threadId,
+                    from: header(msg.payload, 'From'),
+                    subject: header(msg.payload, 'Subject'),
+                    date: header(msg.payload, 'Date'),
+                    unread: msg.labelIds?.includes('UNREAD') ?? false,
+                    snippet: msg.snippet,
+                };
+            });
+            return text({ count: messages.length, messages });
+        },
     );
+
     server.tool(
         'gmail_get_message',
-        'Get a Gmail message by ID, including headers and decoded text body.',
+        'Read one Gmail message: sender/recipients, subject, date, and the decoded PLAIN-TEXT body (HTML stripped, long bodies truncated). Never returns the raw MIME payload.',
         { message_id: z.string() },
         async ({ message_id }) =>
-            text(await google(`${GMAIL}/messages/${encodeId(message_id)}?format=full`)),
+            text(
+                summarizeMessage(
+                    (await google(
+                        `${GMAIL}/messages/${encodeId(message_id)}?format=full`,
+                    )) as GMessage,
+                ),
+            ),
     );
-    server.tool('gmail_labels', 'List Gmail labels with unread and total counts.', {}, async () =>
-        text(await google(`${GMAIL}/labels`)),
+
+    server.tool(
+        'gmail_get_thread',
+        'Read a whole Gmail conversation by thread id. Each message is summarized (from, date, decoded + truncated body), not raw.',
+        { thread_id: z.string() },
+        async ({ thread_id }) => {
+            const t = (await google(`${GMAIL}/threads/${encodeId(thread_id)}?format=full`)) as {
+                messages?: GMessage[];
+            };
+            return text({ thread_id, messages: (t.messages ?? []).map(summarizeMessage) });
+        },
     );
+
+    server.tool(
+        'gmail_labels',
+        'List Gmail labels with their ids and unread/total counts.',
+        {},
+        async () => text(await google(`${GMAIL}/labels`)),
+    );
+
+    server.tool(
+        'gmail_create_label',
+        'Create a new Gmail label (like a folder/tag).',
+        { name: z.string().min(1) },
+        async ({ name }) =>
+            text(
+                await google(`${GMAIL}/labels`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        name,
+                        labelListVisibility: 'labelShow',
+                        messageListVisibility: 'show',
+                    }),
+                }),
+            ),
+    );
+
+    server.tool(
+        'gmail_modify_message',
+        'Add or remove labels on a message. Labels can be names or ids. Use this to organize (add a label), archive (remove "INBOX"), mark read (remove "UNREAD"), mark unread (add "UNREAD"), star (add "STARRED"), or flag important (add "IMPORTANT").',
+        {
+            message_id: z.string(),
+            add_labels: z.array(z.string()).optional().describe('Label names or ids to add.'),
+            remove_labels: z.array(z.string()).optional().describe('Label names or ids to remove.'),
+        },
+        async ({ message_id, add_labels, remove_labels }) => {
+            const [addLabelIds, removeLabelIds] = await Promise.all([
+                resolveLabels(add_labels),
+                resolveLabels(remove_labels),
+            ]);
+            const r = (await google(`${GMAIL}/messages/${encodeId(message_id)}/modify`, {
+                method: 'POST',
+                body: JSON.stringify({ addLabelIds, removeLabelIds }),
+            })) as GMessage;
+            return text({ message_id, labels: r.labelIds });
+        },
+    );
+
+    server.tool(
+        'gmail_trash',
+        'Move a Gmail message to the trash.',
+        { message_id: z.string() },
+        async ({ message_id }) => {
+            await google(`${GMAIL}/messages/${encodeId(message_id)}/trash`, { method: 'POST' });
+            return text({ status: 'trashed', message_id });
+        },
+    );
+
     server.tool(
         'gmail_create_draft',
         'Create an email draft in Gmail and register it in this running MCP. This does not send anything. A separate explicit approval and send step is required.',
@@ -256,6 +448,55 @@ function buildServer() {
                     }),
                 }),
             ),
+    );
+    server.tool(
+        'calendar_update_event',
+        'Update fields on an existing Google Calendar event. Only pass what changes (a patch). Use only when the user explicitly asks.',
+        {
+            calendar_id: z.string().default('primary'),
+            event_id: z.string(),
+            summary: z.string().optional(),
+            description: z.string().optional(),
+            start: z.string().datetime().optional(),
+            end: z.string().datetime().optional(),
+            time_zone: z.string().default('America/New_York'),
+            location: z.string().optional(),
+        },
+        async ({
+            calendar_id,
+            event_id,
+            summary,
+            description,
+            start,
+            end,
+            time_zone,
+            location,
+        }) => {
+            const patch: Record<string, unknown> = {};
+            if (summary !== undefined) patch.summary = summary;
+            if (description !== undefined) patch.description = description;
+            if (location !== undefined) patch.location = location;
+            if (start) patch.start = { dateTime: start, timeZone: time_zone };
+            if (end) patch.end = { dateTime: end, timeZone: time_zone };
+            return text(
+                await google(
+                    `${CALENDAR}/calendars/${encodeId(calendar_id)}/events/${encodeId(event_id)}`,
+                    { method: 'PATCH', body: JSON.stringify(patch) },
+                ),
+            );
+        },
+    );
+    server.tool(
+        'calendar_delete_event',
+        'Delete a Google Calendar event. Use only when the user explicitly asks.',
+        { calendar_id: z.string().default('primary'), event_id: z.string() },
+        async ({ calendar_id, event_id }) => {
+            await google(
+                `${CALENDAR}/calendars/${encodeId(calendar_id)}/events/${encodeId(event_id)}`,
+                { method: 'DELETE' },
+            );
+            return text({ status: 'deleted', event_id });
+        },
     );
 
     return server;
