@@ -4,6 +4,8 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { McpConnection } from '../../models/mcp-connection';
 import { Secret } from '../../models/secret';
+import { getIntegration } from '../../mcp/catalog';
+import { integrationAccessToken } from '../../mcp/oauth';
 import { interpolate } from '../../util/interpolate';
 import { runner } from '@nero/shared/runner';
 import { isTokenExpired, refreshAccessToken } from './oauth';
@@ -141,6 +143,14 @@ export class McpClient {
         }
         for (const [k, v] of Object.entries(conn.config?.env ?? {})) {
             injected[k] = interpolate(v, vault);
+        }
+        // Built-in integration: the api owns OAuth, so inject a fresh access token.
+        if (conn.config?.integration) {
+            const integ = getIntegration(conn.config.integration);
+            if (integ?.oauth) {
+                const token = await integrationAccessToken(conn.config.integration);
+                if (token) injected[integ.oauth.tokenEnvVar] = token;
+            }
         }
         return injected;
     }

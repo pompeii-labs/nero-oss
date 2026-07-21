@@ -2,6 +2,7 @@ import { loadConfig } from '@nero/shared/config';
 import { isLuxConnected, ensureAnonGrants } from '@nero/shared/lux';
 import { Logger } from '@nero/shared/logger';
 import { getMcpClient } from './services/mcp/client';
+import { reconcileIntegrations } from './mcp/reconcile';
 import { Dispatch } from './models/dispatch';
 import { Question } from './models/question';
 import { resumeProjects } from './services/projects/runner';
@@ -30,6 +31,9 @@ if (isLuxConnected()) {
     await resumeProjects()
         .then((n) => n && log.info(`reconciled ${n} project(s)`))
         .catch((e) => log.error('project resume failed', { error: String(e) }));
+    await reconcileIntegrations().catch((e) =>
+        log.error('integration reconcile failed', { error: String(e) }),
+    );
     await getMcpClient()
         .connectAll()
         .catch((e) => log.error('mcp connect failed', { error: String(e) }));

@@ -10,6 +10,7 @@ import { settingsRoutes } from './routes/settings';
 import { displayRoutes } from './routes/display';
 import { panelRoutes } from './routes/panels';
 import { secretRoutes } from './routes/secrets';
+import { integrationRoutes } from './routes/integrations';
 import { askRoutes } from './routes/ask';
 import { projectRoutes } from './routes/projects';
 import { mediumRoutes } from './routes/mediums';
@@ -38,6 +39,7 @@ export function createApp(deps: Partial<NeroDeps> = {}, upgradeWebSocket?: Upgra
     app.route('/', displayRoutes());
     app.route('/', panelRoutes());
     app.route('/', secretRoutes());
+    app.route('/', integrationRoutes());
     app.route('/', askRoutes());
     app.route('/', projectRoutes());
     app.route('/', mediumRoutes());

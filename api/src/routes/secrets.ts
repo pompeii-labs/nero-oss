@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { Secret } from '../models/secret';
+import { reconcileIntegrations } from '../mcp/reconcile';
 import { error } from '../util/errors';
 
 /** Secret pool control plane. The user sets values here out of band so they never
@@ -23,6 +24,8 @@ export function secretRoutes(): Hono {
             if (!key) return error(c, 400, 'key required');
             if (typeof b.value !== 'string') return error(c, 400, 'value required');
             await Secret.set(key, b.value);
+            // A newly-set secret may satisfy a built-in integration; wire it up.
+            void reconcileIntegrations({ connect: true }).catch(() => {});
             return c.json({ ok: true });
         } catch (err) {
             return error(c, 500, err);

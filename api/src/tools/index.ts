@@ -6,6 +6,7 @@ import { FileUtility } from './files';
 import { BashUtility } from './bash';
 import { WebUtility } from './web';
 import { McpConnectUtility } from '../services/mcp/tool';
+import { IntegrationsUtility } from '../mcp/tool';
 import { mcpUtilities } from '../services/mcp/bridge';
 import { DisplayUtility } from '../services/display/tool';
 import { SecretsUtility } from '../services/secrets/tool';
@@ -31,6 +32,7 @@ export function buildUtilities(opts: BuildUtilitiesOpts = {}): MagmaUtilities[] 
         loadUtilities(new FileUtility()),
         loadUtilities(new BashUtility()),
         loadUtilities(new McpConnectUtility()),
+        loadUtilities(new IntegrationsUtility()),
         loadUtilities(new DisplayUtility()),
         loadUtilities(new SecretsUtility()),
         loadUtilities(new AskUtility()),

@@ -1,13 +1,15 @@
 import { DataModel } from './datamodel';
 import { getLux, unwrap } from '@nero/shared/lux';
 import type { McpConnections } from '@nero/shared/types';
-import type { StoredOAuthData } from '../services/mcp/oauth';
+import type { StoredOAuthData, OAuthTokens } from '../services/mcp/oauth';
 
 export type McpTransport = 'http' | 'sse' | 'stdio';
 
 export interface McpAuth {
     oauth?: StoredOAuthData;
     apiKey?: string;
+    /** API-owned OAuth tokens for a built-in integration (see api/src/mcp/oauth.ts). */
+    integrationTokens?: OAuthTokens;
 }
 
 export interface McpExtraConfig {
@@ -30,6 +32,9 @@ export interface McpExtraConfig {
      *  the host serving HTTP, the api connects over host.docker.internal:<port>).
      *  Assigned once on first launch and reused. */
     port?: number;
+    /** Set on connections that are a built-in integration (catalog id). The api owns
+     *  that integration's OAuth and injects its access token at connect. */
+    integration?: string;
 }
 
 export interface McpConnectionData {
