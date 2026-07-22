@@ -73,6 +73,50 @@
         busy = '';
     }
 
+    type ModelEntry = {
+        id: string;
+        label: string;
+        base_url: string;
+        model: string;
+        api_key_secret: string | null;
+        reasoning: boolean;
+    };
+    let registry = $state<ModelEntry[]>([]);
+    let nm = $state({ id: '', label: '', base_url: '', model: '', api_key_secret: '', reasoning: false });
+    async function loadRegistry() {
+        const r = await get<{ models: ModelEntry[] }>('/v1/models');
+        if (r.success) registry = r.data.models;
+    }
+    async function pickModel(role: keyof Models, id: string) {
+        busy = 'model:' + role;
+        await post('/v1/settings', { [role]: id });
+        await loadModels();
+        busy = '';
+    }
+    async function addModel() {
+        const id = nm.id.trim().toLowerCase();
+        if (!id || !nm.base_url.trim() || !nm.model.trim()) return;
+        busy = 'model-add';
+        await post('/v1/models', {
+            id,
+            label: nm.label.trim() || id,
+            base_url: nm.base_url.trim(),
+            model: nm.model.trim(),
+            api_key_secret: nm.api_key_secret.trim() || null,
+            reasoning: nm.reasoning,
+        });
+        nm = { id: '', label: '', base_url: '', model: '', api_key_secret: '', reasoning: false };
+        await loadRegistry();
+        busy = '';
+    }
+    async function removeModel(id: string) {
+        busy = 'model-del:' + id;
+        await del('/v1/models/' + encodeURIComponent(id));
+        await loadRegistry();
+        await loadModels();
+        busy = '';
+    }
+
     type SecretMeta = {
         key: string;
         isPlaceholder: boolean;
@@ -109,6 +153,7 @@
     $effect(() => {
         if (open) {
             void loadModels();
+            void loadRegistry();
             void loadDevices();
             void loadSecrets();
             void loadMcp();
@@ -190,9 +235,20 @@
                             <span class="s-key">{r.label}</span>
                             <span class="s-status">{models[r.key] || '…'}</span>
                         </div>
+                        {#if registry.length}
+                            <div class="s-chips">
+                                {#each registry as m (m.id)}
+                                    <button
+                                        class="s-chip"
+                                        class:sel={models[r.key] === m.id}
+                                        disabled={busy === 'model:' + r.key}
+                                        onclick={() => pickModel(r.key, m.id)}>{m.label}</button>
+                                {/each}
+                            </div>
+                        {/if}
                         <div class="s-row">
                             <input
-                                placeholder="provider/model-slug"
+                                placeholder="or provider/model-slug"
                                 bind:value={modelEdits[r.key]}
                                 onkeydown={(e) => e.key === 'Enter' && saveModel(r.key)}
                             />
@@ -200,6 +256,32 @@
                         </div>
                     </div>
                 {/each}
+
+                <div class="s-section">Registered models</div>
+                {#each registry as m (m.id)}
+                    <div class="s-item">
+                        <div class="s-item-head">
+                            <span class="s-key">{m.label}</span>
+                            {#if m.reasoning}<span class="s-status on">reasoning</span>{/if}
+                            <button class="s-del" onclick={() => removeModel(m.id)} aria-label="Delete">✕</button>
+                        </div>
+                        <p class="s-desc">
+                            {m.model} · {m.base_url}{m.api_key_secret ? ' · key: ' + m.api_key_secret : ''}
+                        </p>
+                    </div>
+                {/each}
+                <div class="s-item add">
+                    <div class="s-row"><input placeholder="id (e.g. laguna)" bind:value={nm.id} /></div>
+                    <div class="s-row"><input placeholder="label (optional)" bind:value={nm.label} /></div>
+                    <div class="s-row"><input placeholder="base url (http://host:8080/v1)" bind:value={nm.base_url} /></div>
+                    <div class="s-row"><input placeholder="model name" bind:value={nm.model} /></div>
+                    <div class="s-row"><input placeholder="api key secret name (optional)" bind:value={nm.api_key_secret} /></div>
+                    <label class="s-toggle">
+                        <input type="checkbox" bind:checked={nm.reasoning} />
+                        <span>Reasoning model (thinking toggle)</span>
+                    </label>
+                    <div class="s-row"><button disabled={busy === 'model-add'} onclick={addModel}>add model</button></div>
+                </div>
             {:else if tab === 'devices'}
                 {#if devices.length === 0}<p class="s-empty">No devices yet.</p>{/if}
                 {#each devices as d (d.id)}
@@ -389,6 +471,44 @@
         font-size: 12px;
         text-align: center;
         padding: 24px 0;
+    }
+    .s-section {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        margin: 10px 2px 0;
+    }
+    .s-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+    }
+    .s-chip {
+        background: rgb(var(--holo) / 0.05);
+        border: 1px solid rgb(var(--holo) / 0.16);
+        border-radius: 20px;
+        color: var(--text-dim);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        cursor: pointer;
+        padding: 4px 11px;
+        white-space: nowrap;
+    }
+    .s-chip:hover:not(:disabled) {
+        color: var(--text);
+        border-color: rgb(var(--holo) / 0.32);
+    }
+    .s-chip.sel {
+        color: rgb(var(--holo-soft));
+        background: rgb(var(--holo) / 0.14);
+        border-color: rgb(var(--holo) / 0.5);
+    }
+    .s-chip:disabled {
+        opacity: 0.5;
+        cursor: default;
     }
     .s-item {
         border: 1px solid rgb(var(--holo) / 0.1);
