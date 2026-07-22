@@ -22,6 +22,9 @@ export async function reconcileIntegrations(opts: { connect?: boolean } = {}): P
                     command: integ.server.command,
                     args: integ.server.args,
                     integration: integ.id,
+                    // API-key integrations get their secret injected into the server; OAuth
+                    // ones don't (the client secret stays with the api, only a token flows).
+                    secrets: integ.oauth ? undefined : integ.requiredSecrets,
                 },
                 disabled: false,
             });
@@ -45,6 +48,8 @@ export async function reconcileIntegrations(opts: { connect?: boolean } = {}): P
 /** needs-secret (missing client secrets) | needs-auth (no tokens yet) | connected. */
 export async function integrationStatus(integ: Integration): Promise<IntegrationStatus> {
     if (!(await secretsSatisfied(integ))) return 'needs-secret';
+    // API-key integrations are usable as soon as the secret is set; no auth step.
+    if (!integ.oauth) return 'connected';
     const conn = await McpConnection.getByName(integ.id);
     if (!conn?.auth?.integrationTokens) return 'needs-auth';
     return 'connected';

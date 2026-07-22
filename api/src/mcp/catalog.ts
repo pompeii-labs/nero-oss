@@ -26,7 +26,16 @@ export interface Integration {
 
 export type IntegrationStatus = 'needs-secret' | 'needs-auth' | 'connected';
 
-const googleServer = new URL('./servers/google/index.ts', import.meta.url).pathname;
+const serverPath = (name: string) =>
+    new URL(`./servers/${name}/index.ts`, import.meta.url).pathname;
+
+const GOOGLE_OAUTH = {
+    authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    clientIdKey: 'GOOGLE_CLIENT_ID',
+    clientSecretKey: 'GOOGLE_CLIENT_SECRET',
+    tokenEnvVar: 'GOOGLE_ACCESS_TOKEN',
+};
 
 export const CATALOG: Integration[] = [
     {
@@ -35,19 +44,47 @@ export const CATALOG: Integration[] = [
         description:
             'Search/read Gmail, draft + send email with explicit approval, read + create Google Calendar events.',
         requiredSecrets: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
-        server: { command: 'bun', args: [googleServer] },
+        server: { command: 'bun', args: [serverPath('google')] },
         oauth: {
-            authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-            tokenUrl: 'https://oauth2.googleapis.com/token',
+            ...GOOGLE_OAUTH,
             scopes: [
                 'https://www.googleapis.com/auth/gmail.modify',
                 'https://www.googleapis.com/auth/calendar.readonly',
                 'https://www.googleapis.com/auth/calendar.events',
             ],
-            clientIdKey: 'GOOGLE_CLIENT_ID',
-            clientSecretKey: 'GOOGLE_CLIENT_SECRET',
-            tokenEnvVar: 'GOOGLE_ACCESS_TOKEN',
         },
+    },
+    {
+        id: 'gdrive',
+        name: 'Google Drive (Docs + Sheets)',
+        description:
+            'Search Google Drive, read files, and read/write Google Docs and Sheets. Reuses your Google client credentials.',
+        requiredSecrets: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
+        server: { command: 'bun', args: [serverPath('gdrive')] },
+        oauth: {
+            ...GOOGLE_OAUTH,
+            scopes: [
+                'https://www.googleapis.com/auth/drive',
+                'https://www.googleapis.com/auth/documents',
+                'https://www.googleapis.com/auth/spreadsheets',
+            ],
+        },
+    },
+    {
+        id: 'linear',
+        name: 'Linear',
+        description:
+            'Read + search Linear issues, create and update issues, comment. Set a personal API key.',
+        requiredSecrets: ['LINEAR_API_KEY'],
+        server: { command: 'bun', args: [serverPath('linear')] },
+    },
+    {
+        id: 'github',
+        name: 'GitHub',
+        description:
+            'Repos, pull requests (incl. review-requested), issues, code/issue search, notifications, CI checks. Set a personal access token.',
+        requiredSecrets: ['GITHUB_TOKEN'],
+        server: { command: 'bun', args: [serverPath('github')] },
     },
 ];
 
