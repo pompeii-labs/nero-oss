@@ -2,6 +2,29 @@
 
 All notable changes to Nero are documented here.
 
+## 2.1.0 (2026-07-22)
+
+### Highlights
+
+- **Native iOS app.** A full SwiftUI app (iOS 26): presence-first home with the orb, native voice with barge-in, streamed chat with inline tool cards and interactive panels, and APNs push. Plus a fire-and-forget "Tell Nero" errand (Action Button / Siri) that runs in the background and pushes you when it's done, a Share-sheet "Send to Nero", a lock-screen/StandBy orb widget, and a Dynamic Island Live Activity.
+- **Built-in integrations.** A catalog of first-party integrations that switch on when their secrets are set, with a one-link in-conversation OAuth: Google (Gmail + Calendar), Google Drive (Docs + Sheets), Linear, and GitHub. Nero knows which are available and offers to set them up.
+- **Voice v2.** All-WebSocket transport (WebRTC/sidecar dropped), real barge-in with echo cancellation + VAD, tools usable in voice with live tool cards, and swappable TTS (ElevenLabs / Hume / Kokoro).
+- **Multi-display presence.** Every ambient screen listens for "hey nero"; the loudest device wins and focus follows you. Human device naming instead of callsigns.
+- **"Hey Nero" wakeword** trained and shipped (on-device openWakeWord).
+
+### Added
+
+- **Model config**: four independently-settable roles (base / voice / planning / subagents) in the settings table, default `gpt-5.6-terra`; `/model` opens the Models UI.
+- **Push + proactivity**: native push via Lux (`db.push`), presence-gated notifications, reply-when-away, and a `reach_out` tool that persists to the thread.
+- **MCP host-launch (Path B)**: stdio MCP servers run on the host via the sidecar with vault secrets injected.
+- Image attachments in chat; Settings panels for Devices, Models, secrets, and MCP.
+
+### Fixed
+
+- Voice: conservative barge VAD so Nero no longer interrupts himself; speaker/earpiece routing + toggle; clean email reading (decoded + capped, no raw MIME dumps).
+- Projects: approve / merge-approve survive an API restart.
+- Push presence gate reads the correct result shape; wakeword toggle arms without requiring ambient/focus.
+
 ## 2.0.1 (2026-07-06)
 
 ### Added
