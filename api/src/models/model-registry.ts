@@ -21,20 +21,46 @@ export interface ModelEntry {
 }
 
 export class ModelRegistry {
+    /** The `models` table is created lazily on first write. Lux errors on
+     *  insert/select against a table that doesn't exist yet, so ensure it once. */
+    private static ensured = false;
+    private static async ensure(): Promise<void> {
+        if (ModelRegistry.ensured) return;
+        await getLux().createTable('models', [
+            { name: 'id', type: 'STR', primaryKey: true },
+            { name: 'label', type: 'STR' },
+            { name: 'base_url', type: 'STR' },
+            { name: 'model', type: 'STR' },
+            { name: 'api_key_secret', type: 'STR' },
+            { name: 'reasoning', type: 'BOOL' },
+            { name: 'created_at', type: 'INT' },
+        ]);
+        ModelRegistry.ensured = true;
+    }
+
     static async list(): Promise<ModelEntry[]> {
-        return unwrap(
-            await getLux().table('models').select().order('created_at', { ascending: true }),
-        ) as unknown as ModelEntry[];
+        try {
+            return unwrap(
+                await getLux().table('models').select().order('created_at', { ascending: true }),
+            ) as unknown as ModelEntry[];
+        } catch {
+            return [];
+        }
     }
 
     static async get(id: string): Promise<ModelEntry | null> {
-        const rows = unwrap(
-            await getLux().table('models').select().eq('id', id).limit(1),
-        ) as unknown as ModelEntry[];
-        return rows[0] ?? null;
+        try {
+            const rows = unwrap(
+                await getLux().table('models').select().eq('id', id).limit(1),
+            ) as unknown as ModelEntry[];
+            return rows[0] ?? null;
+        } catch {
+            return null;
+        }
     }
 
     static async upsert(e: Omit<ModelEntry, 'created_at'>): Promise<ModelEntry> {
+        await ModelRegistry.ensure();
         const existing = await ModelRegistry.get(e.id);
         const body: ModelEntry = { ...e, created_at: existing?.created_at ?? Date.now() };
         if (existing) {
