@@ -123,7 +123,7 @@ export class ProjectUtility {
         const project = await Project.create({
             title,
             goal,
-            model: await Settings.resolvePlanModel(),
+            model: (await Settings.resolveConnection('plan_model')).model,
             est_cost_usd: estTotal,
             status: 'awaiting_approval',
             repo_path: repoPath,

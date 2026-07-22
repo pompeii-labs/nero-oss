@@ -47,9 +47,9 @@ export async function runVoiceTurn(
     // agent setup + session assembly.
     const recall = Memory.recallForPrompt(transcript).catch(() => '');
 
-    const model = await Settings.resolveVoiceModel();
+    const connection = await Settings.resolveConnection('voice_model');
     const agent = new NeroAgent({
-        model,
+        connection,
         voice: true,
         utilities: buildUtilities({ includeMcp: true }),
     });

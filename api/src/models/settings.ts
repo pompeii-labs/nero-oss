@@ -1,6 +1,8 @@
 import { getLux, unwrap } from '@nero/shared/lux';
-import { DEFAULT_MODEL } from '@nero/shared/config';
+import { DEFAULT_MODEL, loadConfig } from '@nero/shared/config';
 import type { Settings as SettingsRow } from '@nero/shared/types';
+import { ModelRegistry } from './model-registry';
+import { Secret } from './secret';
 
 /** Per-role model settings keys. Every role falls back to DEFAULT_MODEL (no env). */
 export const MODEL_KEY = 'model'; // base / chat
@@ -9,6 +11,15 @@ export const PLAN_MODEL_KEY = 'plan_model';
 export const SUBAGENT_MODEL_KEY = 'subagent_model';
 
 export type ModelRole = 'model' | 'voice_model' | 'plan_model' | 'subagent_model';
+
+/** A fully-resolved model endpoint for a role: which server, key, model, and whether
+ *  it supports the reasoning toggle. */
+export interface ModelConnection {
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+    reasoning: boolean;
+}
 
 /**
  * Runtime-mutable, single-user config in Lux, keyed by name (not id), so a
@@ -57,6 +68,31 @@ export class Settings {
     /** A role's model: its `settings` value, else DEFAULT_MODEL. No env. */
     private static async resolve(key: ModelRole): Promise<string> {
         return (await Settings.get(key).catch(() => null))?.trim() || DEFAULT_MODEL;
+    }
+
+    /**
+     * Resolve a role to a full endpoint. If the role's value matches a registered model
+     * (models table) use that endpoint; otherwise treat it as a raw OpenRouter slug on
+     * the default OpenRouter connection.
+     */
+    static async resolveConnection(key: ModelRole): Promise<ModelConnection> {
+        const value = await Settings.resolve(key);
+        const entry = await ModelRegistry.get(value).catch(() => null);
+        if (entry) {
+            let apiKey = '';
+            if (entry.api_key_secret) {
+                const vault = await Secret.loadMap().catch(() => ({}) as Record<string, string>);
+                apiKey = vault[entry.api_key_secret] ?? '';
+            }
+            return {
+                baseUrl: entry.base_url,
+                apiKey,
+                model: entry.model,
+                reasoning: !!entry.reasoning,
+            };
+        }
+        const cfg = loadConfig();
+        return { baseUrl: cfg.llm.baseUrl, apiKey: cfg.llm.apiKey, model: value, reasoning: false };
     }
 
     /** The base/chat model in effect. Use anywhere that must match it (context

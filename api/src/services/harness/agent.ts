@@ -18,7 +18,8 @@ import { truncateToolResult } from './truncate';
 import type { AgentActivity } from './activity';
 import { buildUtilities } from '../../tools';
 import { Message } from '../../models/message';
-import { openrouter } from '../../lib/openrouter';
+import { openrouter, clientFor } from '../../lib/openrouter';
+import type { ModelConnection } from '../../models/settings';
 import { Logger } from '@nero/shared/logger';
 
 const log = new Logger('agent');
@@ -30,8 +31,12 @@ const KEEP_TOOL_OUTPUT_RATIO = 0.5;
 export interface NeroAgentOpts {
     client?: OpenAI;
     model?: string;
+    /** A resolved model endpoint (registry-aware). Preferred over client/model in prod;
+     *  client/model stay for tests. */
+    connection?: ModelConnection;
     utilities?: MagmaUtilities[];
-    /** Voice turn: append speech-formatting guidance to the system prompt. */
+    /** Voice turn: append speech-formatting guidance to the system prompt + disable the
+     *  model's reasoning (if it supports the toggle) so speech is snappy. */
     voice?: boolean;
 }
 
@@ -76,22 +81,43 @@ export class NeroAgent extends MagmaAgent {
     private clock = new Date();
 
     constructor(opts: NeroAgentOpts = {}) {
-        const cfg = loadConfig();
-        const client = opts.client ?? openrouter();
+        const voice = opts.voice ?? false;
+        let client: OpenAI;
+        let model: string;
+        let reasoning = false;
+        if (opts.client) {
+            client = opts.client;
+            model = opts.model ?? loadConfig().model;
+        } else if (opts.connection) {
+            client = clientFor(opts.connection.baseUrl, opts.connection.apiKey);
+            model = opts.connection.model;
+            reasoning = opts.connection.reasoning;
+        } else {
+            client = openrouter();
+            model = opts.model ?? loadConfig().model;
+        }
 
-        const model = opts.model ?? cfg.model;
+        // Reasoning models (llama.cpp `enable_thinking`): think for chat/agentic work,
+        // but not on voice (a 20s think before speaking is unusable). Give a big token
+        // budget when thinking so it isn't cut off mid-reasoning with an empty answer.
+        const settings: Record<string, unknown> = { temperature: 0.7 };
+        if (reasoning) {
+            settings.chat_template_kwargs = { enable_thinking: !voice };
+            settings.max_tokens = voice ? 1024 : 16384;
+        }
+
         super({
             provider: 'openai',
             model,
             client,
-            settings: { temperature: 0.7 },
+            settings: settings as never,
             messageContext: -1,
             stream: true,
         });
 
         this.resolvedModel = model;
         this._utilities = opts.utilities ?? buildUtilities();
-        this.voice = opts.voice ?? false;
+        this.voice = voice;
     }
 
     async setup(): Promise<void> {

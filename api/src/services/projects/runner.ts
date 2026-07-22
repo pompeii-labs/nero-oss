@@ -174,8 +174,9 @@ async function resolveConflictAgent(
     intWt: string,
     files: string[],
 ): Promise<void> {
-    const model = await Settings.resolveSubagentModel();
-    const agent = new NeroAgent({ model, utilities: buildWorkerUtilities(intWt) });
+    const connection = await Settings.resolveConnection('subagent_model');
+    const model = connection.model;
+    const agent = new NeroAgent({ connection, utilities: buildWorkerUtilities(intWt) });
     await agent.setup();
     const usage = { input: 0, output: 0 };
     agent.onUsage = (u) => {
@@ -248,7 +249,8 @@ async function processJob(job: Job): Promise<void> {
         .map((d) => `### ${d.title}\n${d.result ?? '(no result)'}`)
         .join('\n\n');
 
-    const model = await Settings.resolveSubagentModel();
+    const connection = await Settings.resolveConnection('subagent_model');
+    const model = connection.model;
     let streamed = '';
     const acts = new Map<string, TaskActivity>();
     const usage = { input: 0, output: 0 };
@@ -283,7 +285,7 @@ async function processJob(job: Job): Promise<void> {
         workdir = join(homedir(), '.nero', 'work', projectId, taskId);
         await runner().mkdir(workdir);
     }
-    const agent = new NeroAgent({ model, utilities: buildWorkerUtilities(workdir) });
+    const agent = new NeroAgent({ connection, utilities: buildWorkerUtilities(workdir) });
     await agent.setup();
     let lastWrite = 0;
     const flush = async () => {

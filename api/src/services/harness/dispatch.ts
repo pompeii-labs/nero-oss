@@ -116,12 +116,12 @@ export class Dispatcher {
             });
         }
 
-        // Resolve the model fresh each run: a Lux `/model` override wins, else the
-        // env default. Takes effect on the very next message, no restart.
-        const model = (await Settings.getModel().catch(() => null)) ?? undefined;
+        // Resolve the base model endpoint fresh each run (registry entry or OpenRouter
+        // slug). Takes effect on the very next message, no restart.
+        const connection = await Settings.resolveConnection('model');
         const agent: RunnableAgent = opts.agentFactory
             ? opts.agentFactory()
-            : new NeroAgent({ client: opts.client, model });
+            : new NeroAgent({ connection, client: opts.client });
         const emitter = createEmitter(dispatch.id);
         const entry: ActiveDispatch = {
             id: dispatch.id,
