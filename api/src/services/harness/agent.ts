@@ -177,9 +177,9 @@ export class NeroAgent extends MagmaAgent {
                 }
             }
         }
-        if (clearAt.size === 0) return messages;
+        if (clearAt.size === 0) return this.withVolatile(messages);
 
-        return messages.map((m, i) => {
+        const cleared = messages.map((m, i) => {
             if (!clearAt.has(i)) return m;
             const blocks: MagmaContentBlock[] = (m.blocks ?? []).map((b) =>
                 b.type === 'tool_result'
@@ -191,6 +191,7 @@ export class NeroAgent extends MagmaAgent {
             );
             return new MagmaMessage({ role: m.role, blocks });
         });
+        return this.withVolatile(cleared);
     }
 
     private loadPromptTemplate(): string {
@@ -209,7 +210,18 @@ export class NeroAgent extends MagmaAgent {
         throw new Error('Could not find prompts/system.txt');
     }
 
-    getSystemPrompts() {
+    /** Whether the resolved model uses Anthropic-style breakpoint caching
+     *  (cache_control). Everything else (OpenAI, local llama.cpp) relies on
+     *  automatic longest-common-prefix caching, which needs a byte-stable prefix. */
+    private get anthropicCache(): boolean {
+        return (
+            typeof this.resolvedModel === 'string' && this.resolvedModel.startsWith('anthropic/')
+        );
+    }
+
+    /** The per-turn-volatile context: recalled memories + the current time. Frozen
+     *  by `this.clock` so it's identical across the turn's tool loop. */
+    private volatileContext(): string {
         const cfg = loadConfig();
         const now = this.clock;
         const human = now.toLocaleString('en-US', {
@@ -222,37 +234,88 @@ export class NeroAgent extends MagmaAgent {
             minute: '2-digit',
             timeZoneName: 'short',
         });
-        const context =
+        const time =
             `Right now it is ${human} (${cfg.timezone}). ` +
             `The current year is ${now.getFullYear()} - use today's real date for anything ` +
             `time-sensitive (web searches, "latest"/"recent" queries, scheduling). Do not assume ` +
             `an earlier year from your training. ISO: ${now.toISOString()}.`;
+        return `${this.currentMemories || ''}\n\n${time}`.trim();
+    }
 
-        // Prompt caching: split the template at its volatile tail. The stable
-        // instructions get a cache breakpoint, and because Anthropic's cache prefix
-        // is tools -> system -> messages, that one breakpoint also caches the tool
-        // schemas (the bulk of the per-turn prompt) sitting before it. Memories +
-        // time go in a separate, uncached block so the cached key is identical turn
-        // to turn. Only Anthropic models on OpenRouter honor cache_control.
-        // ONE system message with two text blocks: a single message whose first
-        // block carries the cache breakpoint is what OpenRouter actually caches
-        // (two separate system messages are NOT cached). The volatile second block
-        // (memories + time) sits after the breakpoint, processed fresh each turn.
+    getSystemPrompts() {
         const [base] = this.loadPromptTemplate().split('{{MEMORIES}}');
         // Voice guidance is stable across voice turns, so it stays in the cached
         // block (voice and chat just get separate cache entries).
         const stable = this.voice ? `${base.trim()}\n\n${VOICE_STYLE}` : base.trim();
-        const volatile = `${this.currentMemories || ''}\n\n${context}`.trim();
-        const cache = this.resolvedModel.startsWith('anthropic/');
-        return [
-            {
-                role: 'system' as const,
-                blocks: [
-                    { type: 'text' as const, text: stable, cache },
-                    { type: 'text' as const, text: volatile },
-                ],
-            },
-        ];
+
+        // Anthropic: split the prompt at its volatile tail. The stable instructions
+        // get a cache breakpoint, and because Anthropic's cache prefix is
+        // tools -> system -> messages, that one breakpoint also caches the tool
+        // schemas (the bulk of the per-turn prompt) sitting before it. Memories +
+        // time go in a separate, uncached block after the breakpoint. ONE system
+        // message with two text blocks (two separate system messages are NOT cached).
+        if (this.anthropicCache) {
+            return [
+                {
+                    role: 'system' as const,
+                    blocks: [
+                        { type: 'text' as const, text: stable, cache: true },
+                        { type: 'text' as const, text: this.volatileContext() },
+                    ],
+                },
+            ];
+        }
+
+        // OpenAI + local (llama.cpp) cache by longest common prefix, so the system
+        // prompt must be byte-identical turn to turn. The volatile block (memories +
+        // time) is NOT here; withVolatile() (in getMessages) rides it on the current
+        // user message instead, so [system + tools + prior history] stays a stable,
+        // reusable prefix and only the new turn gets reprocessed.
+        return [{ role: 'system' as const, blocks: [{ type: 'text' as const, text: stable }] }];
+    }
+
+    /**
+     * For prefix-cached models (OpenAI, local), append the volatile context
+     * (memories + time) to the current user message instead of the system prompt, so
+     * the cached prefix ([system + tools + prior history]) stays byte-stable. Operates
+     * on copies from super.getMessages() and never mutates stored history, so it's
+     * fresh (single, non-accumulating) on every completion.
+     */
+    private withVolatile(messages: MagmaMessage[]): MagmaMessage[] {
+        // Magma's base constructor calls getMessages() during super(), before this
+        // subclass's fields (resolvedModel, clock, ...) are initialized. Skip until
+        // construction is done; real requests run after and inject normally.
+        if (!this.resolvedModel) return messages;
+        if (this.anthropicCache) return messages;
+        const volatile = this.volatileContext();
+        if (!volatile) return messages;
+        let idx = -1;
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === 'user') {
+                idx = i;
+                break;
+            }
+        }
+        if (idx === -1) return messages;
+        const m = messages[idx];
+        const blocks: MagmaContentBlock[] = [...(m.blocks ?? [])];
+        const tail = `\n\n<runtime-context>\n${volatile}\n</runtime-context>`;
+        let lastText = -1;
+        for (let i = blocks.length - 1; i >= 0; i--) {
+            if (blocks[i].type === 'text') {
+                lastText = i;
+                break;
+            }
+        }
+        if (lastText >= 0) {
+            const b = blocks[lastText] as Extract<MagmaContentBlock, { type: 'text' }>;
+            blocks[lastText] = { ...b, text: b.text + tail };
+        } else {
+            blocks.push({ type: 'text', text: tail.trimStart() });
+        }
+        const copy = [...messages];
+        copy[idx] = new MagmaMessage({ role: m.role, blocks });
+        return copy;
     }
 
     private formatToolName(name: string): string {
