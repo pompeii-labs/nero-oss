@@ -330,7 +330,7 @@
         height: 18px;
         border: none;
         border-radius: 999px;
-        background: rgb(0 0 0 / 0.4);
+        background: var(--sunken);
         color: var(--text-dim);
         cursor: pointer;
     }
@@ -379,23 +379,26 @@
         align-items: center;
         gap: 10px;
         padding: 10px 10px 10px 16px;
-        border-radius: 16px;
-        background: linear-gradient(180deg, rgb(0 0 0 / 0) 0%, rgb(0 0 0 / 0.32) 100%), var(--panel-bg);
-        border: 1px solid rgb(var(--holo) / 0.2);
-        backdrop-filter: blur(12px);
+        border-radius: 20px;
+        background: var(--glass-tint);
+        border: 1px solid var(--glass-edge);
+        backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
         box-shadow:
-            inset 0 1px 0 rgb(var(--metal-hi) / 0.16),
-            0 0 40px -12px rgb(var(--holo) / 0.22),
-            0 18px 40px -18px rgb(0 0 0 / 0.9);
+            inset 0 1px 0 var(--glass-hi),
+            inset 0 -1px 0 var(--glass-shade),
+            0 0 40px -14px rgb(var(--holo) / 0.22),
+            var(--glass-lift);
         transition: border-color 0.25s, box-shadow 0.25s;
         position: relative;
     }
     .input:focus-within {
-        border-color: rgb(var(--holo) / 0.42);
+        border-color: rgb(var(--holo) / 0.5);
         box-shadow:
-            inset 0 1px 0 rgb(var(--metal-hi) / 0.18),
-            0 0 52px -10px rgb(var(--holo) / 0.38),
-            0 18px 40px -18px rgb(0 0 0 / 0.9);
+            inset 0 1px 0 var(--glass-hi),
+            inset 0 -1px 0 var(--glass-shade),
+            0 0 54px -10px rgb(var(--holo) / 0.4),
+            var(--glass-lift);
     }
     .input.drag { border-color: rgb(var(--holo) / 0.6); }
     .prompt {

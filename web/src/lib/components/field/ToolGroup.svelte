@@ -30,13 +30,23 @@
         min-width: 220px;
         max-width: 100%;
         padding: 6px;
-        border-radius: 10px;
-        background: rgb(var(--holo) / 0.03);
-        border: 1px solid rgb(var(--holo) / 0.1);
+        border-radius: 14px;
+        background: var(--glass-tint);
+        backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        border: 1px solid var(--glass-edge);
+        box-shadow:
+            inset 0 1px 0 var(--glass-hi),
+            inset 0 -1px 0 var(--glass-shade),
+            0 12px 30px -20px rgb(0 0 0 / 0.8);
     }
     .group.live {
-        border-color: rgb(var(--holo) / 0.22);
-        background: rgb(var(--holo) / 0.05);
+        border-color: rgb(var(--holo) / 0.4);
+        box-shadow:
+            inset 0 1px 0 var(--glass-hi),
+            inset 0 -1px 0 var(--glass-shade),
+            0 0 30px -12px rgb(var(--holo) / 0.45),
+            0 12px 30px -20px rgb(0 0 0 / 0.8);
     }
     .ghead {
         padding: 4px 8px 6px;
@@ -107,7 +117,7 @@
         margin: 0 9px 6px;
         padding: 9px 11px;
         border-radius: 7px;
-        background: rgb(0 0 0 / 0.35);
+        background: var(--sunken);
         border: 1px solid rgb(var(--holo) / 0.1);
         font-family: var(--font-mono);
         font-size: 11px;

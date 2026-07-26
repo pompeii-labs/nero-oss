@@ -65,13 +65,22 @@
         justify-content: flex-start;
     }
 
+    /* the glass recipe carries the material; the holo wash on top keeps the user's
+       side reading as theirs */
     .bubble {
         max-width: 78%;
         padding: 11px 15px;
-        border-radius: 16px 16px 4px 16px;
-        background: rgb(var(--holo) / 0.08);
-        border: 1px solid rgb(var(--holo) / 0.18);
-        box-shadow: 0 0 24px -14px rgb(var(--holo) / 0.5);
+        border-radius: 18px 18px 5px 18px;
+        background:
+            linear-gradient(180deg, rgb(var(--holo) / 0.16), rgb(var(--holo) / 0.06)),
+            var(--glass-tint);
+        backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        border: 1px solid var(--glass-edge);
+        box-shadow:
+            inset 0 1px 0 var(--glass-hi),
+            inset 0 -1px 0 var(--glass-shade),
+            0 14px 34px -20px rgb(0 0 0 / 0.85);
     }
     .utext {
         margin: 0;
@@ -153,7 +162,7 @@
         padding: 0.12em 0.38em;
     }
     .prose :global(pre) {
-        background: rgb(0 0 0 / 0.4);
+        background: var(--sunken);
         border: 1px solid rgb(var(--holo) / 0.14);
         border-radius: 10px;
         padding: 12px 14px;

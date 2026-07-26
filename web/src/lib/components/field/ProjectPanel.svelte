@@ -371,7 +371,7 @@
         overflow-y: auto;
         padding: 10px 11px;
         border-radius: 8px;
-        background: rgb(0 0 0 / 0.25);
+        background: var(--sunken);
         border: 1px solid rgb(var(--holo) / 0.15);
         font-family: var(--font-mono);
         font-size: 11px;

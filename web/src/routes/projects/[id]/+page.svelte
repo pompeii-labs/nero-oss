@@ -499,7 +499,7 @@
         height: var(--app-h);
         overflow: hidden;
         box-sizing: border-box;
-        background: var(--bg, #08090c);
+        background: var(--field-bg);
         color: var(--text);
         display: flex;
         flex-direction: column;
@@ -565,16 +565,16 @@
         background: rgb(var(--holo) / 0.16);
     }
     .pd-paused {
-        color: #e7b34a;
-        border-color: #e7b34a66;
+        color: rgb(var(--warn));
+        border-color: rgb(var(--warn) / 0.4);
     }
     .pd-error {
-        color: #e7674a;
-        border-color: #e7674a66;
+        color: rgb(var(--bad));
+        border-color: rgb(var(--bad) / 0.4);
     }
     .pd-done {
-        color: #4ae08a;
-        border-color: #4ae08a66;
+        color: rgb(var(--ok));
+        border-color: rgb(var(--ok) / 0.4);
     }
     .pd-meter {
         margin-left: auto;
@@ -597,7 +597,7 @@
         transition: width 0.4s ease;
     }
     .pd-fill.near {
-        background: #e7b34a;
+        background: rgb(var(--warn));
     }
     .pd-spend,
     .pd-prog {
@@ -631,9 +631,9 @@
         color: var(--text);
     }
     .pd-ctl.danger:hover {
-        border-color: #e7674a88;
-        color: #e7674a;
-        background: #e7674a18;
+        border-color: rgb(var(--bad) / 0.53);
+        color: rgb(var(--bad));
+        background: rgb(var(--bad) / 0.09);
     }
 
     .pd-body {
@@ -704,10 +704,10 @@
         color: rgb(var(--holo));
     }
     .pd-s-done .pd-navdot {
-        color: #4ae08a;
+        color: rgb(var(--ok));
     }
     .pd-s-failed .pd-navdot {
-        color: #e7674a;
+        color: rgb(var(--bad));
     }
     .pd-navbody {
         display: flex;
@@ -854,8 +854,8 @@
         color: var(--text-dim);
     }
     .pd-s-done .pd-flownum {
-        border-color: #4ae08a66;
-        color: #4ae08a;
+        border-color: rgb(var(--ok) / 0.4);
+        color: rgb(var(--ok));
     }
     .pd-s-running .pd-flownum {
         border-color: rgb(var(--holo));
@@ -863,8 +863,8 @@
         animation: pd-pulse 1.4s ease-in-out infinite;
     }
     .pd-s-failed .pd-flownum {
-        border-color: #e7674a66;
-        color: #e7674a;
+        border-color: rgb(var(--bad) / 0.4);
+        color: rgb(var(--bad));
     }
     .pd-flowbody {
         display: flex;
@@ -956,10 +956,10 @@
         color: rgb(var(--holo));
     }
     .pd-s-done .pd-ddot {
-        color: #4ae08a;
+        color: rgb(var(--ok));
     }
     .pd-s-failed .pd-ddot {
-        color: #e7674a;
+        color: rgb(var(--bad));
     }
     .pd-dtitle {
         margin: 0;
@@ -1038,10 +1038,10 @@
         background: rgb(var(--holo));
     }
     .pd-a-success .pd-tdot {
-        background: #4ae08a;
+        background: rgb(var(--ok));
     }
     .pd-a-error .pd-tdot {
-        background: #e7674a;
+        background: rgb(var(--bad));
     }
     .pd-tname {
         flex-shrink: 0;
@@ -1097,7 +1097,7 @@
         inset: 0;
         z-index: 80;
         border: none;
-        background: rgb(0 0 0 / 0.55);
+        background: var(--sunken);
         cursor: default;
         animation: pd-fade 0.15s ease;
     }
@@ -1121,12 +1121,16 @@
         flex-direction: column;
         gap: 12px;
         padding: 22px 24px;
-        /* Opaque: a faint holo tint composited over the solid page bg. */
-        background:
-            linear-gradient(rgb(var(--holo) / 0.05), rgb(var(--holo) / 0.05)),
-            var(--bg, #0a0b0e);
-        border-left: 1px solid rgb(var(--holo) / 0.25);
-        box-shadow: -50px 0 90px -30px rgb(0 0 0 / 0.95);
+        /* Same glass slab as the Field's Settings sheet. Was composited over
+           var(--bg), which never existed, so it fell through to --void and stayed
+           dark on the light themes. */
+        background: var(--glass-tint);
+        backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        border-left: 1px solid var(--glass-edge);
+        box-shadow:
+            inset 1px 0 0 var(--glass-hi),
+            -50px 0 90px -30px rgb(0 0 0 / 0.7);
         animation: pd-slidein 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
     .pd-slide.wide {
@@ -1165,10 +1169,10 @@
         background: rgb(var(--holo));
     }
     .pd-adot.pd-a-success {
-        background: #4ae08a;
+        background: rgb(var(--ok));
     }
     .pd-adot.pd-a-error {
-        background: #e7674a;
+        background: rgb(var(--bad));
     }
     .pd-slide-name {
         flex: 1;
@@ -1297,7 +1301,7 @@
     }
     .pd-prerr {
         margin: 0;
-        color: #e7674a;
+        color: rgb(var(--bad));
         font-family: var(--font-mono);
         font-size: 11.5px;
     }
@@ -1328,10 +1332,10 @@
         font-size: 11px;
     }
     .pd-diffdel {
-        color: #e7674a;
+        color: rgb(var(--bad));
     }
     .pd-diffadd {
-        color: #4ae08a;
+        color: rgb(var(--ok));
     }
     .pd-editlink {
         margin-left: auto;
@@ -1349,7 +1353,7 @@
         overflow: auto;
         border-radius: 8px;
         border: 1px solid rgb(var(--holo) / 0.12);
-        background: rgb(0 0 0 / 0.28);
+        background: var(--sunken);
         font-family: var(--font-mono);
         font-size: 11.5px;
         line-height: 1.55;
@@ -1370,11 +1374,11 @@
         user-select: none;
     }
     .pd-dl-add {
-        background: rgb(74 224 138 / 0.1);
-        color: #b6f0cf;
+        background: rgb(var(--ok) / 0.12);
+        color: rgb(var(--ok) / 0.75);
     }
     .pd-dl-del {
-        background: rgb(231 103 74 / 0.1);
-        color: #f0c0b6;
+        background: rgb(var(--bad) / 0.12);
+        color: rgb(var(--bad) / 0.75);
     }
 </style>

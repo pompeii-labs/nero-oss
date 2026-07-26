@@ -1,6 +1,9 @@
 <script lang="ts">
     import '../app.css';
     import '$lib/design/layout.css';
+    // The token layer belongs to every route, not just the Field. Imported per-page it
+    // wasn't guaranteed to be present on a direct navigation to /agenda.
+    import '$lib/design/themes.css';
     import { onMount } from 'svelte';
     import { Toaster } from '$lib/components/ui/sonner';
 

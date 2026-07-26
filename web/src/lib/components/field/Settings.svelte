@@ -1,6 +1,7 @@
 <script lang="ts">
     import { get, post, del } from '$lib/actions/helpers';
     import { deviceId, renameDevice, forgetDevice } from '$lib/device';
+    import { fieldTheme } from '$lib/stores/field-theme.svelte';
 
     type Tab = 'models' | 'devices' | 'secrets' | 'mcp';
     let { open = $bindable(false), tab = $bindable<Tab>('secrets') }: { open?: boolean; tab?: Tab } =
@@ -215,7 +216,9 @@
         onkeydown={(e) => e.key === 'Escape' && (open = false)}
         role="presentation"
     ></div>
-    <aside class="settings" data-theme="obsidian">
+    <!-- was pinned to data-theme="obsidian", which froze the sheet in one palette no
+         matter what the Field was set to -->
+    <aside class="settings" data-theme={fieldTheme.dataTheme}>
         <header class="s-head">
             <span class="s-title">Settings</span>
             <button class="s-close" onclick={() => (open = false)} aria-label="Close settings">✕</button>
@@ -373,10 +376,11 @@
 {/if}
 
 <style>
+    /* above the dial (90/91) so the two can never fight over the top */
     .scrim {
         position: fixed;
         inset: 0;
-        z-index: 90;
+        z-index: 100;
         background: rgb(0 0 0 / 0.45);
         backdrop-filter: blur(2px);
         animation: fade 0.2s ease;
@@ -386,14 +390,17 @@
         top: 0;
         right: 0;
         bottom: 0;
-        z-index: 91;
+        z-index: 101;
         width: min(420px, 92vw);
         display: flex;
         flex-direction: column;
-        background: var(--panel-bg);
-        backdrop-filter: blur(18px) saturate(1.1);
-        border-left: 1px solid rgb(var(--holo) / 0.14);
-        box-shadow: -30px 0 80px rgb(0 0 0 / 0.5);
+        background: var(--glass-tint);
+        backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        border-left: 1px solid var(--glass-edge);
+        box-shadow:
+            inset 1px 0 0 var(--glass-hi),
+            -30px 0 80px rgb(0 0 0 / 0.5);
         color: var(--text);
         animation: slide 0.26s cubic-bezier(0.22, 1, 0.36, 1);
     }

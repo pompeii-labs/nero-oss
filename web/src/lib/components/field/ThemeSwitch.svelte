@@ -46,9 +46,13 @@
         gap: 4px;
         padding: 4px;
         border-radius: 999px;
-        background: rgb(var(--void) / 0.5);
-        border: 1px solid rgb(var(--holo) / 0.12);
-        backdrop-filter: blur(10px);
+        background: var(--glass-tint);
+        border: 1px solid var(--glass-edge);
+        backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        box-shadow:
+            inset 0 1px 0 var(--glass-hi),
+            0 8px 22px -12px rgb(0 0 0 / 0.8);
     }
     .opt {
         font-family: var(--font-mono);

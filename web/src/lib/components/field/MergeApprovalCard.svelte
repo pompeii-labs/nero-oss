@@ -139,7 +139,7 @@
         overflow: auto;
         padding: 11px 13px;
         border-radius: 8px;
-        background: rgb(0 0 0 / 0.28);
+        background: var(--sunken);
         border: 1px solid rgb(var(--holo) / 0.12);
         font-family: var(--font-mono);
         font-size: 11.5px;
