@@ -127,6 +127,23 @@ struct NeroClient {
     }
     func mcpAction(_ name: String, _ action: String) async { _ = try? await post("/v1/mcp/\(action)", ["name": name]) }
 
+    // MARK: actions (the orb's radial dial)
+    /// Custom actions the user or Nero bound to dial slots. Built-in wedges are
+    /// client-side and never come back from here.
+    func actions() async -> [DialAction] {
+        (try? await getJSON("/v1/actions", ActionsResponse.self))?.actions ?? []
+    }
+
+    /// Fire a script or prompt action. A `builtin` in the reply means the slot is one
+    /// the screen owns and the caller should handle it locally.
+    func runAction(_ id: String) async -> ActionRunResult {
+        guard let d = try? await post("/v1/actions/\(id)/run", [:]),
+              let r = try? JSONDecoder().decode(ActionRunResult.self, from: d) else {
+            return ActionRunResult(ok: false, output: "couldn't reach Nero", builtin: nil)
+        }
+        return r
+    }
+
     // MARK: push
     func registerPush(_ token: String) async {
         _ = try? await post("/v1/push/register", ["token": token, "platform": "ios", "bundle_id": "com.pompeii.nero"])
@@ -185,3 +202,14 @@ struct ModelsConfig: Codable {
     let subagentModel: String?
 }
 struct CompactResponse: Codable { let compacted: Bool; let summary: String? }
+struct DialAction: Codable, Identifiable {
+    let id: String
+    /// 0-7 clockwise from twelve o'clock, or -1 when unbound.
+    let slot: Int
+    let label: String
+    let icon: String
+    let kind: String
+    let confirm: Bool
+}
+struct ActionsResponse: Codable { let actions: [DialAction] }
+struct ActionRunResult: Codable { let ok: Bool; let output: String; let builtin: String? }

@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 /// Root shell. The home IS the voice view: tap the orb to talk in place (the composer
 /// pill becomes voice controls). Tap the pill -> pushed Chat; gear -> Settings sheet.
@@ -73,6 +74,25 @@ struct HomeScreen: View {
     var onSettings: () -> Void
     var onOpenProject: () -> Void
 
+    // The dial. Press and hold the orb to ring it with eight slots; drag to one and
+    // release to fire it. Built-ins are the defaults; anything Nero bound to a slot
+    // displaces the built-in that sat there.
+    @AppStorage("nero.theme") private var themeId: String = "obsidian"
+    @SwiftUI.State private var dialOpen = false
+    @SwiftUI.State private var dialHot: Int?
+    @SwiftUI.State private var dialArmed: Int?
+    @SwiftUI.State private var dialStatus = ""
+    @SwiftUI.State private var customActions: [DialAction] = []
+    @SwiftUI.State private var composeSlot: Int?
+    @SwiftUI.State private var composeText = ""
+    @SwiftUI.State private var confirming: DialWedge?
+    @SwiftUI.State private var firedThisGesture = false
+    @SwiftUI.State private var showPhotos = false
+    @SwiftUI.State private var photoItems: [PhotosPickerItem] = []
+
+    private let dialSize: CGFloat = 340
+    private let orbSize: CGFloat = 216
+
     private var voiceOn: Bool { voice.phase != .idle }
 
     private var orbState: Orb.State {
@@ -111,9 +131,8 @@ struct HomeScreen: View {
                     .transition(.opacity)
                     .animation(Motion.glide, value: voice.activities)
             }
-            Button { toggleVoice() } label: { Orb(state: orbState, size: 216) }
-                .buttonStyle(PressableButtonStyle(haptic: true))
-            caption(view: caption)
+            orbStack
+            caption(view: dialOpen ? "release on a slot" : caption)
             if voiceOn { transcript }
             Spacer()
             bottomControls
@@ -123,6 +142,225 @@ struct HomeScreen: View {
         .background { Atmosphere() }
         .animation(Motion.glide, value: voiceOn)
         .onDisappear { if voiceOn { voice.stop() } }
+    }
+
+    // MARK: the orb + its dial
+
+    private var orbStack: some View {
+        ZStack {
+            // the orb recedes into the dial's hole so the ring clears it
+            Orb(state: orbState, size: orbSize)
+                .scaleEffect(dialOpen ? 0.58 : 1)
+                .animation(Motion.snap, value: dialOpen)
+            if dialOpen {
+                RadialDial(
+                    wedges: dialWedges,
+                    hot: dialHot,
+                    armed: dialArmed,
+                    status: dialStatus,
+                    diameter: dialSize
+                )
+                .transition(.opacity)
+            }
+        }
+        .frame(width: dialSize, height: dialSize)
+        .coordinateSpace(name: "dial")
+        .contentShape(Circle())
+        .gesture(dialGesture)
+        .onTapGesture { if !dialOpen { toggleVoice() } }
+        .photosPicker(isPresented: $showPhotos, selection: $photoItems, maxSelectionCount: 1, matching: .images)
+        .onChange(of: photoItems) { _, items in Task { await sendPhotos(items) } }
+        .alert("Bind slot \(composeSlot ?? 0)", isPresented: composeBinding) {
+            TextField("what should this do?", text: $composeText)
+            Button("Ask Nero") { submitCompose() }
+            Button("Cancel", role: .cancel) { closeDial() }
+        } message: {
+            Text("Nero will write the action and bind it to this slot.")
+        }
+        .alert(confirming?.label ?? "", isPresented: confirmBinding) {
+            Button("Run", role: .destructive) { if let w = confirming { fire(w) } }
+            Button("Cancel", role: .cancel) { closeDial() }
+        } message: {
+            Text("This action asked to confirm before it runs.")
+        }
+    }
+
+    /// Press-and-hold opens the ring, the same press drags to a wedge, release fires it.
+    private var dialGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.42)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("dial")))
+            .onChanged { value in
+                switch value {
+                case .first(true):
+                    openDial()
+                case .second(true, let drag):
+                    if let drag { updateHot(drag.location) }
+                default:
+                    break
+                }
+            }
+            .onEnded { value in
+                guard case .second(true, let drag) = value else { return }
+                release(at: drag?.location)
+            }
+    }
+
+    private var dialCenter: CGPoint { CGPoint(x: dialSize / 2, y: dialSize / 2) }
+
+    private func openDial() {
+        guard !dialOpen else { return }
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        DialSfx.shared.open()
+        withAnimation(Motion.snap) { dialOpen = true }
+        Task { customActions = await store.client.actions() }
+    }
+
+    private func closeDial() {
+        // a wedge that fired already played its own sound; don't stack a dismiss on top
+        if dialOpen && !firedThisGesture { DialSfx.shared.close() }
+        firedThisGesture = false
+        withAnimation(Motion.snap) { dialOpen = false }
+        dialHot = nil
+        dialArmed = nil
+        dialStatus = ""
+        confirming = nil
+        composeSlot = nil
+        composeText = ""
+    }
+
+    private func updateHot(_ p: CGPoint) {
+        let slot = Dial.slot(at: p, center: dialCenter, radius: dialSize / 2)
+        guard slot != dialHot else { return }
+        dialHot = slot
+        // the detent: every wedge you cross ticks. This is the thing the web build
+        // can't do, since Safari has no vibration API.
+        if let slot {
+            UISelectionFeedbackGenerator().selectionChanged()
+            DialSfx.shared.tick(slot)
+        }
+    }
+
+    private func release(at p: CGPoint?) {
+        let slot = p.flatMap { Dial.slot(at: $0, center: dialCenter, radius: dialSize / 2) }
+        guard let slot else { return closeDial() }
+        guard let w = dialWedges[slot] else {
+            // an empty slot is an invitation: ask Nero for the button you want
+            composeSlot = slot
+            return
+        }
+        if w.confirm {
+            dialArmed = slot
+            confirming = w
+            DialSfx.shared.arm()
+            return
+        }
+        fire(w)
+    }
+
+    private func fire(_ w: DialWedge) {
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        DialSfx.shared.fire(dialArmed ?? dialHot ?? 0)
+        firedThisGesture = true
+        if w.custom {
+            let id = w.id
+            Task {
+                let r = await store.client.runAction(id)
+                if !r.ok, !r.output.isEmpty { dialStatus = r.output }
+            }
+            closeDial()
+            return
+        }
+        closeDial()
+        runBuiltin(w.id)
+    }
+
+    private func submitCompose() {
+        let text = composeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let slot = composeSlot
+        closeDial()
+        guard !text.isEmpty, let slot else { return }
+        store.send(
+            "Create a dial action bound to slot \(slot) that does this: \(text). "
+                + "Pick a short label and a fitting icon."
+        )
+    }
+
+    private func sendPhotos(_ items: [PhotosPickerItem]) async {
+        for item in items {
+            guard let raw = try? await item.loadTransferable(type: Data.self),
+                  let ui = UIImage(data: raw),
+                  let jpeg = ui.jpegData(compressionQuality: 0.85) else { continue }
+            store.send("", images: [PendingImage(data: jpeg, mime: "image/jpeg", name: "photo.jpg")])
+        }
+        photoItems = []
+    }
+
+    // MARK: wedges
+
+    /// Built-in slot order, clockwise from twelve o'clock. Slots resolve to nil when
+    /// the capability isn't available right now (no call in progress, no live project),
+    /// which leaves them open as invitations.
+    private var builtinSlots: [String?] {
+        [
+            "voice",
+            "chat",
+            "camera",
+            voiceOn ? "mute" : nil,
+            store.activeProject != nil ? "project" : nil,
+            "theme",
+            "settings",
+            nil,
+        ]
+    }
+
+    private func builtin(_ key: String) -> DialWedge? {
+        switch key {
+        case "voice": return DialWedge(id: key, label: "Voice", icon: "mic.fill", on: voiceOn)
+        case "chat": return DialWedge(id: key, label: "Chat", icon: "text.bubble")
+        case "camera": return DialWedge(id: key, label: "Camera", icon: "camera.fill")
+        case "mute": return DialWedge(id: key, label: "Mute", icon: voice.muted ? "mic.slash.fill" : "mic.fill", on: voice.muted)
+        case "project": return DialWedge(id: key, label: "Project", icon: "square.stack.3d.up")
+        case "theme": return DialWedge(id: key, label: "Theme", icon: "paintpalette")
+        case "settings": return DialWedge(id: key, label: "Settings", icon: "gearshape")
+        default: return nil
+        }
+    }
+
+    private func runBuiltin(_ key: String) {
+        switch key {
+        case "voice": toggleVoice()
+        case "chat": onType()
+        case "camera": showPhotos = true
+        case "mute": voice.toggleMute()
+        case "project": onOpenProject()
+        case "theme":
+            let i = Theme.all.firstIndex { $0.id == themeId } ?? 0
+            themeId = Theme.all[(i + 1) % Theme.all.count].id
+        case "settings": onSettings()
+        default: break
+        }
+    }
+
+    private var dialWedges: [DialWedge?] {
+        (0..<Dial.slots).map { i in
+            if let a = customActions.first(where: { $0.slot == i }) {
+                return DialWedge(
+                    id: a.id,
+                    label: a.label,
+                    icon: DialIcon.symbol(a.icon),
+                    custom: true,
+                    confirm: a.confirm
+                )
+            }
+            return builtinSlots[i].flatMap(builtin)
+        }
+    }
+
+    private var composeBinding: Binding<Bool> {
+        Binding(get: { composeSlot != nil }, set: { if !$0 { composeSlot = nil } })
+    }
+    private var confirmBinding: Binding<Bool> {
+        Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } })
     }
 
     private var topBar: some View {

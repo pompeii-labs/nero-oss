@@ -76,7 +76,25 @@ extension Theme {
         orbStops: [Color(hex: 0x2a1d14), Color(hex: 0x150d08), Color(hex: 0x0b0604), Color(hex: 0x060302)]
     )
 
-    static let all: [Theme] = [.obsidian, .forge]
+    /// Instrument blue. Hard electric blue on near-black with a teal counter-accent
+    /// and no warm anywhere; the theme the HUD chrome and survey grid belong to.
+    static let vector = Theme(
+        id: "vector",
+        displayName: "Vector",
+        void_: Color(hex: 0x01050b),
+        text: Color(hex: 0xcfe4f7),
+        textDim: Color(hex: 0x6f8ba6),
+        textFaint: Color(hex: 0x3f5468),
+        holoRGB: (42, 132, 226),
+        holoSoft: Color(r: 122, 186, 246),
+        holoHot: Color(r: 226, 242, 255),
+        holo2RGB: (0, 206, 196),
+        fieldStops: [Color(hex: 0x06111f), Color(hex: 0x030a14), Color(hex: 0x01050b)],
+        panelStops: [Color(r: 10, 28, 48, 0.66), Color(r: 3, 10, 20, 0.54)],
+        orbStops: [Color(hex: 0x10283f), Color(hex: 0x071626), Color(hex: 0x030c16), Color(hex: 0x01060d)]
+    )
+
+    static let all: [Theme] = [.obsidian, .forge, .vector]
     static func named(_ id: String) -> Theme { all.first { $0.id == id } ?? .obsidian }
 }
 
