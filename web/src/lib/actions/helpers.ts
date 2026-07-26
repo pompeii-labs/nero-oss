@@ -47,6 +47,13 @@ export function put<T>(path: string, body?: unknown): Promise<NeroResult<T>> {
     });
 }
 
+export function patch<T>(path: string, body?: unknown): Promise<NeroResult<T>> {
+    return request<T>(path, {
+        method: 'PATCH',
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+}
+
 export function del<T>(path: string): Promise<NeroResult<T>> {
     return request<T>(path, { method: 'DELETE' });
 }
