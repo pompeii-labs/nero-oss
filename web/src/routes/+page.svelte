@@ -10,6 +10,10 @@
     import Composer, { type PendingFile } from '$lib/components/field/Composer.svelte';
     import Settings from '$lib/components/field/Settings.svelte';
     import ThemeSwitch from '$lib/components/field/ThemeSwitch.svelte';
+    import HudFrame from '$lib/components/field/HudFrame.svelte';
+    import RadialMenu from '$lib/components/field/RadialMenu.svelte';
+    import CameraCapture from '$lib/components/field/CameraCapture.svelte';
+    import { listActions, runAction, SLOTS, type DialAction, type Wedge } from '$lib/actions/dial';
     import type { WakewordListener } from '$lib/wakeword';
     import {
         startVoice,
@@ -813,6 +817,177 @@
         else if (res) currentDispatchId = res.dispatchId;
     }
 
+    // ---- the dial ----
+    // Long-press (or right-click) the orb to ring it with eight slots. Each slot is a
+    // built-in the Field already owns, or an action Nero authored; an empty slot is a
+    // prompt to make one. Built-ins are the defaults and any custom action bound to a
+    // slot displaces the built-in that sat there.
+    let dialOpen = $state(false);
+    let dialStatus = $state('');
+    let customActions = $state<DialAction[]>([]);
+    let cameraInput = $state<HTMLInputElement | null>(null);
+    let cameraOpen = $state(false);
+
+    const BUILTINS: Record<string, { label: string; icon: string; run: () => void }> = {
+        voice: {
+            label: 'Voice',
+            icon: 'mic',
+            run: () => {
+                if (!presenceMode) {
+                    presenceMode = true;
+                    engaged = true;
+                } else engaged = !engaged;
+            },
+        },
+        wake: { label: 'Wake', icon: 'wave', run: () => toggleWakeword() },
+        // On a phone the native capture sheet IS the camera, so use it. Desktop
+        // browsers ignore `capture` and would just open a file dialog, so those get a
+        // real getUserMedia viewfinder instead.
+        camera: {
+            label: 'Camera',
+            icon: 'camera',
+            run: () => {
+                if (isPhone()) cameraInput?.click();
+                else cameraOpen = true;
+            },
+        },
+        ambient: { label: 'Ambient', icon: 'radio', run: () => toggleAmbient() },
+        chat: {
+            label: 'Chat',
+            icon: 'chat',
+            run: () => {
+                presenceMode = !presenceMode;
+                if (!presenceMode) engaged = false;
+            },
+        },
+        theme: { label: 'Theme', icon: 'palette', run: () => fieldTheme.cycle() },
+        agenda: { label: 'Agenda', icon: 'wrench', run: () => void goto('/agenda') },
+        settings: { label: 'Settings', icon: 'settings', run: () => (settingsOpen = true) },
+    };
+
+    // Default slot order, clockwise from twelve o'clock. The last one is deliberately
+    // empty: it's the invitation to bind an action, and settings already has a home in
+    // the top bar. Anything Nero binds to a taken slot displaces that built-in.
+    const DEFAULT_SLOTS: (string | null)[] = [
+        'voice',
+        'wake',
+        'camera',
+        'ambient',
+        'chat',
+        'theme',
+        'agenda',
+        null,
+    ];
+
+    /** Which built-ins currently read as "on", so their wedge renders filled. */
+    const builtinOn = $derived<Record<string, boolean>>({
+        voice: engaged,
+        wake: wakewordOn,
+        ambient: amAmbient,
+        chat: !presenceMode,
+        camera: false,
+        theme: false,
+        workshop: false,
+        settings: false,
+    });
+
+    const dialWedges = $derived<(Wedge | null)[]>(
+        Array.from({ length: SLOTS }, (_, i) => {
+            const custom = customActions.find((a) => a.slot === i);
+            if (custom) {
+                return {
+                    id: custom.id,
+                    label: custom.label,
+                    icon: custom.icon,
+                    custom: true,
+                    confirm: custom.confirm,
+                };
+            }
+            const key = DEFAULT_SLOTS[i] ?? '';
+            const b = BUILTINS[key];
+            if (!b) return null;
+            return { id: key, label: b.label, icon: b.icon, custom: false, on: builtinOn[key] };
+        }),
+    );
+
+    async function openDial() {
+        dialStatus = '';
+        dialOpen = true;
+        customActions = await listActions();
+    }
+
+    async function fireWedge(w: Wedge) {
+        if (!w.custom) {
+            dialOpen = false;
+            BUILTINS[w.id]?.run();
+            return;
+        }
+        dialStatus = 'running…';
+        const r = await runAction(w.id);
+        dialOpen = false;
+        dialStatus = '';
+        if (r.output) pushNotice(`${w.label}: ${r.output}`, !r.ok);
+        else if (!r.ok) pushNotice(`${w.label} failed`, true);
+    }
+
+    /** An empty slot asks Nero to fill it. He has the tools to write and bind it. */
+    function composeWedge(slot: number, text: string) {
+        dialOpen = false;
+        void handleSend(
+            `Create a dial action bound to slot ${slot} that does this: ${text}. Pick a short label and a fitting icon.`,
+        );
+    }
+
+    // Long-press opens the dial; the press that opened it must not also toggle talk.
+    const LONG_PRESS_MS = 420;
+    let pressTimer: ReturnType<typeof setTimeout> | null = null;
+    let pressedLong = false;
+    // True while the finger that opened the dial is still down, so releasing it over a
+    // wedge fires that wedge. Opening by right-click is not a drag.
+    let dialDragging = $state(false);
+
+    function orbPointerDown(e: PointerEvent) {
+        pressedLong = false;
+        if (pressTimer) clearTimeout(pressTimer);
+        pressTimer = setTimeout(() => {
+            pressedLong = true;
+            pressTimer = null;
+            // touch gives the orb implicit capture; hand it back or the dial never
+            // sees the drag that follows
+            const el = e.currentTarget as HTMLElement | null;
+            if (el?.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
+            dialDragging = true;
+            void openDial();
+        }, LONG_PRESS_MS);
+    }
+    function orbPointerUp() {
+        if (pressTimer) clearTimeout(pressTimer);
+        pressTimer = null;
+        dialDragging = false;
+    }
+    /** Leaving the orb only cancels a long-press that hasn't fired yet. Once the dial
+     *  is open the finger is expected to travel off the orb toward a wedge. */
+    function orbPointerLeave() {
+        if (!pressTimer) return;
+        clearTimeout(pressTimer);
+        pressTimer = null;
+    }
+    function orbClick() {
+        if (pressedLong) {
+            pressedLong = false;
+            return;
+        }
+        toggleTalk();
+    }
+
+    async function onCameraPick(e: Event) {
+        const input = e.currentTarget as HTMLInputElement;
+        const file = input.files?.[0];
+        input.value = '';
+        if (!file) return;
+        await handleSend('', [{ file, id: `cam${Date.now()}` }]);
+    }
+
     function pushNotice(content: string, error = false) {
         const key = `n${noticeSeq++}`;
         commandNotices = [...commandNotices, { key, content, error }];
@@ -867,8 +1042,54 @@
     });
 </script>
 
-<div class="field" class:presence={presenceMode} data-theme={fieldTheme.dataTheme}>
+<div
+    class="field"
+    class:presence={presenceMode}
+    class:dialed={dialOpen}
+    class:hud={fieldTheme.hud}
+    data-theme={fieldTheme.dataTheme}
+>
     <Atmosphere />
+
+    {#if fieldTheme.hud}
+        <HudFrame
+            {connected}
+            label={myDeviceName}
+            status={[
+                { key: 'voice', value: engaged ? 'on' : 'off', on: engaged },
+                { key: 'wake', value: wakewordOn ? 'on' : 'off', on: wakewordOn },
+                { key: 'mode', value: presenceMode ? 'field' : 'chat' },
+            ]}
+        />
+    {/if}
+
+    <!-- photo capture for the dial's CAMERA slot; the composer owns the normal path -->
+    <input
+        bind:this={cameraInput}
+        class="camera-input"
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onchange={onCameraPick}
+        tabindex="-1"
+        aria-hidden="true"
+    />
+
+    <CameraCapture
+        open={cameraOpen}
+        onCapture={(file) => void handleSend('', [{ file, id: `cam${Date.now()}` }])}
+        onClose={() => (cameraOpen = false)}
+    />
+
+    <RadialMenu
+        open={dialOpen}
+        wedges={dialWedges}
+        status={dialStatus}
+        dragging={dialDragging}
+        onFire={fireWedge}
+        onCompose={composeWedge}
+        onClose={() => (dialOpen = false)}
+    />
 
     <!-- panels Nero throws onto this screen (independent of where the orb is) -->
     <PanelLayer
@@ -936,7 +1157,15 @@
             class="presence-orb"
             class:working={!waitingOnUser && (showLoader || (engaged && voiceOrbState !== 'idle'))}
             class:tappable={presenceMode}
-            onclick={toggleTalk}
+            onclick={orbClick}
+            onpointerdown={orbPointerDown}
+            onpointerup={orbPointerUp}
+            onpointercancel={orbPointerUp}
+            onpointerleave={orbPointerLeave}
+            oncontextmenu={(e) => {
+                e.preventDefault();
+                void openDial();
+            }}
             role="button"
             tabindex="-1"
         >
@@ -1267,8 +1496,13 @@
         width: 40px;
         height: 40px;
         border-radius: 50%;
-        border: 1px solid rgb(var(--holo) / 0.22);
-        background: rgb(var(--holo) / 0.05);
+        border: 1px solid var(--glass-edge);
+        background: var(--glass-tint);
+        backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        box-shadow:
+            inset 0 1px 0 var(--glass-hi),
+            0 6px 18px -10px rgb(0 0 0 / 0.7);
         color: rgb(var(--holo-soft));
         cursor: pointer;
         flex-shrink: 0;
@@ -1286,8 +1520,13 @@
         width: 36px;
         height: 36px;
         border-radius: 50%;
-        border: 1px solid rgb(var(--holo) / 0.16);
-        background: transparent;
+        border: 1px solid var(--glass-edge);
+        background: var(--glass-tint);
+        backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+        box-shadow:
+            inset 0 1px 0 var(--glass-hi),
+            0 6px 18px -10px rgb(0 0 0 / 0.7);
         color: var(--text-dim);
         cursor: pointer;
         flex-shrink: 0;
@@ -1300,10 +1539,12 @@
         color: var(--text);
         border-color: rgb(var(--holo) / 0.3);
     }
+    /* Armed reads as an inverted pill (same treatment as the theme switch's active
+       option), so it stays legible on light day grounds where --holo-hot vanishes. */
     .wake-toggle.on {
-        color: rgb(var(--holo-hot));
-        border-color: rgb(var(--holo) / 0.5);
-        background: rgb(var(--holo) / 0.08);
+        color: rgb(var(--void));
+        border-color: transparent;
+        background: linear-gradient(180deg, rgb(var(--holo-soft)), rgb(var(--holo)));
         animation: wake-pulse 2.4s ease-in-out infinite;
     }
     @keyframes wake-pulse {
@@ -1325,14 +1566,21 @@
         transform-origin: center;
         z-index: 5;
         opacity: 0.92;
-        pointer-events: none;
+        /* accepts pointers so the long-press dial gesture works wherever the orb is
+           visible; the click itself still only does something in presence mode */
+        pointer-events: auto;
+        /* the dial's long-press must not race Safari's own press handling: no
+           scroll-cancel, no selection, no callout menu */
+        touch-action: none;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
         transition:
             left 0.85s cubic-bezier(0.65, 0, 0.2, 1),
             transform 0.85s cubic-bezier(0.65, 0, 0.2, 1),
             opacity 0.6s ease;
     }
     .presence-orb.tappable {
-        pointer-events: auto;
         cursor: pointer;
     }
     .presence-orb.working {
@@ -1514,6 +1762,28 @@
         transform: translate(-50%, -50%) scale(2.15);
         opacity: 1;
     }
+    /* the dial owns the screen while it's open: the presence chrome would collide
+       with the lower wedges */
+    .field.dialed .voice-hint,
+    .field.dialed .presence-exit,
+    .field.dialed .voice-transcript {
+        opacity: 0;
+        pointer-events: none;
+        animation: none; /* the hint's pulse would otherwise win over this opacity */
+    }
+    /* the orb recedes into the dial's hole while the dial is open */
+    .field.dialed .presence-orb {
+        left: 50%;
+        transform: translate(-50%, -50%) scale(1.3);
+        opacity: 1;
+    }
+    .camera-input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+    }
     .field.presence .scroller,
     .field.presence .hero {
         transform: translateX(40vw);
@@ -1639,6 +1909,10 @@
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: contain;
         touch-action: pan-y;
+        /* must be positioned or the z-index below is silently ignored, which let
+           glass bubbles (their backdrop-filter makes a stacking context) paint over
+           the dial */
+        position: relative;
         z-index: 10;
         transition: transform 0.85s cubic-bezier(0.65, 0, 0.2, 1), opacity 0.6s ease;
     }
@@ -1769,6 +2043,29 @@
     @keyframes cdot {
         0%, 100% { transform: translateY(0); opacity: 0.4; }
         50% { transform: translateY(-3px); opacity: 1; }
+    }
+
+    /* The instrument frame occupies the outer 40px (rail at 14, elbows 14..40), so
+       when it's on, the Field's own chrome has to move inboard of it. */
+    .field.hud .bar {
+        padding-top: max(34px, var(--safe-t));
+        padding-left: max(48px, var(--safe-l));
+        padding-right: max(48px, var(--safe-r));
+    }
+    .field.hud .theme-dock {
+        left: 48px;
+        bottom: 36px;
+    }
+    @media (max-width: 640px) {
+        .field.hud .bar {
+            padding-top: max(30px, var(--safe-t));
+            padding-left: max(34px, var(--safe-l));
+            padding-right: max(34px, var(--safe-r));
+        }
+        .field.hud .theme-dock {
+            left: 34px;
+            bottom: 30px;
+        }
     }
 
     .theme-dock {

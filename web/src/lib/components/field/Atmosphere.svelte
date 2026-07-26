@@ -26,6 +26,7 @@
 <div class="atmos" aria-hidden="true">
     <div class="cloud c1"></div>
     <div class="cloud c2"></div>
+    <div class="grid"></div>
     <div class="vignette"></div>
     {#if floor}<div class="floor"></div>{/if}
     <div class="motes">
@@ -80,6 +81,18 @@
     @keyframes drift2 {
         0%, 100% { transform: translate(0, 0); }
         50% { transform: translate(-5vw, -3vw); }
+    }
+
+    /* flat survey grid — only themes that set --grid (Vector) draw it */
+    .grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+            linear-gradient(var(--grid, transparent) 1px, transparent 1px),
+            linear-gradient(90deg, var(--grid, transparent) 1px, transparent 1px);
+        background-size: var(--grid-size, 46px) var(--grid-size, 46px);
+        mask-image: radial-gradient(115% 90% at 50% 46%, #000 30%, transparent 82%);
+        -webkit-mask-image: radial-gradient(115% 90% at 50% 46%, #000 30%, transparent 82%);
     }
 
     .vignette {

@@ -1,20 +1,25 @@
 import { browser } from '$app/environment';
 import { setTheme, setFieldMode } from '$lib/actions/settings';
 
-export type FieldTheme = 'obsidian' | 'forge';
+export type FieldTheme = 'obsidian' | 'forge' | 'vector';
 export type FieldMode = 'night' | 'day';
 
 export const FIELD_THEMES: { id: FieldTheme; label: string }[] = [
     { id: 'obsidian', label: 'Obsidian' },
     { id: 'forge', label: 'Forge' },
+    { id: 'vector', label: 'Vector' },
 ];
+
+/** Themes that render the instrument chrome (HUD frame, ruler ticks, grid). */
+const HUD_THEMES: FieldTheme[] = ['vector'];
 
 const THEME_KEY = 'nero-field-theme';
 const MODE_KEY = 'nero-field-mode';
 
 function initialTheme(): FieldTheme {
     if (!browser) return 'obsidian';
-    return localStorage.getItem(THEME_KEY) === 'forge' ? 'forge' : 'obsidian';
+    const stored = localStorage.getItem(THEME_KEY);
+    return FIELD_THEMES.some((t) => t.id === stored) ? (stored as FieldTheme) : 'obsidian';
 }
 function initialMode(): FieldMode {
     if (!browser) return 'night';
@@ -28,6 +33,11 @@ class FieldThemeState {
     /** The composite applied to `data-theme` — e.g. "obsidian" or "obsidian-day". */
     get dataTheme(): string {
         return this.mode === 'day' ? `${this.value}-day` : this.value;
+    }
+
+    /** True when the active theme wants the instrument chrome drawn. */
+    get hud(): boolean {
+        return HUD_THEMES.includes(this.value);
     }
 
     /** Apply a value locally without writing back — used for incoming sync from
@@ -51,8 +61,14 @@ class FieldThemeState {
         if (browser) void setFieldMode(m);
     }
 
+    /** Step to the next theme in the list. What the dial's THEME wedge fires. */
+    cycle() {
+        const i = FIELD_THEMES.findIndex((t) => t.id === this.value);
+        this.set(FIELD_THEMES[(i + 1) % FIELD_THEMES.length].id);
+    }
+
     toggle() {
-        this.set(this.value === 'obsidian' ? 'forge' : 'obsidian');
+        this.cycle();
     }
 
     toggleMode() {
