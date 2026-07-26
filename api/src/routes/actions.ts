@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { Actions } from '../services/actions';
 import { catalogStatus, PROVIDERS } from '../services/actions/catalog';
+import { ActionAuthor } from '../services/actions/author';
 import { SLOTS, type ActionKind } from '../models/action';
 import { error } from '../util/errors';
 
@@ -113,6 +114,30 @@ export function actionRoutes(): Hono {
             });
             if (r.error) return error(c, 400, r.error);
             return c.json({ action: r.action, missingSecrets: r.missingSecrets });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
+    /** Hand a slot to Nero: he drafts an action, runs it until it works, and binds it.
+     *  Returns as soon as the row exists so the dial can render it building. */
+    app.post('/v1/actions/author', async (c) => {
+        try {
+            const b = (await c.req.json().catch(() => ({}))) as {
+                goal?: string;
+                slot?: number;
+                /** Block until it's authored. For scripted tests; the UI fires and forgets. */
+                wait?: boolean;
+            };
+            const goal = b.goal?.trim();
+            if (!goal) return error(c, 400, 'goal is required');
+            const slot = b.slot ?? -1;
+            if (slot < -1 || slot >= SLOTS)
+                return error(c, 400, `slot must be -1 or 0-${SLOTS - 1}`);
+
+            if (b.wait === true) return c.json(await ActionAuthor.author(goal, slot));
+            void ActionAuthor.author(goal, slot).catch(() => {});
+            return c.json({ started: true, slot });
         } catch (err) {
             return error(c, 500, err);
         }

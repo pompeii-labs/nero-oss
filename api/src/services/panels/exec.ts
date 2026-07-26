@@ -42,6 +42,8 @@ export interface FnResult {
     raw: unknown;
     /** Shell stderr, kept separate: a command can succeed and still say something. */
     stderr?: string;
+    /** Killed at the timeout rather than exiting. Its output may still be complete. */
+    timedOut?: boolean;
 }
 
 /**
@@ -67,6 +69,7 @@ export async function runFn(
             status: r.code,
             raw: parseMaybeJson(r.stdout),
             stderr: r.stderr || undefined,
+            timedOut: r.timedOut,
         };
     }
 

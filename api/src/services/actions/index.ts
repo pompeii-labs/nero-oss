@@ -40,7 +40,8 @@ function format(r: FnResult, kind: 'shell' | 'http'): string {
     if (!r.ok && kind === 'http') parts.push(`HTTP ${r.status}`);
     if (body) parts.push(body);
     if (r.stderr) parts.push(`[stderr]\n${r.stderr.trimEnd()}`);
-    if (!r.ok && kind === 'shell') parts.push(`[exit ${r.status}]`);
+    if (r.timedOut) parts.push('[hung: killed at the timeout, it never exited on its own]');
+    else if (!r.ok && kind === 'shell') parts.push(`[exit ${r.status}]`);
     return parts.join('\n') || '(no output)';
 }
 

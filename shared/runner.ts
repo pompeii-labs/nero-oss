@@ -19,6 +19,11 @@ export interface ShellResult {
     stdout: string;
     stderr: string;
     code: number;
+    /** The command was killed at the timeout rather than exiting on its own. Distinct
+     *  from a non-zero exit: a script can do its whole job, print, and still hang
+     *  because something kept the event loop alive. Callers that judge success by the
+     *  exit code alone would call that a failure. */
+    timedOut?: boolean;
 }
 export interface ExecOpts {
     cwd?: string;
@@ -75,11 +80,21 @@ export class HostRunner implements Runner {
             });
             return { stdout, stderr, code: 0 };
         } catch (e) {
-            const err = e as { stdout?: string; stderr?: string; code?: number; message?: string };
+            const err = e as {
+                stdout?: string;
+                stderr?: string;
+                code?: number;
+                message?: string;
+                killed?: boolean;
+                signal?: string;
+            };
+            // A timeout arrives here with killed/signal set and no numeric code.
+            const timedOut = err.killed === true || err.signal === 'SIGTERM';
             return {
                 stdout: err.stdout ?? '',
                 stderr: err.stderr ?? err.message ?? String(e),
                 code: typeof err.code === 'number' ? err.code : 1,
+                ...(timedOut ? { timedOut: true } : {}),
             };
         }
     }
