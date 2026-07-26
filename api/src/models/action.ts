@@ -3,19 +3,36 @@ import { randomUUID } from 'crypto';
 
 /**
  * An action: one thing the user can fire from a slot on the orb's radial menu.
- * Three kinds share one row:
- *   - `builtin` — a capability the Field already owns (voice, wakeword, theme).
- *     `body` is the builtin key; the server never runs it, the client does.
- *   - `script`  — a shell script Nero (or the user) authored. Runs through the
- *     runner, same surface as the bash tool.
+ * One row, several kinds:
+ *   - `builtin` — a capability the Field already owns (camera, stop). `body` is the
+ *     builtin key; the server never runs it, the client does.
+ *   - `http`    — a declarative request. Fires directly, no LLM turn, which is the
+ *     whole point of a dial: an MCP round trip would leave you waiting on a model.
+ *   - `shell`   — a command, run through the runner with the vault in its env.
  *   - `prompt`  — a message handed to Nero as if the user had typed it.
+ *   - `agent`   — a goal run as an agent loop rather than a single turn (BRIEF).
  *
  * Slots are the eight compass positions on the dial, 0 at twelve o'clock going
  * clockwise. `slot` -1 means the action exists but isn't bound to the dial.
  * Direct-Lux with a lazy ensure, like Pursuit.
  */
 
-export type ActionKind = 'builtin' | 'script' | 'prompt';
+export type ActionKind = 'builtin' | 'http' | 'shell' | 'prompt' | 'agent';
+
+/** How an action executes. Mirrors PanelFn minus `js`, which actions never carry. */
+export type ActionFn =
+    | { kind: 'shell'; cmd: string }
+    | {
+          kind: 'http';
+          url: string;
+          method?: string;
+          headers?: Record<string, string>;
+          body?: string;
+      };
+
+/** Where an action is in its life. Nero authors in the background, so a slot can be
+ *  occupied by something he's still building. */
+export type ActionStatus = 'ready' | 'drafting' | 'testing' | 'failed';
 
 export const SLOTS = 8;
 
@@ -27,11 +44,25 @@ export interface ActionData {
     /** Icon key the Field maps to a glyph. */
     icon: string;
     kind: ActionKind;
-    /** builtin key, shell script, or prompt text depending on `kind`. */
+    /** builtin key, prompt text, or agent goal. Empty for http/shell, which use `fn`. */
     body: string;
+    /**
+     * The executable form for http/shell. Holds `${SECRET}` references verbatim —
+     * they resolve per run, so rotating a token doesn't orphan every action and the
+     * value is never written to a row.
+     */
+    fn: ActionFn | null;
+    /** Catalogue provenance, so a template can be re-instantiated or repaired. */
+    provider: string;
+    template_id: string;
+    /** Param values baked in at instantiation (unlike secrets). */
+    params: Record<string, string>;
+    status: ActionStatus;
+    /** Newline log of the authoring loop's attempts; the error when `failed`. */
+    draft_log: string;
     /** Require a confirm tap before firing. For anything destructive. */
     confirm: boolean;
-    /** Working directory for `script` actions. Empty = the runner's default. */
+    /** Working directory for `shell` actions. Empty = the runner's default. */
     cwd: string;
     /** Epoch ms of the last run (0 = never). */
     last_run_at: number;
@@ -39,7 +70,55 @@ export interface ActionData {
     updated_at: number;
 }
 
+/** The stored shape. `fn` and `params` are JSON *strings*: Lux's createTable has no
+ *  JSON type, and Pursuit already avoids JSON columns for the same reason. */
+type ActionRow = Omit<ActionData, 'fn' | 'params'> & { fn: string; params: string };
+
+function parse<T>(raw: unknown, fallback: T): T {
+    if (typeof raw !== 'string' || !raw) return fallback;
+    try {
+        return JSON.parse(raw) as T;
+    } catch {
+        return fallback;
+    }
+}
+
+/** Rows written before http/agent existed used `script` and lack the newer columns.
+ *  Normalise on read so callers never see a half-shaped row. */
+function hydrate(row: ActionRow): ActionData {
+    return {
+        ...row,
+        kind: (row.kind as string) === 'script' ? 'shell' : row.kind,
+        fn: parse<ActionFn | null>(row.fn, null),
+        provider: row.provider ?? '',
+        template_id: row.template_id ?? '',
+        params: parse<Record<string, string>>(row.params, {}),
+        status: row.status ?? 'ready',
+        draft_log: row.draft_log ?? '',
+    };
+}
+
+function dehydrate(data: ActionData): ActionRow {
+    return {
+        ...data,
+        fn: data.fn ? JSON.stringify(data.fn) : '',
+        params: Object.keys(data.params).length ? JSON.stringify(data.params) : '',
+    };
+}
+
 const TABLE = 'actions';
+
+/** Columns added after the table first shipped. `createTable` is a no-op against an
+ *  existing table and does NOT backfill columns, so an install that predates these
+ *  needs them altered in. Both paths converge on the same schema. */
+const ADDED_COLUMNS: [string, string][] = [
+    ['fn', 'TEXT'],
+    ['provider', 'TEXT'],
+    ['template_id', 'TEXT'],
+    ['params', 'TEXT'],
+    ['status', 'TEXT'],
+    ['draft_log', 'TEXT'],
+];
 
 export class Action {
     private static ensured = false;
@@ -52,20 +131,34 @@ export class Action {
             { name: 'icon', type: 'STR' },
             { name: 'kind', type: 'STR' },
             { name: 'body', type: 'STR' },
+            { name: 'fn', type: 'STR' },
+            { name: 'provider', type: 'STR' },
+            { name: 'template_id', type: 'STR' },
+            { name: 'params', type: 'STR' },
+            { name: 'status', type: 'STR' },
+            { name: 'draft_log', type: 'STR' },
             { name: 'confirm', type: 'BOOL' },
             { name: 'cwd', type: 'STR' },
             { name: 'last_run_at', type: 'INT' },
             { name: 'created_at', type: 'INT' },
             { name: 'updated_at', type: 'INT' },
         ]);
+        // Idempotent: each fails harmlessly once the column is there.
+        for (const [name, type] of ADDED_COLUMNS) {
+            await getLux()
+                .exec(`TALTER ${TABLE} ADD ${name} ${type}`)
+                .catch(() => {});
+        }
         Action.ensured = true;
     }
 
     static async list(): Promise<ActionData[]> {
         try {
-            return unwrap(
-                await getLux().table(TABLE).select().order('slot', { ascending: true }),
-            ) as unknown as ActionData[];
+            return (
+                unwrap(
+                    await getLux().table(TABLE).select().order('slot', { ascending: true }),
+                ) as unknown as ActionRow[]
+            ).map(hydrate);
         } catch {
             return [];
         }
@@ -75,8 +168,8 @@ export class Action {
         try {
             const rows = unwrap(
                 await getLux().table(TABLE).select().eq('id', id).limit(1),
-            ) as unknown as ActionData[];
-            return rows[0] ?? null;
+            ) as unknown as ActionRow[];
+            return rows[0] ? hydrate(rows[0]) : null;
         } catch {
             return null;
         }
@@ -87,8 +180,8 @@ export class Action {
         try {
             const rows = unwrap(
                 await getLux().table(TABLE).select().eq('slot', slot).limit(1),
-            ) as unknown as ActionData[];
-            return rows[0] ?? null;
+            ) as unknown as ActionRow[];
+            return rows[0] ? hydrate(rows[0]) : null;
         } catch {
             return null;
         }
@@ -106,6 +199,12 @@ export class Action {
             icon: input.icon?.trim() || 'zap',
             kind: input.kind,
             body: input.body,
+            fn: input.fn ?? null,
+            provider: input.provider ?? '',
+            template_id: input.template_id ?? '',
+            params: input.params ?? {},
+            status: input.status ?? 'ready',
+            draft_log: input.draft_log ?? '',
             confirm: input.confirm ?? false,
             cwd: input.cwd ?? '',
             last_run_at: 0,
@@ -116,7 +215,7 @@ export class Action {
         unwrap(
             await getLux()
                 .table(TABLE)
-                .insert(row as never),
+                .insert(dehydrate(row) as never),
         );
         return row;
     }
@@ -129,7 +228,7 @@ export class Action {
         unwrap(
             await getLux()
                 .table(TABLE)
-                .update(row as never)
+                .update(dehydrate(row) as never)
                 .eq('id', id),
         );
         return row;
@@ -142,7 +241,7 @@ export class Action {
         unwrap(
             await getLux()
                 .table(TABLE)
-                .update({ ...held, slot: -1, updated_at: Date.now() } as never)
+                .update(dehydrate({ ...held, slot: -1, updated_at: Date.now() }) as never)
                 .eq('id', held.id),
         );
     }
@@ -157,7 +256,7 @@ export class Action {
         unwrap(
             await getLux()
                 .table(TABLE)
-                .update({ ...existing, last_run_at: Date.now() } as never)
+                .update(dehydrate({ ...existing, last_run_at: Date.now() }) as never)
                 .eq('id', id),
         );
     }

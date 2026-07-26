@@ -134,43 +134,50 @@ struct RadialDial: View {
         }
     }
 
-    // Each wedge is its own Liquid Glass surface, grouped in a container so the system
-    // renders them as one piece of material. No plate underneath: a wedge is a closed
-    // shape, so glassEffect clips to it cleanly and the hole stays clear for the orb.
+    /// The one lit wedge, if any. Armed beats hot. Deriving it once means two wedges
+    /// can't both look selected, which is what the old per-wedge fill allowed.
+    private var lit: (slot: Int, fill: Color, edge: Color)? {
+        if let armed { return (armed, theme.holo2(0.5), theme.holo2()) }
+        if let hot { return (hot, theme.holo(0.45), theme.holoSoft.opacity(0.85)) }
+        return nil
+    }
+
+    // Deliberately NOT in a GlassEffectContainer: that merges glass shapes within its
+    // spacing, and eight touching wedges get blended into one blob that bleeds tint
+    // into its neighbours. Uniform untinted material per wedge, then a single
+    // highlight layer on top.
     private var ring: some View {
-        GlassEffectContainer(spacing: 2) {
-            ZStack {
-                ForEach(0..<Dial.slots, id: \.self) { i in
-                    let w = wedges[i]
-                    AnnularSector(slot: i)
-                        .fill(fill(i, w))
-                        .overlay(AnnularSector(slot: i).stroke(stroke(i, w), lineWidth: 0.8))
-                        .glassEffect(.regular.tint(fill(i, w)), in: AnnularSector(slot: i))
-                        // each wedge swings in from behind the one before it, staggered
-                        // clockwise, so the ring reads as one sweep from twelve o'clock
-                        .rotationEffect(.degrees(shown ? 0 : -16))
-                        .opacity(shown ? 1 : 0)
-                        .animation(
-                            reduceMotion ? nil : Motion.snap.delay(Double(i) * 0.026),
-                            value: shown
-                        )
+        ZStack {
+            ForEach(0..<Dial.slots, id: \.self) { i in
+                AnnularSector(slot: i)
+                    .fill(.clear)
+                    .glassEffect(.regular, in: AnnularSector(slot: i))
+            }
+
+            // "on" capabilities read as a quiet wash, well below the selection, so an
+            // active toggle is never mistaken for the thing under your thumb
+            ForEach(0..<Dial.slots, id: \.self) { i in
+                if wedges[i]?.on == true {
+                    AnnularSector(slot: i).fill(theme.holo(0.16))
                 }
             }
+
+            if let lit {
+                AnnularSector(slot: lit.slot)
+                    .fill(lit.fill)
+                    .overlay(AnnularSector(slot: lit.slot).stroke(lit.edge, lineWidth: 1.2))
+            }
+
+            ForEach(0..<Dial.slots, id: \.self) { i in
+                AnnularSector(slot: i)
+                    .stroke(theme.holo(wedges[i] == nil ? 0.1 : 0.24), lineWidth: 0.8)
+            }
         }
-    }
-
-    private func fill(_ i: Int, _ w: DialWedge?) -> Color {
-        if armed == i { return theme.holo2(0.45) }
-        if hot == i { return theme.holo(0.42) }
-        if w?.on == true { return theme.holo(0.3) }
-        return theme.holo(w == nil ? 0.015 : 0.08)
-    }
-
-    private func stroke(_ i: Int, _ w: DialWedge?) -> Color {
-        if armed == i { return theme.holo2() }
-        if hot == i { return theme.holoSoft.opacity(0.8) }
-        if w?.on == true { return theme.holo(0.55) }
-        return theme.holo(w == nil ? 0.1 : 0.26)
+        // one transform on the whole ring. Rotating each sector individually slid it
+        // along the arc, which smeared rather than swept.
+        .scaleEffect(shown ? 1 : 0.93)
+        .opacity(shown ? 1 : 0)
+        .animation(reduceMotion ? nil : Motion.snap, value: shown)
     }
 
     /// The light under your thumb. It snaps to the hot wedge instead of trailing the
@@ -205,16 +212,19 @@ struct RadialDial: View {
             .foregroundStyle(labelTint(i, w))
             .frame(width: 76)
             .position(Dial.point(slot: i, center: c, radius: R, ratio: Dial.labelRatio))
+            // opacity only, staggered clockwise: transforms on a positioned view fight
+            // the .position and read as jitter
             .opacity(shown ? 1 : 0)
-            .scaleEffect(shown ? 1 : 0.9)
-            .animation(reduceMotion ? nil : Motion.snap.delay(Double(i) * 0.026), value: shown)
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.2).delay(Double(i) * 0.022),
+                value: shown
+            )
         }
     }
 
     private func labelTint(_ i: Int, _ w: DialWedge?) -> Color {
-        if armed == i { return theme.holo2() }
-        if hot == i { return theme.text }
-        if w?.on == true { return theme.holoSoft }
+        if lit?.slot == i { return armed == i ? theme.holo2() : theme.text }
+        if w?.on == true { return theme.holoSoft.opacity(0.85) }
         return w == nil ? theme.textFaint : theme.textDim
     }
 }

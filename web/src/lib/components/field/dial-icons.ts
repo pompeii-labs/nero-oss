@@ -17,6 +17,7 @@ import Settings from '@lucide/svelte/icons/settings';
 import Wrench from '@lucide/svelte/icons/wrench';
 import Radio from '@lucide/svelte/icons/radio';
 import Plus from '@lucide/svelte/icons/plus';
+import Square from '@lucide/svelte/icons/square';
 
 /** Icon keys the dial can draw. `create_action` advertises the first twelve to Nero;
  *  the rest back the built-in wedges. */
@@ -39,6 +40,7 @@ export const DIAL_ICONS: Record<string, Component> = {
     wrench: Wrench,
     radio: Radio,
     plus: Plus,
+    square: Square,
 };
 
 export function dialIcon(key: string): Component {

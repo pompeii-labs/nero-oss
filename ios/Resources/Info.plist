@@ -37,6 +37,8 @@
     </array>
     <key>UIUserInterfaceStyle</key>
     <string>Dark</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Nero uses the camera so you can show him what you're looking at.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Nero uses the microphone so you can talk to him.</string>
     <key>UIBackgroundModes</key>

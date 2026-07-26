@@ -43,7 +43,7 @@ export class ActionsUtility {
         type: 'string',
         required: true,
         description:
-            'Either "script" (run shell) or "prompt" (send yourself a message as if the user typed it).',
+            'Either "shell" (run a command) or "prompt" (send yourself a message as if the user typed it).',
     })
     @toolparam({
         key: 'body',
@@ -81,7 +81,7 @@ export class ActionsUtility {
         const kind = a.text('kind') as ActionKind;
         const body = a.str('body');
         if (!label) return 'Need a short label for the action.';
-        if (kind !== 'script' && kind !== 'prompt') return 'kind must be "script" or "prompt".';
+        if (kind !== 'shell' && kind !== 'prompt') return 'kind must be "shell" or "prompt".';
         if (!body.trim()) return 'Need the script (or prompt text) to run.';
 
         const slot = a.num('slot', -1);

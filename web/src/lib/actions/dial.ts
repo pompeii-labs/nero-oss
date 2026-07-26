@@ -32,6 +32,59 @@ export interface Wedge {
     confirm?: boolean;
 }
 
+export interface ActionParam {
+    key: string;
+    label: string;
+    description: string;
+    default?: string;
+    required?: boolean;
+    options?: string[];
+}
+
+/** A catalogue template. `available` is false when a secret it needs isn't set yet. */
+export interface ActionTemplate {
+    id: string;
+    provider: string;
+    label: string;
+    icon: string;
+    description: string;
+    kind: ActionKind;
+    requiredSecrets: string[];
+    params: ActionParam[];
+    confirm?: boolean;
+    available: boolean;
+    missing: string[];
+}
+
+export interface ActionProvider {
+    id: string;
+    name: string;
+    description: string;
+    secretHints: Record<string, string>;
+}
+
+export async function loadCatalog(): Promise<{
+    templates: ActionTemplate[];
+    providers: ActionProvider[];
+}> {
+    const r = await get<{ templates: ActionTemplate[]; providers: ActionProvider[] }>(
+        '/v1/actions/catalog',
+    );
+    return r.success ? r.data : { templates: [], providers: [] };
+}
+
+export function bindTemplate(input: {
+    template: string;
+    slot: number;
+    label?: string;
+    params?: Record<string, string>;
+}) {
+    return post<{ action: DialAction; missingSecrets?: string[] }>(
+        '/v1/actions/from-template',
+        input,
+    );
+}
+
 export interface ActionResult {
     ok: boolean;
     output: string;

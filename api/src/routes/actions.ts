@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import { Actions } from '../services/actions';
+import { catalogStatus, PROVIDERS } from '../services/actions/catalog';
 import { SLOTS, type ActionKind } from '../models/action';
 import { error } from '../util/errors';
 
-const KINDS: ActionKind[] = ['builtin', 'script', 'prompt'];
+const KINDS: ActionKind[] = ['builtin', 'http', 'shell', 'prompt', 'agent'];
 
 /** The dial. Eight slots around the orb, each bound to a builtin capability, a
  *  shell script, or a prompt. Nero writes these too (see services/actions/tool). */
@@ -79,6 +80,39 @@ export function actionRoutes(): Hono {
         try {
             await Actions.remove(c.req.param('id'));
             return c.json({ ok: true });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
+    app.get('/v1/actions/catalog', async (c) => {
+        try {
+            return c.json({ templates: await catalogStatus(), providers: PROVIDERS });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
+    app.post('/v1/actions/from-template', async (c) => {
+        try {
+            const b = (await c.req.json().catch(() => ({}))) as {
+                template?: string;
+                slot?: number;
+                label?: string;
+                params?: Record<string, string>;
+            };
+            if (!b.template) return error(c, 400, 'template is required');
+            const slot = b.slot ?? -1;
+            if (slot < -1 || slot >= SLOTS)
+                return error(c, 400, `slot must be -1 or 0-${SLOTS - 1}`);
+
+            const r = await Actions.fromTemplate(b.template, {
+                slot,
+                label: b.label,
+                params: b.params,
+            });
+            if (r.error) return error(c, 400, r.error);
+            return c.json({ action: r.action, missingSecrets: r.missingSecrets });
         } catch (err) {
             return error(c, 500, err);
         }

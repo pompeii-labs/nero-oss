@@ -13,6 +13,7 @@
     import HudFrame from '$lib/components/field/HudFrame.svelte';
     import RadialMenu from '$lib/components/field/RadialMenu.svelte';
     import CameraCapture from '$lib/components/field/CameraCapture.svelte';
+    import ActionPicker from '$lib/components/field/ActionPicker.svelte';
     import { listActions, runAction, SLOTS, type DialAction, type Wedge } from '$lib/actions/dial';
     import type { WakewordListener } from '$lib/wakeword';
     import {
@@ -827,22 +828,12 @@
     let customActions = $state<DialAction[]>([]);
     let cameraInput = $state<HTMLInputElement | null>(null);
     let cameraOpen = $state(false);
+    let pickerSlot = $state<number | null>(null);
 
     const BUILTINS: Record<string, { label: string; icon: string; run: () => void }> = {
-        voice: {
-            label: 'Voice',
-            icon: 'mic',
-            run: () => {
-                if (!presenceMode) {
-                    presenceMode = true;
-                    engaged = true;
-                } else engaged = !engaged;
-            },
-        },
-        wake: { label: 'Wake', icon: 'wave', run: () => toggleWakeword() },
-        // On a phone the native capture sheet IS the camera, so use it. Desktop
-        // browsers ignore `capture` and would just open a file dialog, so those get a
-        // real getUserMedia viewfinder instead.
+        // On a phone the native capture sheet IS the camera. Desktop browsers ignore
+        // `capture` and would just open a file dialog, so those get a real
+        // getUserMedia viewfinder instead.
         camera: {
             label: 'Camera',
             icon: 'camera',
@@ -851,45 +842,25 @@
                 else cameraOpen = true;
             },
         },
-        ambient: { label: 'Ambient', icon: 'radio', run: () => toggleAmbient() },
-        chat: {
-            label: 'Chat',
-            icon: 'chat',
-            run: () => {
-                presenceMode = !presenceMode;
-                if (!presenceMode) engaged = false;
-            },
-        },
-        theme: { label: 'Theme', icon: 'palette', run: () => fieldTheme.cycle() },
-        agenda: { label: 'Agenda', icon: 'wrench', run: () => void goto('/agenda') },
-        settings: { label: 'Settings', icon: 'settings', run: () => (settingsOpen = true) },
+        stop: { label: 'Stop', icon: 'square', run: () => void cancelDispatch() },
     };
 
-    // Default slot order, clockwise from twelve o'clock. The last one is deliberately
-    // empty: it's the invitation to bind an action, and settings already has a home in
-    // the top bar. Anything Nero binds to a taken slot displaces that built-in.
-    const DEFAULT_SLOTS: (string | null)[] = [
-        'voice',
-        'wake',
+    // Built-in slots, clockwise from twelve o'clock. Deliberately sparse: tapping the
+    // orb is already voice, the composer is already chat, and theme/wakeword/settings
+    // live in the top bar. STOP only appears when there's a turn to cancel. Everything
+    // else is yours (or Nero's) to bind.
+    // derived, not a const: STOP appears only while a turn is in flight, and a plain
+    // array would capture isRunning once at init
+    const DEFAULT_SLOTS = $derived<(string | null)[]>([
         'camera',
-        'ambient',
-        'chat',
-        'theme',
-        'agenda',
         null,
-    ];
-
-    /** Which built-ins currently read as "on", so their wedge renders filled. */
-    const builtinOn = $derived<Record<string, boolean>>({
-        voice: engaged,
-        wake: wakewordOn,
-        ambient: amAmbient,
-        chat: !presenceMode,
-        camera: false,
-        theme: false,
-        workshop: false,
-        settings: false,
-    });
+        null,
+        null,
+        isRunning ? 'stop' : null,
+        null,
+        null,
+        null,
+    ]);
 
     const dialWedges = $derived<(Wedge | null)[]>(
         Array.from({ length: SLOTS }, (_, i) => {
@@ -906,7 +877,7 @@
             const key = DEFAULT_SLOTS[i] ?? '';
             const b = BUILTINS[key];
             if (!b) return null;
-            return { id: key, label: b.label, icon: b.icon, custom: false, on: builtinOn[key] };
+            return { id: key, label: b.label, icon: b.icon, custom: false };
         }),
     );
 
@@ -930,9 +901,14 @@
         else if (!r.ok) pushNotice(`${w.label} failed`, true);
     }
 
-    /** An empty slot asks Nero to fill it. He has the tools to write and bind it. */
-    function composeWedge(slot: number, text: string) {
+    /** An empty slot opens the catalogue for that position. */
+    function openPicker(slot: number) {
         dialOpen = false;
+        pickerSlot = slot;
+    }
+
+    /** The picker's "or describe it" path: hand it to Nero to author. */
+    function composeWedge(slot: number, text: string) {
         void handleSend(
             `Create a dial action bound to slot ${slot} that does this: ${text}. Pick a short label and a fitting icon.`,
         );
@@ -1087,8 +1063,16 @@
         status={dialStatus}
         dragging={dialDragging}
         onFire={fireWedge}
-        onCompose={composeWedge}
+        onEmpty={openPicker}
         onClose={() => (dialOpen = false)}
+    />
+
+    <ActionPicker
+        open={pickerSlot !== null}
+        slot={pickerSlot ?? 0}
+        onBound={() => void listActions().then((a) => (customActions = a))}
+        onCompose={composeWedge}
+        onClose={() => (pickerSlot = null)}
     />
 
     <!-- panels Nero throws onto this screen (independent of where the orb is) -->

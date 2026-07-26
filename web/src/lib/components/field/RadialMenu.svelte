@@ -17,7 +17,7 @@
         status = '',
         dragging = false,
         onFire,
-        onCompose,
+        onEmpty,
         onClose,
     }: {
         open?: boolean;
@@ -28,7 +28,8 @@
          *  press can drag to a wedge and fire it on release. */
         dragging?: boolean;
         onFire: (w: Wedge) => void;
-        onCompose: (slot: number, text: string) => void;
+        /** An unbound slot was pressed; the Field opens the picker for it. */
+        onEmpty: (slot: number) => void;
         onClose: () => void;
     } = $props();
 
@@ -43,9 +44,6 @@
 
     let hot = $state<number | null>(null);
     let armed = $state<number | null>(null); // a confirm wedge waiting on its second press
-    let composing = $state<number | null>(null);
-    let composeText = $state('');
-    let composeInput = $state<HTMLInputElement | null>(null);
     let dialEl = $state<HTMLElement | null>(null);
     /** Captured once at open. Reading the live prop would race the orb's own pointerup,
      *  which clears it before the release handler runs. */
@@ -106,12 +104,7 @@
 
     function press(i: number) {
         const w = wedges[i] ?? null;
-        if (!w) {
-            composing = i;
-            composeText = '';
-            queueMicrotask(() => composeInput?.focus());
-            return;
-        }
+        if (!w) return onEmpty(i);
         if (w.confirm && armed !== i) {
             armed = i;
             sfx.arm();
@@ -121,16 +114,6 @@
         fired = true;
         sfx.fire(i);
         onFire(w);
-    }
-
-    function submitCompose(e: Event) {
-        e.preventDefault();
-        const text = composeText.trim();
-        const slot = composing;
-        if (!text || slot === null) return;
-        composing = null;
-        composeText = '';
-        onCompose(slot, text);
     }
 
     // Open/close audio. `fired` suppresses the dismiss sound when a wedge already
@@ -146,8 +129,6 @@
         }
         hot = null;
         armed = null;
-        composing = null;
-        composeText = '';
         if (wasOpen && !fired) sfx.close();
         wasOpen = false;
     });
@@ -173,11 +154,10 @@
         // effect and wipe the latch
         dragLatch = untrack(() => dragging);
         function onMove(e: PointerEvent) {
-            if (composing !== null) return;
             hot = slotAt(e.clientX, e.clientY);
         }
         function onUp(e: PointerEvent) {
-            if (!dragLatch || composing !== null) return;
+            if (!dragLatch) return;
             dragLatch = false;
             const slot = slotAt(e.clientX, e.clientY);
             if (slot === null) return;
@@ -198,8 +178,6 @@
         function onKey(e: KeyboardEvent) {
             if (e.key !== 'Escape') return;
             e.preventDefault();
-            // Escape dismisses the whole dial, compose input and all.
-            composing = null;
             onClose();
         }
         window.addEventListener('keydown', onKey);
@@ -227,9 +205,7 @@
 
         <!-- The hole is an explicit dismiss target. The dial sits above the scrim, so
              without this a click in the middle hits dead space instead of closing. -->
-        {#if composing === null}
-            <button class="hole" onclick={onClose} aria-label="Close the dial"></button>
-        {/if}
+        <button class="hole" onclick={onClose} aria-label="Close the dial"></button>
 
         <svg viewBox="0 0 {VB} {VB}" aria-hidden="true">
             {#each paths as d, i}
@@ -279,17 +255,7 @@
         {/each}
 
         <div class="hub">
-            {#if composing !== null}
-                <form class="compose" onsubmit={submitCompose}>
-                    <span class="compose-slot">SLOT {composing}</span>
-                    <input
-                        bind:this={composeInput}
-                        bind:value={composeText}
-                        placeholder="what should this do?"
-                        spellcheck="false"
-                    />
-                </form>
-            {:else if status}
+            {#if status}
                 <!-- the orb is the identity; the hub only speaks when it has something
                      to report, so nothing sits over the orb's core at rest -->
                 <span class="hub-label">{status}</span>
@@ -377,9 +343,11 @@
         stroke: rgb(var(--holo) / 0.1);
         stroke-dasharray: 2 3;
     }
+    /* well below .hot: an active toggle must never read as the thing under your
+       cursor, or two wedges look selected at once */
     .wedge.on {
-        fill: rgb(var(--holo) / 0.3);
-        stroke: rgb(var(--holo) / 0.55);
+        fill: rgb(var(--holo) / 0.16);
+        stroke: rgb(var(--holo) / 0.4);
     }
     .wedge.hot {
         fill: rgb(var(--holo) / 0.42);
@@ -499,34 +467,6 @@
         color: rgb(var(--holo-soft) / 0.9);
         text-transform: uppercase;
         text-align: center;
-    }
-    .compose {
-        pointer-events: auto;
-        display: grid;
-        justify-items: center;
-        gap: 6px;
-        width: 100%;
-    }
-    .compose-slot {
-        font-family: var(--font-mono);
-        font-size: 8.5px;
-        letter-spacing: 0.2em;
-        color: rgb(var(--holo2));
-    }
-    .compose input {
-        width: 100%;
-        background: rgb(var(--void) / 0.7);
-        border: 1px solid rgb(var(--holo) / 0.35);
-        border-radius: 6px;
-        outline: none;
-        padding: 6px 8px;
-        text-align: center;
-        color: var(--text);
-        font-family: var(--font-mono);
-        font-size: 10px;
-    }
-    .compose input::placeholder {
-        color: var(--text-faint);
     }
 
     @media (prefers-reduced-motion: reduce) {

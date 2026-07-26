@@ -1,5 +1,4 @@
 import SwiftUI
-import PhotosUI
 
 /// Root shell. The home IS the voice view: tap the orb to talk in place (the composer
 /// pill becomes voice controls). Tap the pill -> pushed Chat; gear -> Settings sheet.
@@ -87,8 +86,7 @@ struct HomeScreen: View {
     @SwiftUI.State private var composeText = ""
     @SwiftUI.State private var confirming: DialWedge?
     @SwiftUI.State private var firedThisGesture = false
-    @SwiftUI.State private var showPhotos = false
-    @SwiftUI.State private var photoItems: [PhotosPickerItem] = []
+    @SwiftUI.State private var showCamera = false
 
     private let dialSize: CGFloat = 340
     private let orbSize: CGFloat = 216
@@ -168,8 +166,16 @@ struct HomeScreen: View {
         .contentShape(Circle())
         .gesture(dialGesture)
         .onTapGesture { if !dialOpen { toggleVoice() } }
-        .photosPicker(isPresented: $showPhotos, selection: $photoItems, maxSelectionCount: 1, matching: .images)
-        .onChange(of: photoItems) { _, items in Task { await sendPhotos(items) } }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker(
+                onCapture: { jpeg in
+                    showCamera = false
+                    store.send("", images: [PendingImage(data: jpeg, mime: "image/jpeg", name: "photo.jpg")])
+                },
+                onCancel: { showCamera = false }
+            )
+            .ignoresSafeArea()
+        }
         .alert("Bind slot \(composeSlot ?? 0)", isPresented: composeBinding) {
             TextField("what should this do?", text: $composeText)
             Button("Ask Nero") { submitCompose() }
@@ -285,58 +291,46 @@ struct HomeScreen: View {
         )
     }
 
-    private func sendPhotos(_ items: [PhotosPickerItem]) async {
-        for item in items {
-            guard let raw = try? await item.loadTransferable(type: Data.self),
-                  let ui = UIImage(data: raw),
-                  let jpeg = ui.jpegData(compressionQuality: 0.85) else { continue }
-            store.send("", images: [PendingImage(data: jpeg, mime: "image/jpeg", name: "photo.jpg")])
-        }
-        photoItems = []
-    }
-
     // MARK: wedges
 
     /// Built-in slot order, clockwise from twelve o'clock. Slots resolve to nil when
     /// the capability isn't available right now (no call in progress, no live project),
     /// which leaves them open as invitations.
+    /// Built-in slots, clockwise from twelve o'clock. Deliberately sparse: tapping the
+    /// orb is already voice, chat is already the composer pill, and theme/settings are
+    /// set-once chrome that doesn't earn a one-press slot. STOP only appears when
+    /// there's something to stop. Everything else is yours to bind.
     private var builtinSlots: [String?] {
         [
-            "voice",
-            "chat",
             "camera",
-            voiceOn ? "mute" : nil,
-            store.activeProject != nil ? "project" : nil,
-            "theme",
-            "settings",
+            nil,
+            nil,
+            busy ? "stop" : nil,
+            nil,
+            nil,
+            nil,
             nil,
         ]
     }
 
+    /// A turn is in flight, so STOP has something to cancel.
+    private var busy: Bool {
+        store.dispatch?.isActive == true || voice.phase == .thinking
+    }
+
     private func builtin(_ key: String) -> DialWedge? {
         switch key {
-        case "voice": return DialWedge(id: key, label: "Voice", icon: "mic.fill", on: voiceOn)
-        case "chat": return DialWedge(id: key, label: "Chat", icon: "text.bubble")
         case "camera": return DialWedge(id: key, label: "Camera", icon: "camera.fill")
-        case "mute": return DialWedge(id: key, label: "Mute", icon: voice.muted ? "mic.slash.fill" : "mic.fill", on: voice.muted)
-        case "project": return DialWedge(id: key, label: "Project", icon: "square.stack.3d.up")
-        case "theme": return DialWedge(id: key, label: "Theme", icon: "paintpalette")
-        case "settings": return DialWedge(id: key, label: "Settings", icon: "gearshape")
+        case "stop": return DialWedge(id: key, label: "Stop", icon: "stop.fill")
         default: return nil
         }
     }
 
     private func runBuiltin(_ key: String) {
         switch key {
-        case "voice": toggleVoice()
-        case "chat": onType()
-        case "camera": showPhotos = true
-        case "mute": voice.toggleMute()
-        case "project": onOpenProject()
-        case "theme":
-            let i = Theme.all.firstIndex { $0.id == themeId } ?? 0
-            themeId = Theme.all[(i + 1) % Theme.all.count].id
-        case "settings": onSettings()
+        case "camera": showCamera = true
+        case "stop":
+            if voice.phase != .idle { voice.stop() } else { store.cancel() }
         default: break
         }
     }
