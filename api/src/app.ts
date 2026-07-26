@@ -18,6 +18,7 @@ import { mediumRoutes } from './routes/mediums';
 import { pushRoutes } from './routes/push';
 import { streamRoutes } from './routes/stream';
 import { browserRoutes } from './routes/browser';
+import { actionRoutes } from './routes/actions';
 import { Dispatcher } from './services/harness/dispatch';
 
 /** Build the Nero Hono app. Deps are injectable for tests. The WebSocket
@@ -47,6 +48,7 @@ export function createApp(deps: Partial<NeroDeps> = {}, upgradeWebSocket?: Upgra
     app.route('/', mediumRoutes());
     app.route('/', pushRoutes());
     app.route('/', streamRoutes());
+    app.route('/', actionRoutes());
     if (upgradeWebSocket) {
         app.route('/', voiceRoutes(upgradeWebSocket));
         app.route('/', browserRoutes(upgradeWebSocket));

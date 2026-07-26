@@ -15,6 +15,7 @@ import { NotifyUtility } from '../services/mediums/tool';
 import { BrowserOpenUtility } from '../services/browser/tool';
 import { BrowserAgentUtility } from '../services/browser/agent-tool';
 import { ProjectUtility } from '../services/projects/tool';
+import { ActionsUtility } from '../services/actions/tool';
 
 export interface BuildUtilitiesOpts {
     /** Bridge every connected MCP server's tools (138+ schemas). Off for voice,
@@ -40,6 +41,7 @@ export function buildUtilities(opts: BuildUtilitiesOpts = {}): MagmaUtilities[] 
         loadUtilities(new BrowserOpenUtility()),
         loadUtilities(new BrowserAgentUtility()),
         loadUtilities(new ProjectUtility()),
+        loadUtilities(new ActionsUtility()),
     ];
     if (cfg.tavilyApiKey) utils.push(loadUtilities(new WebUtility(cfg.tavilyApiKey)));
     if (opts.includeMcp ?? true) utils.push(mcpUtilities());

@@ -1,0 +1,97 @@
+import { Hono } from 'hono';
+import { Actions } from '../services/actions';
+import { SLOTS, type ActionKind } from '../models/action';
+import { error } from '../util/errors';
+
+const KINDS: ActionKind[] = ['builtin', 'script', 'prompt'];
+
+/** The dial. Eight slots around the orb, each bound to a builtin capability, a
+ *  shell script, or a prompt. Nero writes these too (see services/actions/tool). */
+export function actionRoutes(): Hono {
+    const app = new Hono();
+
+    app.get('/v1/actions', async (c) => {
+        try {
+            return c.json({ actions: await Actions.list(), slots: SLOTS });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
+    app.post('/v1/actions', async (c) => {
+        try {
+            const b = (await c.req.json().catch(() => ({}))) as {
+                label?: string;
+                icon?: string;
+                kind?: string;
+                body?: string;
+                slot?: number;
+                confirm?: boolean;
+                cwd?: string;
+            };
+            const label = b.label?.trim();
+            const kind = b.kind as ActionKind;
+            if (!label) return error(c, 400, 'label is required');
+            if (!KINDS.includes(kind))
+                return error(c, 400, `kind must be one of ${KINDS.join(', ')}`);
+            if (!b.body?.trim()) return error(c, 400, 'body is required');
+            const slot = b.slot ?? -1;
+            if (slot < -1 || slot >= SLOTS)
+                return error(c, 400, `slot must be -1 or 0-${SLOTS - 1}`);
+
+            return c.json(
+                await Actions.create({
+                    label,
+                    kind,
+                    body: b.body,
+                    icon: b.icon,
+                    slot,
+                    confirm: b.confirm === true,
+                    cwd: b.cwd?.trim() ?? '',
+                }),
+            );
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
+    app.patch('/v1/actions/:id', async (c) => {
+        try {
+            const b = (await c.req.json().catch(() => ({}))) as {
+                label?: string;
+                icon?: string;
+                body?: string;
+                slot?: number;
+                confirm?: boolean;
+                cwd?: string;
+            };
+            if (b.slot !== undefined && (b.slot < -1 || b.slot >= SLOTS))
+                return error(c, 400, `slot must be -1 or 0-${SLOTS - 1}`);
+            const updated = await Actions.update(c.req.param('id'), b);
+            if (!updated) return error(c, 404);
+            return c.json(updated);
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
+    app.delete('/v1/actions/:id', async (c) => {
+        try {
+            await Actions.remove(c.req.param('id'));
+            return c.json({ ok: true });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
+    app.post('/v1/actions/:id/run', async (c) => {
+        try {
+            const result = await Actions.run(c.req.param('id'));
+            return c.json(result);
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
+    return app;
+}
