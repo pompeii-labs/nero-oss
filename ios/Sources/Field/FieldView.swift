@@ -83,7 +83,6 @@ struct HomeScreen: View {
     @SwiftUI.State private var dialStatus = ""
     @SwiftUI.State private var customActions: [DialAction] = []
     @SwiftUI.State private var composeSlot: Int?
-    @SwiftUI.State private var composeText = ""
     @SwiftUI.State private var confirming: DialWedge?
     @SwiftUI.State private var firedThisGesture = false
     @SwiftUI.State private var showCamera = false
@@ -176,12 +175,14 @@ struct HomeScreen: View {
             )
             .ignoresSafeArea()
         }
-        .alert("Bind slot \(composeSlot ?? 0)", isPresented: composeBinding) {
-            TextField("what should this do?", text: $composeText)
-            Button("Ask Nero") { submitCompose() }
-            Button("Cancel", role: .cancel) { closeDial() }
-        } message: {
-            Text("Nero will write the action and bind it to this slot.")
+        .sheet(isPresented: composeBinding) {
+            ActionPicker(
+                slot: composeSlot ?? 0,
+                client: store.client,
+                onBound: { Task { customActions = await store.client.actions() } },
+                onDescribe: { text in describeAction(slot: composeSlot ?? 0, text: text) }
+            )
+            .environment(\.theme, theme)
         }
         .alert(confirming?.label ?? "", isPresented: confirmBinding) {
             Button("Run", role: .destructive) { if let w = confirming { fire(w) } }
@@ -231,7 +232,6 @@ struct HomeScreen: View {
         dialStatus = ""
         confirming = nil
         composeSlot = nil
-        composeText = ""
     }
 
     private func updateHot(_ p: CGPoint) {
@@ -280,11 +280,8 @@ struct HomeScreen: View {
         runBuiltin(w.id)
     }
 
-    private func submitCompose() {
-        let text = composeText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let slot = composeSlot
-        closeDial()
-        guard !text.isEmpty, let slot else { return }
+    /// The picker's "or describe it" path: hand it to Nero to author.
+    private func describeAction(slot: Int, text: String) {
         store.send(
             "Create a dial action bound to slot \(slot) that does this: \(text). "
                 + "Pick a short label and a fitting icon."

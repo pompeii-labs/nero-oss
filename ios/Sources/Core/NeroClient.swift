@@ -134,6 +134,29 @@ struct NeroClient {
         (try? await getJSON("/v1/actions", ActionsResponse.self))?.actions ?? []
     }
 
+    /// Templated actions a slot can become. A template whose secret isn't set still
+    /// comes back, flagged unavailable, so the UI can say what it's waiting on.
+    func actionCatalog() async -> (templates: [ActionTemplate], providers: [ActionProvider]) {
+        guard let r = try? await getJSON("/v1/actions/catalog", ActionCatalogResponse.self) else {
+            return ([], [])
+        }
+        return (r.templates, r.providers)
+    }
+
+    /// Instantiate a template onto a slot. Params bake in; `${SECRET}` refs stay refs.
+    func bindTemplate(
+        _ templateId: String,
+        slot: Int,
+        label: String,
+        params: [String: String]
+    ) async -> Bool {
+        let body: [String: Any] = [
+            "template": templateId, "slot": slot, "label": label, "params": params,
+        ]
+        guard let d = try? await post("/v1/actions/from-template", body) else { return false }
+        return (try? JSONDecoder().decode(BindTemplateResponse.self, from: d))?.action != nil
+    }
+
     /// Fire a script or prompt action. A `builtin` in the reply means the slot is one
     /// the screen owns and the caller should handle it locally.
     func runAction(_ id: String) async -> ActionRunResult {
@@ -212,4 +235,36 @@ struct DialAction: Codable, Identifiable {
     let confirm: Bool
 }
 struct ActionsResponse: Codable { let actions: [DialAction] }
+struct ActionParam: Codable, Identifiable {
+    var id: String { key }
+    let key: String
+    let label: String
+    let description: String
+    let `default`: String?
+    let required: Bool?
+    let options: [String]?
+}
+struct ActionTemplate: Codable, Identifiable {
+    let id: String
+    let provider: String
+    let label: String
+    let icon: String
+    let description: String
+    let kind: String
+    let requiredSecrets: [String]
+    let params: [ActionParam]
+    let confirm: Bool?
+    let available: Bool
+    let missing: [String]
+}
+struct ActionProvider: Codable, Identifiable {
+    let id: String
+    let name: String
+    let description: String
+}
+struct ActionCatalogResponse: Codable {
+    let templates: [ActionTemplate]
+    let providers: [ActionProvider]
+}
+struct BindTemplateResponse: Codable { let action: DialAction? }
 struct ActionRunResult: Codable { let ok: Bool; let output: String; let builtin: String? }
