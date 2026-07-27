@@ -4,6 +4,7 @@ import type { MagmaAgent } from '@pompeii-labs/magma';
 import { Args } from '../../util/args';
 import { Action, type ActionFn } from '../../models/action';
 import { Actions } from './index';
+import { DEFAULT_ICON, ICON_LIST, isDialIcon } from './icons';
 
 /**
  * The two tools that make a dial button real: fire a draft and see what happens, then
@@ -125,8 +126,7 @@ export class DialAuthorUtility {
         key: 'icon',
         type: 'string',
         required: true,
-        description:
-            'One of: zap, terminal, play, refresh, moon, music, camera, chat, mic, globe, home, lock, wave, palette, settings, wrench, radio.',
+        description: `One of: ${ICON_LIST}. Name the thing the button touches.`,
     })
     @toolparam({ key: 'kind', type: 'string', required: true, description: '"http" or "shell".' })
     @toolparam({ key: 'cmd', type: 'string', required: false, description: 'shell: command line.' })
@@ -152,7 +152,10 @@ export class DialAuthorUtility {
 
         await Action.update(this.actionId, {
             label: a.text('label', 'Action').slice(0, 14),
-            icon: a.text('icon', 'zap'),
+            icon: (() => {
+                const key = a.text('icon', DEFAULT_ICON);
+                return isDialIcon(key) ? key : DEFAULT_ICON;
+            })(),
             kind: fn!.kind,
             fn: fn!,
             body: '',

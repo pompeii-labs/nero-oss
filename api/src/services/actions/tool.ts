@@ -5,22 +5,7 @@ import { Args } from '../../util/args';
 import { Actions } from './index';
 import { ActionAuthor } from './author';
 import { SLOTS, type ActionKind } from '../../models/action';
-
-/** The eight icon keys the dial knows how to draw. */
-const ICONS = [
-    'zap',
-    'terminal',
-    'play',
-    'refresh',
-    'moon',
-    'music',
-    'camera',
-    'chat',
-    'mic',
-    'globe',
-    'home',
-    'lock',
-] as const;
+import { DEFAULT_ICON, ICON_LIST, isDialIcon } from './icons';
 
 const SLOT_NAMES = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
@@ -62,7 +47,7 @@ export class ActionsUtility {
         key: 'icon',
         type: 'string',
         required: false,
-        description: `Glyph key, one of: ${ICONS.join(', ')}. Defaults to zap.`,
+        description: `Glyph key, one of: ${ICON_LIST}. Pick the one that names the thing the action touches. Defaults to ${DEFAULT_ICON}.`,
     })
     @toolparam({
         key: 'cwd',
@@ -87,14 +72,14 @@ export class ActionsUtility {
 
         const slot = a.num('slot', -1);
         if (slot < -1 || slot >= SLOTS) return `slot must be -1 or 0-${SLOTS - 1}.`;
-        const icon = a.text('icon', 'zap');
+        const icon = a.text('icon', DEFAULT_ICON);
 
         const action = await Actions.create({
             label,
             kind,
             body,
             slot,
-            icon: (ICONS as readonly string[]).includes(icon) ? icon : 'zap',
+            icon: isDialIcon(icon) ? icon : DEFAULT_ICON,
             cwd: a.text('cwd'),
             confirm: a.bool('confirm'),
         });

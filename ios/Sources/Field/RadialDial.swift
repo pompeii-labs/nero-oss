@@ -112,27 +112,131 @@ struct DialWedge: Identifiable, Equatable {
 }
 
 enum DialIcon {
-    /// Icon keys the server hands back, mapped to SF Symbols.
+    /// Icon keys the server hands back, mapped to SF Symbols. Keys mirror
+    /// `api/src/services/actions/icons.ts`, which is the canonical list; anything
+    /// unmapped falls back to a bolt rather than drawing nothing.
+    static let symbols: [String: String] = [
+        // home and devices
+        "home": "house.fill",
+        "lightbulb": "lightbulb.fill",
+        "lamp": "lamp.desk.fill",
+        "tv": "tv",
+        "speaker": "hifispeaker.fill",
+        "thermostat": "thermometer.medium",
+        "fan": "fan.fill",
+        "plug": "powerplug.fill",
+        "door": "door.left.hand.closed",
+        "blinds": "blinds.horizontal.closed",
+        "lock": "lock.fill",
+        "unlock": "lock.open.fill",
+        "power": "power",
+        "battery": "battery.100percent",
+        "wifi": "wifi",
+
+        // media
+        "play": "play.fill",
+        "pause": "pause.fill",
+        "next": "forward.fill",
+        "prev": "backward.fill",
+        "music": "music.note",
+        "volume": "speaker.wave.2.fill",
+        "mute": "speaker.slash.fill",
+        "headphones": "headphones",
+        "video": "video.fill",
+        "film": "film.fill",
+        "mic": "mic.fill",
+        "radio": "dot.radiowaves.left.and.right",
+
+        // people and messages
+        "chat": "text.bubble",
+        "mail": "envelope.fill",
+        "phone": "phone.fill",
+        "send": "paperplane.fill",
+        "bell": "bell.fill",
+        "users": "person.2.fill",
+        "user": "person.fill",
+
+        // time and planning
+        "calendar": "calendar",
+        "clock": "clock.fill",
+        "timer": "timer",
+        "alarm": "alarm.fill",
+        "check": "checkmark.circle.fill",
+        "list": "list.bullet",
+        "flag": "flag.fill",
+        "bookmark": "bookmark.fill",
+        "star": "star.fill",
+        "pin": "mappin",
+
+        // work and data
+        "terminal": "terminal",
+        "code": "chevron.left.forwardslash.chevron.right",
+        "git": "arrow.triangle.branch",
+        "database": "cylinder.fill",
+        "server": "server.rack",
+        "cloud": "cloud.fill",
+        "folder": "folder.fill",
+        "file": "doc.fill",
+        "download": "arrow.down.circle.fill",
+        "upload": "arrow.up.circle.fill",
+        "link": "link",
+        "search": "magnifyingglass",
+        "chart": "chart.bar.fill",
+        "trending": "chart.line.uptrend.xyaxis",
+        "dollar": "dollarsign.circle.fill",
+        "briefcase": "briefcase.fill",
+        "book": "book.fill",
+        "pencil": "pencil",
+        "clipboard": "doc.on.clipboard",
+
+        // getting around
+        "globe": "globe",
+        "map": "map.fill",
+        "navigation": "location.fill",
+        "car": "car.fill",
+        "plane": "airplane",
+        "train": "tram.fill",
+        "bike": "bicycle",
+
+        // weather
+        "sun": "sun.max.fill",
+        "moon": "moon.fill",
+        "rain": "cloud.rain.fill",
+        "snow": "snowflake",
+        "wind": "wind",
+
+        // everything else
+        "zap": "bolt.fill",
+        "refresh": "arrow.clockwise",
+        "settings": "gearshape",
+        "wrench": "wrench.and.screwdriver",
+        "sliders": "slider.horizontal.3",
+        "palette": "paintpalette",
+        "camera": "camera.fill",
+        "image": "photo.fill",
+        "eye": "eye.fill",
+        "shield": "shield.fill",
+        "key": "key.fill",
+        "trash": "trash.fill",
+        "archive": "archivebox.fill",
+        "package": "shippingbox.fill",
+        "gift": "gift.fill",
+        "heart": "heart.fill",
+        "coffee": "cup.and.saucer.fill",
+        "dumbbell": "dumbbell.fill",
+        "pill": "pills.fill",
+        "cart": "cart.fill",
+        "wave": "waveform",
+        "sparkles": "sparkles",
+        "brain": "brain",
+        "flame": "flame.fill",
+        "droplet": "drop.fill",
+        "leaf": "leaf.fill",
+        "paw": "pawprint.fill",
+    ]
+
     static func symbol(_ key: String) -> String {
-        switch key {
-        case "terminal": return "terminal"
-        case "play": return "play.fill"
-        case "refresh": return "arrow.clockwise"
-        case "moon": return "moon.fill"
-        case "music": return "music.note"
-        case "camera": return "camera.fill"
-        case "chat": return "text.bubble"
-        case "mic": return "mic.fill"
-        case "globe": return "globe"
-        case "home": return "house.fill"
-        case "lock": return "lock.fill"
-        case "wave": return "waveform"
-        case "palette": return "paintpalette"
-        case "settings": return "gearshape"
-        case "wrench": return "wrench.and.screwdriver"
-        case "radio": return "dot.radiowaves.left.and.right"
-        default: return "bolt.fill"
-        }
+        symbols[key] ?? "bolt.fill"
     }
 }
 
