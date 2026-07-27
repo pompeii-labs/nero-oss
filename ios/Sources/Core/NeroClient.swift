@@ -157,6 +157,13 @@ struct NeroClient {
         return (try? JSONDecoder().decode(BindTemplateResponse.self, from: d))?.action != nil
     }
 
+    /// Hand a slot to Nero: he drafts an action, runs it until it works, and binds it.
+    /// Returns whether the request landed - a silent failure here reads as the button
+    /// doing nothing, which is worse than an error.
+    func authorAction(goal: String, slot: Int) async -> Bool {
+        (try? await post("/v1/actions/author", ["goal": goal, "slot": slot])) != nil
+    }
+
     /// Bind an existing action to a slot, or -1 to free it. It stays in the library
     /// either way; only deleteAction removes it.
     func assignAction(_ id: String, slot: Int) async -> Bool {
@@ -252,6 +259,7 @@ struct DialAction: Codable, Identifiable {
     let icon: String
     let kind: String
     let confirm: Bool
+    let status: String
 }
 struct ActionsResponse: Codable { let actions: [DialAction] }
 struct ActionParam: Codable, Identifiable {

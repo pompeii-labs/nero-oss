@@ -104,6 +104,11 @@ struct DialWedge: Identifiable, Equatable {
     var on: Bool = false
     /// Needs a second press before it fires.
     var confirm: Bool = false
+    /// Nero is still building this one, or couldn't.
+    var status: String = "ready"
+
+    var building: Bool { status == "drafting" || status == "testing" }
+    var broke: Bool { status == "failed" }
 }
 
 enum DialIcon {
@@ -145,6 +150,7 @@ struct RadialDial: View {
     var diameter: CGFloat = 340
     /// Drives the clockwise sweep-in.
     @SwiftUI.State private var shown = false
+    @SwiftUI.State private var pulse = false
 
     var body: some View {
         ZStack {
@@ -159,8 +165,14 @@ struct RadialDial: View {
         }
         .frame(width: diameter, height: diameter)
         .onAppear {
-            guard !reduceMotion else { shown = true; return }
+            guard !reduceMotion else {
+                shown = true
+                return
+            }
             withAnimation(Motion.snap) { shown = true }
+            withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
         }
     }
 
@@ -195,6 +207,16 @@ struct RadialDial: View {
             ForEach(0..<Dial.slots, id: \.self) { i in
                 if wedges[i]?.on == true {
                     AnnularSector(slot: i).fill(theme.holo(0.14))
+                }
+                // Nero is writing this one. Without the pulse a slot you handed him
+                // looks identical to one sitting dead.
+                if wedges[i]?.building == true {
+                    AnnularSector(slot: i)
+                        .fill(theme.holo(0.22))
+                        .opacity(pulse ? 1 : 0.35)
+                }
+                if wedges[i]?.broke == true {
+                    AnnularSector(slot: i).fill(theme.holo2(0.2))
                 }
             }
 
@@ -243,7 +265,11 @@ struct RadialDial: View {
             VStack(spacing: 5) {
                 Image(systemName: w?.icon ?? "plus")
                     .font(.system(size: 15, weight: .medium))
-                Text(armed == i ? "CONFIRM" : (w?.label.uppercased() ?? ""))
+                Text(
+                    armed == i
+                        ? "CONFIRM"
+                        : (w?.building == true ? "BUILDING…" : (w?.label.uppercased() ?? ""))
+                )
                     .font(Typeface.mono(8.5)).tracking(1.4)
                     .lineLimit(1)
             }
@@ -262,6 +288,8 @@ struct RadialDial: View {
 
     private func labelTint(_ i: Int, _ w: DialWedge?) -> Color {
         if lit?.slot == i { return armed == i ? theme.holo2() : theme.text }
+        if w?.building == true { return theme.holoSoft }
+        if w?.broke == true { return theme.holo2() }
         if w?.on == true { return theme.holoSoft.opacity(0.85) }
         return w == nil ? theme.textFaint : theme.textDim
     }

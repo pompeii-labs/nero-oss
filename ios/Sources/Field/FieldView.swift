@@ -252,6 +252,17 @@ struct HomeScreen: View {
 
     private var dialCenter: CGPoint { CGPoint(x: dialSize / 2, y: dialSize / 2) }
 
+    /// While a slot is mid-build, refresh so you can watch it happen instead of
+    /// closing and reopening the dial to find out.
+    private func pollWhileBuilding() {
+        Task {
+            while dialOpen, customActions.contains(where: { $0.status == "drafting" || $0.status == "testing" }) {
+                try? await Task.sleep(for: .seconds(2))
+                customActions = await store.client.actions()
+            }
+        }
+    }
+
     private func openDial() {
         guard !dialOpen else { return }
         // clear gesture state here rather than on close: the hold-to-edit path closes
@@ -263,7 +274,10 @@ struct HomeScreen: View {
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         DialSfx.shared.open()
         withAnimation(Motion.snap) { dialOpen = true }
-        Task { customActions = await store.client.actions() }
+        Task {
+            customActions = await store.client.actions()
+            pollWhileBuilding()
+        }
     }
 
     private func closeDial() {
@@ -349,12 +363,15 @@ struct HomeScreen: View {
         runBuiltin(w.id)
     }
 
-    /// The picker's "or describe it" path: hand it to Nero to author.
+    /// The picker's "or describe it" path: hand it straight to the authoring loop.
+    /// This used to send a chat message, which meant a whole conversation turn and a
+    /// silently swallowed error if the request failed.
     private func describeAction(slot: Int, text: String) {
-        store.send(
-            "Create a dial action bound to slot \(slot) that does this: \(text). "
-                + "Pick a short label and a fitting icon."
-        )
+        Task {
+            let ok = await store.client.authorAction(goal: text, slot: slot)
+            customActions = await store.client.actions()
+            if !ok { dialStatus = "couldn't reach Nero" }
+        }
     }
 
     // MARK: wedges
@@ -409,7 +426,8 @@ struct HomeScreen: View {
                     label: a.label,
                     icon: DialIcon.symbol(a.icon),
                     custom: true,
-                    confirm: a.confirm
+                    confirm: a.confirm,
+                    status: a.status
                 )
             }
             return builtinSlots[i].flatMap(builtin)

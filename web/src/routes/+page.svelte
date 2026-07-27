@@ -14,7 +14,14 @@
     import RadialMenu from '$lib/components/field/RadialMenu.svelte';
     import CameraCapture from '$lib/components/field/CameraCapture.svelte';
     import ActionPicker from '$lib/components/field/ActionPicker.svelte';
-    import { listActions, runAction, SLOTS, type DialAction, type Wedge } from '$lib/actions/dial';
+    import {
+        listActions,
+        runAction,
+        authorAction,
+        SLOTS,
+        type DialAction,
+        type Wedge,
+    } from '$lib/actions/dial';
     import type { WakewordListener } from '$lib/wakeword';
     import {
         startVoice,
@@ -874,6 +881,7 @@
                     icon: custom.icon,
                     custom: true,
                     confirm: custom.confirm,
+                    status: custom.status,
                 };
             }
             const key = DEFAULT_SLOTS[i] ?? '';
@@ -888,6 +896,17 @@
         dialOpen = true;
         customActions = await listActions();
     }
+
+    /** While a slot is mid-build, poll so you can watch it happen rather than having
+     *  to close and reopen the dial to find out. */
+    $effect(() => {
+        const building = customActions.some(
+            (a) => a.status === 'drafting' || a.status === 'testing',
+        );
+        if (!dialOpen || !building) return;
+        const t = setInterval(() => void listActions().then((a) => (customActions = a)), 2000);
+        return () => clearInterval(t);
+    });
 
     async function fireWedge(w: Wedge) {
         if (!w.custom) {
@@ -909,11 +928,12 @@
         pickerSlot = slot;
     }
 
-    /** The picker's "or describe it" path: hand it to Nero to author. */
-    function composeWedge(slot: number, text: string) {
-        void handleSend(
-            `Create a dial action bound to slot ${slot} that does this: ${text}. Pick a short label and a fitting icon.`,
-        );
+    /** The picker's "or describe it" path: hand it straight to the authoring loop
+     *  rather than sending a chat message and hoping. */
+    async function composeWedge(slot: number, text: string) {
+        const ok = await authorAction(text, slot);
+        customActions = await listActions();
+        if (!ok) pushNotice("couldn't reach Nero to build that", true);
     }
 
     // Long-press opens the dial; the press that opened it must not also toggle talk.

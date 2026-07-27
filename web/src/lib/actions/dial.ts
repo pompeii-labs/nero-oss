@@ -3,7 +3,8 @@ import { get, post, patch, del } from './helpers';
 /** Eight slots around the orb, 0 at twelve o'clock going clockwise. */
 export const SLOTS = 8;
 
-export type ActionKind = 'builtin' | 'script' | 'prompt';
+export type ActionKind = 'builtin' | 'http' | 'shell' | 'prompt' | 'agent';
+export type ActionStatus = 'ready' | 'drafting' | 'testing' | 'failed';
 
 export interface DialAction {
     id: string;
@@ -13,6 +14,8 @@ export interface DialAction {
     kind: ActionKind;
     body: string;
     confirm: boolean;
+    status: ActionStatus;
+    draft_log: string;
     cwd: string;
     last_run_at: number;
     created_at: number;
@@ -30,6 +33,8 @@ export interface Wedge {
     on?: boolean;
     /** Needs a second press before it fires. */
     confirm?: boolean;
+    /** Nero is still building this one, or couldn't. */
+    status?: ActionStatus;
 }
 
 export interface ActionParam {
@@ -120,6 +125,13 @@ export function assignAction(id: string, slot: number) {
 
 export function deleteAction(id: string) {
     return del<{ ok: boolean }>(`/v1/actions/${id}`);
+}
+
+/** Hand a slot to Nero: he drafts, runs it for real, and binds it. Returns false if
+ *  the request didn't land, so the UI can say so instead of looking inert. */
+export async function authorAction(goal: string, slot: number): Promise<boolean> {
+    const r = await post<{ started?: boolean }>('/v1/actions/author', { goal, slot });
+    return r.success;
 }
 
 export async function runAction(id: string): Promise<ActionResult> {

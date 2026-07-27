@@ -48,6 +48,19 @@ function format(r: FnResult, kind: 'shell' | 'http'): string {
     return parts.join('\n') || '(no output)';
 }
 
+/** A flash sits under the dial and must stay one glanceable line. Anything longer
+ *  belongs in a panel; a stack trace spread across the ring helps nobody. */
+const FLASH_LIMIT = 150;
+
+function toFlash(text: string): string {
+    const first = text
+        .split('\n')
+        .map((l) => l.trim())
+        .find(Boolean);
+    if (!first) return '';
+    return first.length > FLASH_LIMIT ? `${first.slice(0, FLASH_LIMIT - 1)}…` : first;
+}
+
 /** `auto` picks by shape: one short line is a flash, anything longer wants somewhere
  *  to live. A press that returns nothing says nothing. */
 function resolveOutput(mode: ActionOutput, text: string): Exclude<ActionOutput, 'auto'> {
@@ -205,10 +218,19 @@ export class Actions {
             const r = await runFn(fn, vault, SCRIPT_TIMEOUT_MS);
             log.info(`ran "${action.label}" (${r.ok ? 'ok' : 'failed'} ${r.status ?? ''})`);
             const output = redact(format(r, fn.kind), vault).slice(0, OUTPUT_LIMIT);
-            // a failure always surfaces, whatever the mode says
-            const present = r.ok ? resolveOutput(action.output, output) : 'flash';
+            // A failure always surfaces whatever the mode says, but it still routes by
+            // shape: a one-line "open Spotify first" flashes, a stack trace gets a panel.
+            const present = r.ok
+                ? resolveOutput(action.output, output)
+                : resolveOutput('auto', output);
             if (present === 'panel') await toPanel(action, output);
-            return { ok: r.ok, status: r.status, output, present };
+            // the client shows `output` directly, so a flash must arrive already short
+            return {
+                ok: r.ok,
+                status: r.status,
+                output: present === 'flash' ? toFlash(output) : output,
+                present,
+            };
         } catch (err) {
             log.error(`action "${action.label}" failed`, {
                 cause: err instanceof Error ? err.message : String(err),

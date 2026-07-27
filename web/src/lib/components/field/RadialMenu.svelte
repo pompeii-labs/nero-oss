@@ -264,6 +264,8 @@
                     class:on={w?.on}
                     class:armed={armed === i}
                     class:empty={!w}
+                    class:building={w?.status === 'drafting' || w?.status === 'testing'}
+                    class:broke={w?.status === 'failed'}
                     {d}
                     style="animation-delay:{i * 26}ms"
                 />
@@ -291,6 +293,8 @@
                 class:on={w?.on}
                 class:armed={armed === i}
                 class:empty={!w}
+                class:building={w?.status === 'drafting' || w?.status === 'testing'}
+                class:broke={w?.status === 'failed'}
                 style="left:{pos.left}; top:{pos.top}; animation-delay:{i * 26}ms"
                 onclick={() => clickSlot(i)}
                 onpointerenter={() => (hot = i)}
@@ -298,7 +302,11 @@
                 title={w ? w.label : 'Bind this slot'}
             >
                 <Icon size={16} strokeWidth={1.7} />
-                <span class="cap">{armed === i ? 'CONFIRM' : (w?.label ?? '')}</span>
+                <span class="cap">
+                    {#if armed === i}CONFIRM
+                    {:else if w?.status === 'drafting' || w?.status === 'testing'}BUILDING…
+                    {:else}{w?.label ?? ''}{/if}
+                </span>
             </button>
         {/each}
 
@@ -401,6 +409,29 @@
         fill: rgb(var(--holo) / 0.42);
         stroke: rgb(var(--holo-soft) / 0.8);
     }
+    /* Nero is writing this one. The pulse is the only signal that a slot you pressed
+       is being worked on rather than sitting dead. */
+    .wedge.building {
+        fill: rgb(var(--holo) / 0.2);
+        stroke: rgb(var(--holo-soft) / 0.6);
+        stroke-dasharray: 4 3;
+        animation: build-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes build-pulse {
+        0%, 100% { opacity: 0.45; }
+        50% { opacity: 1; }
+    }
+    .wedge.broke {
+        fill: rgb(var(--bad) / 0.18);
+        stroke: rgb(var(--bad) / 0.55);
+    }
+    .slot.building {
+        color: rgb(var(--holo-soft));
+    }
+    .slot.broke {
+        color: rgb(var(--bad));
+    }
+
     .wedge.armed {
         fill: rgb(var(--holo2) / 0.45);
         stroke: rgb(var(--holo2));
