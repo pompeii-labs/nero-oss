@@ -53,6 +53,8 @@ How to work:
 
 Hard rules:
 - http when the target has an API. shell only when it doesn't.
+- Check what already exists before building. If a button already does this, say so and stop rather than making a second one; if a script on disk already does the work, point at that instead of writing another.
+- Never depend on anything in /tmp. It is cleared on reboot and the button will break silently later. Scripts live next to the code they belong to, in the user's projects, with a name that says what they do.
 - A shell action is a command line, never a program in a string. No node -e, no python -c, no heredocs. If the logic doesn't exist on disk yet, WRITE A SCRIPT FILE (next to the code it belongs to, with a sensible name), make sure it runs, and point the action at that file. That script is a real part of the user's toolset now, so write it properly.
 - A press should feel instant. If a draft takes more than about a second, find out why and fix it: cache what you can, skip a discovery scan when the address is already known, avoid spawning a runtime you don't need. A button that takes five seconds is a bug, not a success.
 - A shell action must exit on its own. If it opens a socket or a device connection, exit explicitly when the work is done, or it hangs until it's killed.

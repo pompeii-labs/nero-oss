@@ -81,7 +81,14 @@ struct ActionPicker: View {
                 }
             }
         }
-        .task { await reload() }
+        .task {
+            // Cleared every time the sheet opens. SwiftUI can reuse this view, and a
+            // leftover goal from a previous open would be sent as if you'd typed it.
+            describe = ""
+            describing = false
+            picked = nil
+            await reload()
+        }
     }
 
     private func reload() async {
@@ -187,6 +194,7 @@ struct ActionPicker: View {
                 let text = describe.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else { return }
                 onDescribe(text)
+                describe = ""
                 dismiss()
             } label: {
                 Text("Ask Nero")
