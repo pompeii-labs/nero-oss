@@ -157,6 +157,16 @@ struct NeroClient {
         return (try? JSONDecoder().decode(BindTemplateResponse.self, from: d))?.action != nil
     }
 
+    /// Bind an existing action to a slot, or -1 to free it. It stays in the library
+    /// either way; only deleteAction removes it.
+    func assignAction(_ id: String, slot: Int) async -> Bool {
+        (try? await patch("/v1/actions/\(id)", ["slot": slot])) != nil
+    }
+
+    func deleteAction(_ id: String) async -> Bool {
+        (try? await delete("/v1/actions/\(id)")) != nil
+    }
+
     /// Fire a script or prompt action. A `builtin` in the reply means the slot is one
     /// the screen owns and the caller should handle it locally.
     func runAction(_ id: String) async -> ActionRunResult {
@@ -192,6 +202,15 @@ struct NeroClient {
     private func post(_ path: String, _ body: [String: Any]) async throws -> Data {
         var req = URLRequest(url: URL(string: path, relativeTo: base)!)
         req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, _) = try await URLSession.shared.data(for: req)
+        return data
+    }
+    @discardableResult
+    private func patch(_ path: String, _ body: [String: Any]) async throws -> Data {
+        var req = URLRequest(url: URL(string: path, relativeTo: base)!)
+        req.httpMethod = "PATCH"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await URLSession.shared.data(for: req)

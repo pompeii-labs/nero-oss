@@ -85,6 +85,10 @@ struct HomeScreen: View {
     @SwiftUI.State private var composeSlot: Int?
     @SwiftUI.State private var confirming: DialWedge?
     @SwiftUI.State private var firedThisGesture = false
+    /// Holding on a filled wedge (rather than releasing) opens its picker, so a bound
+    /// slot can be swapped or cleared with the same gesture that made it.
+    @SwiftUI.State private var holdTask: Task<Void, Never>?
+    @SwiftUI.State private var heldOpen = false
     @SwiftUI.State private var showCamera = false
 
     private let dialSize: CGFloat = 340
@@ -223,6 +227,9 @@ struct HomeScreen: View {
     }
 
     private func closeDial() {
+        holdTask?.cancel()
+        holdTask = nil
+        heldOpen = false
         // a wedge that fired already played its own sound; don't stack a dismiss on top
         if dialOpen && !firedThisGesture { DialSfx.shared.close() }
         firedThisGesture = false
@@ -238,6 +245,21 @@ struct HomeScreen: View {
         let slot = Dial.slot(at: p, center: dialCenter, radius: dialSize / 2)
         guard slot != dialHot else { return }
         dialHot = slot
+
+        // moving to a different wedge restarts the hold
+        holdTask?.cancel()
+        holdTask = nil
+        if let slot, dialWedges[slot] != nil {
+            holdTask = Task {
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled else { return }
+                heldOpen = true
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                DialSfx.shared.arm()
+                composeSlot = slot
+                withAnimation(Motion.snap) { dialOpen = false }
+            }
+        }
         // the detent: every wedge you cross ticks. This is the thing the web build
         // can't do, since Safari has no vibration API.
         if let slot {
@@ -247,6 +269,13 @@ struct HomeScreen: View {
     }
 
     private func release(at p: CGPoint?) {
+        holdTask?.cancel()
+        holdTask = nil
+        if heldOpen {
+            // the hold already opened the picker; releasing must not also fire
+            heldOpen = false
+            return
+        }
         let slot = p.flatMap { Dial.slot(at: $0, center: dialCenter, radius: dialSize / 2) }
         guard let slot else { return closeDial() }
         guard let w = dialWedges[slot] else {

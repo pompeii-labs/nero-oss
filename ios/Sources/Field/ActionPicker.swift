@@ -19,6 +19,7 @@ struct ActionPicker: View {
     var onDescribe: (String) -> Void
 
     @SwiftUI.State private var templates: [ActionTemplate] = []
+    @SwiftUI.State private var library: [DialAction] = []
     @SwiftUI.State private var providers: [ActionProvider] = []
     @SwiftUI.State private var loading = true
     @SwiftUI.State private var picked: ActionTemplate?
@@ -53,19 +54,93 @@ struct ActionPicker: View {
                 }
             }
         }
-        .task {
-            let c = await client.actionCatalog()
-            templates = c.templates
-            providers = c.providers
-            loading = false
-        }
+        .task { await reload() }
     }
+
+    private func reload() async {
+        async let cat = client.actionCatalog()
+        async let mine = client.actions()
+        let (c, m) = await (cat, mine)
+        templates = c.templates
+        providers = c.providers
+        library = m
+        loading = false
+    }
+
+    /// What currently holds this slot, if anything.
+    private var occupant: DialAction? { library.first { $0.slot == slot } }
 
     // MARK: catalogue
 
     private var list: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
+                if let occ = occupant {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Kicker(text: "In this slot", size: 9.5)
+                        HStack {
+                            Text(occ.label).font(Typeface.ui(14)).foregroundStyle(theme.text)
+                            Spacer()
+                            Button("Unassign") {
+                                Task {
+                                    _ = await client.assignAction(occ.id, slot: -1)
+                                    await reload()
+                                    onBound()
+                                }
+                            }
+                            .font(Typeface.mono(10)).foregroundStyle(theme.textDim)
+                            Button("Delete") {
+                                Task {
+                                    _ = await client.deleteAction(occ.id)
+                                    await reload()
+                                    onBound()
+                                }
+                            }
+                            .font(Typeface.mono(10)).foregroundStyle(theme.holo2())
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 10)
+                        .glassEffect(.regular.tint(theme.holo(0.10)), in: .rect(cornerRadius: 12))
+                        Text("Unassigning frees the slot and keeps the action. Deleting removes it.")
+                            .font(Typeface.ui(11)).foregroundStyle(theme.textFaint)
+                    }
+                }
+
+                let others = library.filter { $0.slot != slot }
+                if !others.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Kicker(text: "Your actions", size: 9.5)
+                        Text("Everything you and Nero have built.")
+                            .font(Typeface.ui(12)).foregroundStyle(theme.textDim)
+                        ForEach(others) { a in
+                            Button {
+                                Task {
+                                    _ = await client.assignAction(a.id, slot: slot)
+                                    onBound()
+                                    dismiss()
+                                }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: DialIcon.symbol(a.icon))
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(theme.holoSoft)
+                                    Text(a.label).font(Typeface.ui(13.5))
+                                        .foregroundStyle(theme.text)
+                                    Spacer()
+                                    Text(a.slot >= 0 ? "slot \(a.slot)" : "unassigned")
+                                        .font(Typeface.mono(9))
+                                        .foregroundStyle(theme.textFaint)
+                                }
+                                .padding(.horizontal, 12).padding(.vertical, 10)
+                                .glassEffect(
+                                    .regular.tint(theme.holo(0.06)).interactive(),
+                                    in: .rect(cornerRadius: 12)
+                                )
+                            }
+                            .buttonStyle(PressableButtonStyle())
+                        }
+                    }
+                }
+
                 ForEach(providers) { p in
                     let items = templates.filter { $0.provider == p.id }
                     if !items.isEmpty {
