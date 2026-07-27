@@ -26,6 +26,7 @@ targets:
         product: MarkdownUI
       - target: NeroShare
       - target: NeroWidgets
+    scheme: {}
     sources:
       - path: Sources
       - path: Resources
