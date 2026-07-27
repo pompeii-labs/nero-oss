@@ -158,9 +158,17 @@ struct RadialDial: View {
             light
             labels
             if !status.isEmpty {
+                // Constrained to the hole and three lines. Output arrives capped, but
+                // the hub must never be able to spill a stack trace across the ring
+                // whatever it is handed.
                 Text(status)
-                    .font(Typeface.mono(10)).tracking(3)
+                    .font(Typeface.mono(9.5))
+                    .tracking(status.count > 24 ? 0 : 3)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(3)
+                    .truncationMode(.tail)
                     .foregroundStyle(theme.holoSoft.opacity(0.9))
+                    .frame(maxWidth: diameter * Dial.innerRatio * 0.82)
             }
         }
         .frame(width: diameter, height: diameter)
