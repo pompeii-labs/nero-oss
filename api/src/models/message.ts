@@ -152,6 +152,44 @@ export class Message extends DataModel<MessageData> {
             .reverse();
     }
 
+    /**
+     * History for a client to render, counted in CHAT messages rather than rows.
+     *
+     * Tool calls share this table, so a row-capped window is at the mercy of one
+     * tool-heavy turn: a single agent run making 199 calls will evict an entire
+     * conversation and the app opens on a blank thread. This walks back far enough to
+     * include `messages` real messages, then returns everything from there (tool rows
+     * included, so the UI can still group them under the turn they belong to).
+     */
+    static async getDisplayHistory(
+        opts: { messages?: number; maxRows?: number } = {},
+    ): Promise<Message[]> {
+        const want = opts.messages ?? 40;
+        const rows = (
+            unwrap(
+                await getLux()
+                    .table('messages')
+                    .select()
+                    .order('id', { ascending: false })
+                    .limit(opts.maxRows ?? 3000),
+            ) as Messages[]
+        ).map((r) => new Message(r as unknown as MessageData));
+
+        // rows are newest-first; stop once we've passed `want` chat messages
+        let seen = 0;
+        let cut = rows.length;
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i].type === 'message') {
+                seen++;
+                if (seen > want) {
+                    cut = i;
+                    break;
+                }
+            }
+        }
+        return rows.slice(0, cut).reverse();
+    }
+
     /** Human (user) messages written after `sinceId`, ascending. Drives steering. */
     static async getHumanSince(sinceId: number): Promise<Message[]> {
         const q = getLux()

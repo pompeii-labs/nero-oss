@@ -80,3 +80,14 @@ export function buildAuthorUtilities(author: DialAuthorUtility): MagmaUtilities[
     if (cfg.tavilyApiKey) utils.push(loadUtilities(new WebUtility(cfg.tavilyApiKey)));
     return utils;
 }
+
+/** Setting up an agent button: he asks the user what it should do (the ask tool blocks
+ *  for their answer), recalls what he knows about them to make the options real, then
+ *  saves the goal. No file or shell tools - this is a conversation, not a build. */
+export function buildInterviewUtilities(author: DialAuthorUtility): MagmaUtilities[] {
+    return [
+        loadUtilities(new MemoryUtility()),
+        loadUtilities(new AskUtility()),
+        loadUtilities(author),
+    ];
+}

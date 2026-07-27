@@ -163,4 +163,39 @@ export class DialAuthorUtility {
         this.saved = true;
         return `Saved to slot ${this.slot}. It's on the dial now.`;
     }
+
+    @tool({
+        name: 'save_goal',
+        description:
+            "Save the configured goal for an agent button, once you've asked the user what it should do. The goal is what you'll run every time they press it, so write it as a complete instruction to yourself.",
+    })
+    @toolparam({
+        key: 'label',
+        type: 'string',
+        required: true,
+        description: 'Up to 14 characters, shown under the icon.',
+    })
+    @toolparam({
+        key: 'goal',
+        type: 'string',
+        required: true,
+        description:
+            'The instruction, in second person, concrete enough to run unattended without asking anything further.',
+    })
+    async save_goal(call: MagmaToolCall, _agent: MagmaAgent): Promise<string> {
+        const a = new Args(call);
+        const goal = a.str('goal').trim();
+        if (!goal) return 'Need the goal.';
+
+        await Action.update(this.actionId, {
+            label: a.text('label', 'Brief').slice(0, 14),
+            kind: 'agent',
+            body: goal,
+            fn: null,
+            slot: this.slot,
+            status: 'ready',
+        });
+        this.saved = true;
+        return `Saved. Pressing slot ${this.slot} now runs that.`;
+    }
 }

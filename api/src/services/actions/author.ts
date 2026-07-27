@@ -2,9 +2,9 @@ import { Action, type ActionData } from '../../models/action';
 import { Memory } from '../../models/memory';
 import { Settings } from '../../models/settings';
 import { NeroAgent } from '../harness/agent';
-import { buildAuthorUtilities } from '../../tools';
+import { buildAuthorUtilities, buildInterviewUtilities } from '../../tools';
 import { DialAuthorUtility } from './author-tool';
-import { TEMPLATES } from './catalog';
+import { TEMPLATES, getTemplate } from './catalog';
 import { Logger } from '@nero/shared/logger';
 
 const log = new Logger('dial-author');
@@ -64,6 +64,55 @@ ${TEMPLATES.map((t) => `  ${t.id} — ${t.description}`).join('\n')}`;
 }
 
 export class ActionAuthor {
+    /**
+     * Configure an `agent` button by asking the user what it should do.
+     *
+     * A generic "brief me" is worth little; yours is worth pressing daily. Nero asks
+     * through the Ask card (which blocks until you answer), then writes the goal onto
+     * the action. Pressing it afterwards runs that goal, not a canned prompt.
+     */
+    static async interview(actionId: string): Promise<ActionData | null> {
+        const action = await Action.get(actionId);
+        if (!action) return null;
+
+        const template = action.template_id ? getTemplate(action.template_id) : undefined;
+        const util = new DialAuthorUtility(action.id, action.slot);
+        const connection = await Settings.resolveConnection('plan_model');
+        const agent = new NeroAgent({ connection, utilities: buildInterviewUtilities(util) });
+        await agent.setup();
+        // no beginRun: the interview isn't conversation, it shouldn't be stored
+        agent.currentMemories = await Memory.recallForPrompt(
+            template?.description ?? action.label,
+        ).catch(() => '');
+
+        await Action.update(action.id, { status: 'drafting' });
+        agent.addMessage({
+            role: 'user',
+            content: `You're setting up the "${action.label}" button on the user's Dial (slot ${action.slot}). It runs as a full agent turn each time they press it, so it needs a goal worth running.
+
+${template?.interview ?? 'Ask the user what this button should do, then write it as an instruction to yourself.'}
+
+Use the ask tool: give them real options drawn from what you actually know about them and what you can reach, not generic ones. You may ask more than once if the first answer leaves it ambiguous. Then call save_goal.
+
+Write the goal in second person, concrete enough that you could run it unattended without asking anything further.`,
+        });
+
+        try {
+            await withTimeout(agent.main(), TIMEOUT_MS);
+        } catch (err) {
+            log.warn('interview ended early', {
+                cause: err instanceof Error ? err.message : String(err),
+            });
+        }
+
+        const final = await Action.get(action.id);
+        if (!util.saved) {
+            // leave it usable rather than stuck mid-setup; pressing it retries
+            await Action.update(action.id, { status: 'ready' });
+        }
+        return (await Action.get(action.id)) ?? final;
+    }
+
     /**
      * Draft, test and bind an action for a slot. Returns the row in whatever state it
      * reached: `ready` when he saved a working one, `failed` otherwise. Progress lands

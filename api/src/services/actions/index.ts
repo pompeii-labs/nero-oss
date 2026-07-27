@@ -152,6 +152,12 @@ export class Actions {
             draft_log: missingSecrets.length ? `waiting on ${missingSecrets.join(', ')}` : '',
         });
 
+        // a template that wants an interview configures itself the moment it's bound
+        if (template.interview && !action.body.trim()) {
+            const { ActionAuthor } = await import('./author');
+            void ActionAuthor.interview(action.id).catch(() => {});
+        }
+
         return { action, missingSecrets: missingSecrets.length ? missingSecrets : undefined };
     }
 
@@ -163,6 +169,14 @@ export class Actions {
 
         if (action.kind === 'builtin') {
             return { ok: true, output: '', builtin: action.body };
+        }
+
+        // An agent button with no goal yet hasn't been set up. Pressing it starts the
+        // interview rather than failing: the first press IS the configuration.
+        if (action.kind === 'agent' && !action.body.trim()) {
+            const { ActionAuthor } = await import('./author');
+            void ActionAuthor.interview(action.id).catch(() => {});
+            return { ok: true, output: "setting this up - I'll ask you what it should do" };
         }
 
         // prompt hands Nero one turn; agent hands him a goal to work as a loop

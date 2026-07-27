@@ -38,7 +38,9 @@ export function streamRoutes(): Hono {
                 open = false;
             });
 
-            const history = await Message.getSessionHistory({ limit: 200 });
+            // counted in chat messages, not rows: a tool-heavy turn would otherwise
+            // push the whole conversation out of a row-capped window
+            const history = await Message.getDisplayHistory({ messages: 40 });
             let lastId = 0;
             for (const m of history) {
                 await stream.writeSSE({ event: 'message', data: JSON.stringify(m) });

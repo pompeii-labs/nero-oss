@@ -99,6 +99,11 @@ struct HomeScreen: View {
 
     private var voiceOn: Bool { voice.phase != .idle }
 
+    /// A question Nero is blocked on. It has to surface here, not only in Chat: the
+    /// Dial can start an interview, and answering it on a different screen than the
+    /// one you pressed is no answer at all.
+    private var pendingQuestion: Question? { store.questions.first { $0.isPending } }
+
     private var orbState: Orb.State {
         if voiceOn {
             switch voice.phase {
@@ -135,6 +140,21 @@ struct HomeScreen: View {
                     .transition(.opacity)
                     .animation(Motion.glide, value: voice.activities)
             }
+            if let q = pendingQuestion {
+                AskCard(
+                    question: q,
+                    onSubmit: { answers in
+                        Task { await store.client.answer(q.id, answers: answers) }
+                    },
+                    onDismiss: {
+                        Task { await store.client.answer(q.id, answers: [], dismiss: true) }
+                    }
+                )
+                .frame(maxWidth: 380)
+                .padding(.bottom, 18)
+                .transition(.opacity)
+            }
+
             orbStack
             caption(view: dialOpen ? "release on a slot" : caption)
             if voiceOn { transcript }
@@ -145,6 +165,7 @@ struct HomeScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { Atmosphere() }
         .animation(Motion.glide, value: voiceOn)
+        .animation(Motion.snap, value: pendingQuestion?.id)
         .onDisappear { if voiceOn { voice.stop() } }
     }
 
