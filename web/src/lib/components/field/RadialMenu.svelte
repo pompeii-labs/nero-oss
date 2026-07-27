@@ -28,7 +28,7 @@
          *  press can drag to a wedge and fire it on release. */
         dragging?: boolean;
         onFire: (w: Wedge) => void;
-        /** An unbound slot was pressed; the Field opens the picker for it. */
+        /** A slot wants the picker: an empty one pressed, or a filled one held. */
         onEmpty: (slot: number) => void;
         onClose: () => void;
     } = $props();
@@ -40,11 +40,16 @@
     const R_OUT = 96;
     const R_LABEL = (R_IN + R_OUT) / 2;
     const STEP = 360 / SLOTS;
-    const GAP = 1.1; // degrees trimmed off each side so wedges read as separate
+    const GAP = 2.2; // degrees trimmed off each side so wedges read as separate
 
     let hot = $state<number | null>(null);
     let armed = $state<number | null>(null); // a confirm wedge waiting on its second press
     let dialEl = $state<HTMLElement | null>(null);
+    /** Holding on a filled wedge (rather than releasing) opens its picker, so a bound
+     *  slot can be swapped or cleared with the same gesture that made it. */
+    const HOLD_TO_EDIT_MS = 600;
+    let holdTimer: ReturnType<typeof setTimeout> | null = null;
+    let heldOpen = false;
     /** Captured once at open. Reading the live prop would race the orb's own pointerup,
      *  which clears it before the release handler runs. */
     let dragLatch = false;
@@ -57,19 +62,32 @@
         return [C + r * Math.cos(a), C + r * Math.sin(a)];
     }
 
-    /** Annular sector path for slot `i`. */
+    /** Corner softness on each wedge, in viewBox units. Rounded because a hard-cornered
+     *  sector reads as a flat shape rather than a piece of material. */
+    const CR = 5;
+
+    /** Rounded annular sector path for slot `i`. */
     function wedgePath(i: number): string {
-        const a0 = i * STEP - STEP / 2 + GAP;
-        const a1 = i * STEP + STEP / 2 - GAP;
-        const [x0o, y0o] = polar(R_OUT, a0);
-        const [x1o, y1o] = polar(R_OUT, a1);
-        const [x1i, y1i] = polar(R_IN, a1);
-        const [x0i, y0i] = polar(R_IN, a0);
+        const mid = i * STEP;
+        const a0 = mid - STEP / 2 + GAP;
+        const a1 = mid + STEP / 2 - GAP;
+        // clamp so the fillet never eats the band or the arc
+        const half = ((a1 - a0) / 2) * (Math.PI / 180);
+        const cr = Math.min(CR, (R_OUT - R_IN) / 2.2, R_IN * half * 0.8);
+        const dOut = (cr / R_OUT) * (180 / Math.PI);
+        const dIn = (cr / R_IN) * (180 / Math.PI);
+
+        const p = (r: number, deg: number) => polar(r, deg).map((n) => n.toFixed(2)).join(' ');
         return [
-            `M ${x0o} ${y0o}`,
-            `A ${R_OUT} ${R_OUT} 0 0 1 ${x1o} ${y1o}`,
-            `L ${x1i} ${y1i}`,
-            `A ${R_IN} ${R_IN} 0 0 0 ${x0i} ${y0i}`,
+            `M ${p(R_OUT, a0 + dOut)}`,
+            `A ${R_OUT} ${R_OUT} 0 0 1 ${p(R_OUT, a1 - dOut)}`,
+            `Q ${p(R_OUT, a1)} ${p(R_OUT - cr, a1)}`,
+            `L ${p(R_IN + cr, a1)}`,
+            `Q ${p(R_IN, a1)} ${p(R_IN, a1 - dIn)}`,
+            `A ${R_IN} ${R_IN} 0 0 0 ${p(R_IN, a0 + dIn)}`,
+            `Q ${p(R_IN, a0)} ${p(R_IN + cr, a0)}`,
+            `L ${p(R_OUT - cr, a0)}`,
+            `Q ${p(R_OUT, a0)} ${p(R_OUT, a0 + dOut)}`,
             'Z',
         ].join(' ');
     }
@@ -154,9 +172,31 @@
         // effect and wipe the latch
         dragLatch = untrack(() => dragging);
         function onMove(e: PointerEvent) {
-            hot = slotAt(e.clientX, e.clientY);
+            const next = slotAt(e.clientX, e.clientY);
+            if (next !== hot) {
+                hot = next;
+                // moving to a different wedge restarts the hold
+                if (holdTimer) clearTimeout(holdTimer);
+                holdTimer = null;
+                if (dragLatch && next !== null && wedges[next]) {
+                    holdTimer = setTimeout(() => {
+                        holdTimer = null;
+                        heldOpen = true;
+                        sfx.arm();
+                        onEmpty(next);
+                    }, HOLD_TO_EDIT_MS);
+                }
+            }
         }
         function onUp(e: PointerEvent) {
+            if (holdTimer) clearTimeout(holdTimer);
+            holdTimer = null;
+            if (heldOpen) {
+                // the hold already opened the picker; releasing must not also fire
+                heldOpen = false;
+                dragLatch = false;
+                return;
+            }
             if (!dragLatch) return;
             dragLatch = false;
             const slot = slotAt(e.clientX, e.clientY);
@@ -168,6 +208,9 @@
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
         return () => {
+            if (holdTimer) clearTimeout(holdTimer);
+            holdTimer = null;
+            heldOpen = false;
             window.removeEventListener('pointermove', onMove);
             window.removeEventListener('pointerup', onUp);
         };

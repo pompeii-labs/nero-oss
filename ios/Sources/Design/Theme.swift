@@ -44,22 +44,6 @@ struct Theme: Equatable, Identifiable {
 }
 
 extension Theme {
-    static let obsidian = Theme(
-        id: "obsidian",
-        displayName: "Obsidian",
-        void_: Color(hex: 0x04060a),
-        text: Color(hex: 0xdfe8f0),
-        textDim: Color(hex: 0x7d8fa0),
-        textFaint: Color(hex: 0x52606d),
-        holoRGB: (34, 211, 238),
-        holoSoft: Color(r: 125, 230, 247),
-        holoHot: Color(r: 230, 253, 255),
-        holo2RGB: (251, 146, 60),
-        fieldStops: [Color(hex: 0x0a1018), Color(hex: 0x070a0e), Color(hex: 0x04060a)],
-        panelStops: [Color(r: 20, 33, 45, 0.62), Color(r: 8, 13, 19, 0.5)],
-        orbStops: [Color(hex: 0x1a2c38), Color(hex: 0x0a141c), Color(hex: 0x050a0f), Color(hex: 0x03070b)]
-    )
-
     static let forge = Theme(
         id: "forge",
         displayName: "Forge",
@@ -94,8 +78,10 @@ extension Theme {
         orbStops: [Color(hex: 0x10283f), Color(hex: 0x071626), Color(hex: 0x030c16), Color(hex: 0x01060d)]
     )
 
-    static let all: [Theme] = [.obsidian, .forge, .vector]
-    static func named(_ id: String) -> Theme { all.first { $0.id == id } ?? .obsidian }
+    /// Vector first: it is the default, and Obsidian is retired.
+    static let all: [Theme] = [.vector, .forge]
+    /// Anything unknown (a stored "obsidian") lands on the default.
+    static func named(_ id: String) -> Theme { all.first { $0.id == id } ?? .vector }
 }
 
 // MARK: - Typography (three registers: serif wordmark, sans body, mono labels)
@@ -121,7 +107,7 @@ enum Motion {
 // MARK: - Environment plumbing
 
 private struct ThemeKey: EnvironmentKey {
-    static let defaultValue: Theme = .obsidian
+    static let defaultValue: Theme = .vector
 }
 extension EnvironmentValues {
     var theme: Theme {

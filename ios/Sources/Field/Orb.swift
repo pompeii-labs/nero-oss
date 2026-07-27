@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Nero's presence: an obsidian sphere lit from within, wrapped in a gyroscopic
+/// Nero's presence: a dark sphere lit from within, wrapped in a gyroscopic
 /// reticle. Pure SwiftUI layers. State drives the character (calm / introspective /
 /// reaching-out / speaking). Ported from web/src/lib/components/field/Orb.svelte.
 struct Orb: View {

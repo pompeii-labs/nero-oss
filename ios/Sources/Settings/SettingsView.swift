@@ -7,7 +7,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var store: NeroStore
     @AppStorage(NeroConfig.serverKey) private var serverURL: String = ""
-    @AppStorage("nero.theme") private var themeId: String = "obsidian"
+    @AppStorage("nero.theme") private var themeId: String = "vector"
 
     @State private var secrets: [SecretMeta] = []
     @State private var mcp: [McpServer] = []

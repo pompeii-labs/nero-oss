@@ -4,7 +4,7 @@ import SwiftUI
 /// the store (and its realtime connection) when the server changes.
 struct RootView: View {
     @AppStorage(NeroConfig.serverKey) private var serverURL: String = NeroConfig.defaultURL
-    @AppStorage("nero.theme") private var themeId: String = "obsidian"
+    @AppStorage("nero.theme") private var themeId: String = "vector"
 
     var body: some View {
         Group {

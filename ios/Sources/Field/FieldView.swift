@@ -76,7 +76,7 @@ struct HomeScreen: View {
     // The dial. Press and hold the orb to ring it with eight slots; drag to one and
     // release to fire it. Built-ins are the defaults; anything Nero bound to a slot
     // displaces the built-in that sat there.
-    @AppStorage("nero.theme") private var themeId: String = "obsidian"
+    @AppStorage("nero.theme") private var themeId: String = "vector"
     @SwiftUI.State private var dialOpen = false
     @SwiftUI.State private var dialHot: Int?
     @SwiftUI.State private var dialArmed: Int?

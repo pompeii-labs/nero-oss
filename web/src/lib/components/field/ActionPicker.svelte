@@ -9,8 +9,12 @@
     import {
         loadCatalog,
         bindTemplate,
+        listActions,
+        assignAction,
+        deleteAction,
         type ActionTemplate,
         type ActionProvider,
+        type DialAction,
     } from '$lib/actions/dial';
 
     let {
@@ -30,6 +34,7 @@
     } = $props();
 
     let templates = $state<ActionTemplate[]>([]);
+    let library = $state<DialAction[]>([]);
     let providers = $state<ActionProvider[]>([]);
     let loading = $state(true);
     let picked = $state<ActionTemplate | null>(null);
@@ -55,9 +60,10 @@
             return;
         }
         loading = true;
-        void loadCatalog().then((c) => {
+        void Promise.all([loadCatalog(), listActions()]).then(([c, actions]) => {
             templates = c.templates;
             providers = c.providers;
+            library = actions;
             loading = false;
         });
     });
@@ -86,6 +92,36 @@
         }
         onBound();
         onClose();
+    }
+
+    /** What currently holds this slot, if anything. */
+    const occupant = $derived(library.find((a) => a.slot === slot) ?? null);
+
+    async function reload() {
+        library = await listActions();
+        onBound();
+    }
+
+    async function assign(a: DialAction) {
+        busy = true;
+        await assignAction(a.id, slot);
+        busy = false;
+        await reload();
+        onClose();
+    }
+
+    async function unassign(a: DialAction) {
+        busy = true;
+        await assignAction(a.id, -1);
+        busy = false;
+        await reload();
+    }
+
+    async function remove(a: DialAction) {
+        busy = true;
+        await deleteAction(a.id);
+        busy = false;
+        await reload();
     }
 
     function sendToNero(e: Event) {
@@ -169,6 +205,51 @@
             <div class="body"><p class="muted">loading actions…</p></div>
         {:else}
             <div class="body">
+                {#if occupant}
+                    <section class="current">
+                        <h3>In this slot</h3>
+                        <div class="occ">
+                            <span class="occ-name">{occupant.label}</span>
+                            <div class="occ-acts">
+                                <button onclick={() => unassign(occupant)} disabled={busy}>
+                                    unassign
+                                </button>
+                                <button class="danger" onclick={() => remove(occupant)} disabled={busy}>
+                                    delete
+                                </button>
+                            </div>
+                        </div>
+                        <p class="pdesc">
+                            Unassigning frees the slot and keeps the action in your library.
+                            Deleting removes it for good.
+                        </p>
+                    </section>
+                {/if}
+
+                {#if library.length}
+                    <section>
+                        <h3>Your actions</h3>
+                        <p class="pdesc">Everything you and Nero have built. Pick one for this slot.</p>
+                        <div class="rows">
+                            {#each library.filter((a) => a.slot !== slot) as a (a.id)}
+                                {@const Icon = dialIcon(a.icon)}
+                                <div class="row">
+                                    <button class="row-main" onclick={() => assign(a)} disabled={busy}>
+                                        <span class="ico"><Icon size={14} strokeWidth={1.7} /></span>
+                                        <span class="row-name">{a.label}</span>
+                                        <span class="row-where">
+                                            {a.slot >= 0 ? `slot ${a.slot}` : 'unassigned'}
+                                        </span>
+                                    </button>
+                                    <button class="row-x" onclick={() => remove(a)} disabled={busy} aria-label="Delete">
+                                        &times;
+                                    </button>
+                                </div>
+                            {/each}
+                        </div>
+                    </section>
+                {/if}
+
                 {#each grouped as g (g.provider.id)}
                     <section>
                         <h3>{g.provider.name}</h3>
@@ -338,6 +419,87 @@
         color: rgb(var(--holo-soft));
         display: grid;
         place-items: center;
+    }
+
+    .rows {
+        display: grid;
+        gap: 6px;
+    }
+    .row {
+        display: flex;
+        gap: 6px;
+    }
+    .row-main {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px 11px;
+        border-radius: 10px;
+        background: rgb(var(--holo) / 0.06);
+        border: 1px solid rgb(var(--holo) / 0.16);
+        color: var(--text);
+        cursor: pointer;
+        text-align: left;
+    }
+    .row-main:hover {
+        background: rgb(var(--holo) / 0.14);
+    }
+    .row-name {
+        flex: 1;
+        font-size: 13px;
+    }
+    .row-where {
+        font-family: var(--font-mono);
+        font-size: 9px;
+        color: var(--text-faint);
+    }
+    .row-x {
+        width: 34px;
+        border-radius: 10px;
+        background: none;
+        border: 1px solid rgb(var(--holo) / 0.14);
+        color: var(--text-dim);
+        cursor: pointer;
+        font-size: 15px;
+    }
+    .row-x:hover {
+        color: rgb(var(--bad));
+        border-color: rgb(var(--bad) / 0.4);
+    }
+    .occ {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: rgb(var(--holo) / 0.1);
+        border: 1px solid rgb(var(--holo) / 0.28);
+    }
+    .occ-name {
+        flex: 1;
+        font-size: 13.5px;
+    }
+    .occ-acts {
+        display: flex;
+        gap: 6px;
+    }
+    .occ-acts button {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        padding: 5px 10px;
+        border-radius: 7px;
+        background: none;
+        border: 1px solid rgb(var(--holo) / 0.28);
+        color: var(--text-dim);
+        cursor: pointer;
+    }
+    .occ-acts button:hover {
+        color: var(--text);
+    }
+    .occ-acts .danger:hover {
+        color: rgb(var(--bad));
+        border-color: rgb(var(--bad) / 0.5);
     }
 
     .back {

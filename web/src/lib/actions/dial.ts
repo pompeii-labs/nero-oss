@@ -112,6 +112,12 @@ export function updateAction(id: string, patchBody: Partial<DialAction>) {
     return patch<DialAction>(`/v1/actions/${id}`, patchBody);
 }
 
+/** Bind an existing action to a slot, or -1 to unassign it. It stays in the library
+ *  either way; only deleteAction removes it. */
+export function assignAction(id: string, slot: number) {
+    return patch<DialAction>(`/v1/actions/${id}`, { slot });
+}
+
 export function deleteAction(id: string) {
     return del<{ ok: boolean }>(`/v1/actions/${id}`);
 }

@@ -34,6 +34,16 @@ export type ActionFn =
  *  occupied by something he's still building. */
 export type ActionStatus = 'ready' | 'drafting' | 'testing' | 'failed';
 
+/**
+ * Where a run's output goes.
+ *  - `auto`   pick by shape: a short line flashes, anything multi-line opens a panel.
+ *  - `flash`  a brief line under the dial, then gone.
+ *  - `panel`  a panel on the Field you can read and keep.
+ *  - `speak`  read aloud (falls back to a flash outside a voice turn).
+ *  - `silent` nothing. For a light switch, the room is the feedback.
+ */
+export type ActionOutput = 'auto' | 'flash' | 'panel' | 'speak' | 'silent';
+
 export const SLOTS = 8;
 
 export interface ActionData {
@@ -58,6 +68,7 @@ export interface ActionData {
     /** Param values baked in at instantiation (unlike secrets). */
     params: Record<string, string>;
     status: ActionStatus;
+    output: ActionOutput;
     /** Newline log of the authoring loop's attempts; the error when `failed`. */
     draft_log: string;
     /** Require a confirm tap before firing. For anything destructive. */
@@ -94,6 +105,7 @@ function hydrate(row: ActionRow): ActionData {
         template_id: row.template_id ?? '',
         params: parse<Record<string, string>>(row.params, {}),
         status: row.status ?? 'ready',
+        output: row.output ?? 'auto',
         draft_log: row.draft_log ?? '',
     };
 }
@@ -117,6 +129,7 @@ const ADDED_COLUMNS: [string, string][] = [
     ['template_id', 'TEXT'],
     ['params', 'TEXT'],
     ['status', 'TEXT'],
+    ['output', 'TEXT'],
     ['draft_log', 'TEXT'],
 ];
 
@@ -136,6 +149,7 @@ export class Action {
             { name: 'template_id', type: 'STR' },
             { name: 'params', type: 'STR' },
             { name: 'status', type: 'STR' },
+            { name: 'output', type: 'STR' },
             { name: 'draft_log', type: 'STR' },
             { name: 'confirm', type: 'BOOL' },
             { name: 'cwd', type: 'STR' },
@@ -204,6 +218,7 @@ export class Action {
             template_id: input.template_id ?? '',
             params: input.params ?? {},
             status: input.status ?? 'ready',
+            output: input.output ?? 'auto',
             draft_log: input.draft_log ?? '',
             confirm: input.confirm ?? false,
             cwd: input.cwd ?? '',

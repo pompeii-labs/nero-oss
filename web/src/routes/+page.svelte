@@ -2,7 +2,7 @@
     import '$lib/design/themes.css';
     import { onMount, onDestroy } from 'svelte';
     import { fade } from 'svelte/transition';
-    import { fieldTheme } from '$lib/stores/field-theme.svelte';
+    import { fieldTheme, type FieldTheme } from '$lib/stores/field-theme.svelte';
     import Atmosphere from '$lib/components/field/Atmosphere.svelte';
     import Orb from '$lib/components/field/Orb.svelte';
     import Message from '$lib/components/field/Message.svelte';
@@ -377,8 +377,10 @@
             unsubSettings = await subscribeSettings((c) => {
                 const rows = c.kind === 'snapshot' ? c.rows : c.kind === 'upsert' ? [c.row] : [];
                 for (const r of rows) {
-                    if (r.key === 'field_theme' && (r.value === 'obsidian' || r.value === 'forge'))
-                        fieldTheme.applyTheme(r.value);
+                    // applyTheme coerces anything retired (obsidian) to the default,
+                    // so a stale value synced from another screen can't strand us
+                    if (r.key === 'field_theme' && r.value)
+                        fieldTheme.applyTheme(r.value as FieldTheme);
                     else if (r.key === 'field_mode' && (r.value === 'day' || r.value === 'night'))
                         fieldTheme.applyMode(r.value);
                 }

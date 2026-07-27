@@ -19,7 +19,7 @@ enum Dial {
     static let outerRatio: CGFloat = 0.96
     static var labelRatio: CGFloat { (innerRatio + outerRatio) / 2 }
     /// Degrees trimmed off each side of a wedge so they read as separate.
-    static let gap = 1.1
+    static let gap = 2.2
 
     /// Centre angle of a slot. SwiftUI's zero is the +x axis, so twelve o'clock is -90.
     static func angle(_ slot: Int) -> Angle { .degrees(-90 + Double(slot) * step) }
@@ -43,19 +43,49 @@ enum Dial {
 /// One wedge of the ring: an arc band between two radii.
 struct AnnularSector: Shape {
     let slot: Int
+    /// Corner softness. Liquid Glass computes its lensing from the shape it is given;
+    /// a sharp-cornered pie slice degrades to a flat translucent fill that reads as
+    /// gray, so the corners are generously rounded like every native glass surface.
+    var corner: CGFloat = 14
 
     func path(in rect: CGRect) -> Path {
         let c = CGPoint(x: rect.midX, y: rect.midY)
         let R = min(rect.width, rect.height) / 2
-        let rIn = R * Dial.innerRatio, rOut = R * Dial.outerRatio
-        let mid = Dial.angle(slot).degrees
-        let a0 = Angle.degrees(mid - Dial.step / 2 + Dial.gap)
-        let a1 = Angle.degrees(mid + Dial.step / 2 - Dial.gap)
+        let rIn = R * Dial.innerRatio
+        let rOut = R * Dial.outerRatio
+        let mid = Dial.angle(slot).radians
+        let half = (Dial.step / 2 - Dial.gap) * .pi / 180
+        let a0 = mid - half
+        let a1 = mid + half
+
+        // Never let the fillet exceed half the band or half the arc.
+        let cr = min(corner, (rOut - rIn) / 2.2, rIn * half / 1.2)
+        let dOut = cr / rOut
+        let dIn = cr / rIn
+
+        func pt(_ r: CGFloat, _ a: CGFloat) -> CGPoint {
+            CGPoint(x: c.x + r * cos(a), y: c.y + r * sin(a))
+        }
 
         var p = Path()
-        p.addArc(center: c, radius: rOut, startAngle: a0, endAngle: a1, clockwise: false)
-        p.addLine(to: CGPoint(x: c.x + rIn * cos(a1.radians), y: c.y + rIn * sin(a1.radians)))
-        p.addArc(center: c, radius: rIn, startAngle: a1, endAngle: a0, clockwise: true)
+        p.move(to: pt(rOut, a0 + dOut))
+        p.addArc(
+            center: c, radius: rOut,
+            startAngle: .radians(a0 + dOut), endAngle: .radians(a1 - dOut),
+            clockwise: false
+        )
+        // round into the trailing radial edge
+        p.addQuadCurve(to: pt(rOut - cr, a1), control: pt(rOut, a1))
+        p.addLine(to: pt(rIn + cr, a1))
+        p.addQuadCurve(to: pt(rIn, a1 - dIn), control: pt(rIn, a1))
+        p.addArc(
+            center: c, radius: rIn,
+            startAngle: .radians(a1 - dIn), endAngle: .radians(a0 + dIn),
+            clockwise: true
+        )
+        p.addQuadCurve(to: pt(rIn + cr, a0), control: pt(rIn, a0))
+        p.addLine(to: pt(rOut - cr, a0))
+        p.addQuadCurve(to: pt(rOut, a0 + dOut), control: pt(rOut, a0))
         p.closeSubpath()
         return p
     }
@@ -138,7 +168,7 @@ struct RadialDial: View {
     /// can't both look selected, which is what the old per-wedge fill allowed.
     private var lit: (slot: Int, fill: Color, edge: Color)? {
         if let armed { return (armed, theme.holo2(0.5), theme.holo2()) }
-        if let hot { return (hot, theme.holo(0.45), theme.holoSoft.opacity(0.85)) }
+        if let hot { return (hot, theme.holo(0.5), theme.holoSoft.opacity(0.85)) }
         return nil
     }
 
@@ -149,28 +179,36 @@ struct RadialDial: View {
     private var ring: some View {
         ZStack {
             ForEach(0..<Dial.slots, id: \.self) { i in
+                // Tinted, like every other glass surface in the app. Untinted
+                // .regular renders as neutral system gray, which reads as off-brand
+                // against the Field's palette.
                 AnnularSector(slot: i)
                     .fill(.clear)
-                    .glassEffect(.regular, in: AnnularSector(slot: i))
+                    .glassEffect(
+                        .regular.tint(theme.holo(wedges[i] == nil ? 0.07 : 0.16)).interactive(),
+                        in: AnnularSector(slot: i)
+                    )
             }
 
             // "on" capabilities read as a quiet wash, well below the selection, so an
             // active toggle is never mistaken for the thing under your thumb
             ForEach(0..<Dial.slots, id: \.self) { i in
                 if wedges[i]?.on == true {
-                    AnnularSector(slot: i).fill(theme.holo(0.16))
+                    AnnularSector(slot: i).fill(theme.holo(0.14))
                 }
             }
 
+            // The selection is its own glass, brighter and lifted, rather than a fill
+            // with a hard stroke on top. Native glass draws its own edge; outlining it
+            // is what made these read as flat shapes.
             if let lit {
                 AnnularSector(slot: lit.slot)
-                    .fill(lit.fill)
-                    .overlay(AnnularSector(slot: lit.slot).stroke(lit.edge, lineWidth: 1.2))
-            }
-
-            ForEach(0..<Dial.slots, id: \.self) { i in
-                AnnularSector(slot: i)
-                    .stroke(theme.holo(wedges[i] == nil ? 0.1 : 0.24), lineWidth: 0.8)
+                    .fill(.clear)
+                    .glassEffect(
+                        .regular.tint(lit.fill).interactive(),
+                        in: AnnularSector(slot: lit.slot)
+                    )
+                    .shadow(color: theme.holo(0.45), radius: 14)
             }
         }
         // one transform on the whole ring. Rotating each sector individually slid it

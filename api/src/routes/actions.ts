@@ -143,6 +143,24 @@ export function actionRoutes(): Hono {
         }
     });
 
+    /** Revise an action in place: same row, same slot, Nero changes what it does. */
+    app.post('/v1/actions/:id/revise', async (c) => {
+        try {
+            const b = (await c.req.json().catch(() => ({}))) as { goal?: string; wait?: boolean };
+            const goal = b.goal?.trim();
+            if (!goal) return error(c, 400, 'goal is required');
+            const id = c.req.param('id');
+            const existing = await Actions.get(id);
+            if (!existing) return error(c, 404);
+
+            if (b.wait === true) return c.json(await ActionAuthor.author(goal, existing.slot, id));
+            void ActionAuthor.author(goal, existing.slot, id).catch(() => {});
+            return c.json({ started: true, id });
+        } catch (err) {
+            return error(c, 500, err);
+        }
+    });
+
     app.post('/v1/actions/:id/run', async (c) => {
         try {
             const result = await Actions.run(c.req.param('id'));

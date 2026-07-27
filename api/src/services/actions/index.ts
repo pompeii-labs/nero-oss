@@ -1,4 +1,7 @@
-import { Action, type ActionData } from '../../models/action';
+import { Action, type ActionData, type ActionOutput } from '../../models/action';
+import { Panel } from '../../models/panel';
+import { Device } from '../../models/device';
+import { Presence } from '../../models/presence';
 import type { PanelFn } from '../../models/panel';
 import { Secret } from '../../models/secret';
 import { runFn, type FnResult } from '../panels/exec';
@@ -45,6 +48,30 @@ function format(r: FnResult, kind: 'shell' | 'http'): string {
     return parts.join('\n') || '(no output)';
 }
 
+/** `auto` picks by shape: one short line is a flash, anything longer wants somewhere
+ *  to live. A press that returns nothing says nothing. */
+function resolveOutput(mode: ActionOutput, text: string): Exclude<ActionOutput, 'auto'> {
+    if (mode !== 'auto') return mode;
+    const trimmed = text.trim();
+    if (!trimmed) return 'silent';
+    return trimmed.includes('\n') || trimmed.length > 140 ? 'panel' : 'flash';
+}
+
+/** Put a run's output on a screen, as monospace, so `df -H` stays readable. */
+async function toPanel(action: ActionData, text: string): Promise<void> {
+    // wherever Nero currently is; a panel on a screen he isn't on helps nobody
+    const here = await Presence.get().catch(() => null);
+    const device = (await Device.listOnline().catch(() => [])).find((d) => d.id === here);
+    if (!device) return;
+    await Panel.open({
+        device_id: device.id,
+        title: action.label,
+        components: [{ type: 'code', value: text }],
+        w: 520,
+        h: 340,
+    }).catch(() => {});
+}
+
 export interface ActionResult {
     /** False when the request failed, the command exited non-zero, or it couldn't run. */
     ok: boolean;
@@ -54,6 +81,8 @@ export interface ActionResult {
     output: string;
     /** Set for `builtin`: the key the Field should handle locally. */
     builtin?: string;
+    /** How the client should present `output`. Resolved from the action's mode. */
+    present?: Exclude<ActionOutput, 'auto'>;
 }
 
 /**
@@ -161,11 +190,11 @@ export class Actions {
         try {
             const r = await runFn(fn, vault, SCRIPT_TIMEOUT_MS);
             log.info(`ran "${action.label}" (${r.ok ? 'ok' : 'failed'} ${r.status ?? ''})`);
-            return {
-                ok: r.ok,
-                status: r.status,
-                output: redact(format(r, fn.kind), vault).slice(0, OUTPUT_LIMIT),
-            };
+            const output = redact(format(r, fn.kind), vault).slice(0, OUTPUT_LIMIT);
+            // a failure always surfaces, whatever the mode says
+            const present = r.ok ? resolveOutput(action.output, output) : 'flash';
+            if (present === 'panel') await toPanel(action, output);
+            return { ok: r.ok, status: r.status, output, present };
         } catch (err) {
             log.error(`action "${action.label}" failed`, {
                 cause: err instanceof Error ? err.message : String(err),

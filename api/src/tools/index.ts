@@ -16,6 +16,7 @@ import { BrowserOpenUtility } from '../services/browser/tool';
 import { BrowserAgentUtility } from '../services/browser/agent-tool';
 import { ProjectUtility } from '../services/projects/tool';
 import { ActionsUtility } from '../services/actions/tool';
+import type { DialAuthorUtility } from '../services/actions/author-tool';
 
 export interface BuildUtilitiesOpts {
     /** Bridge every connected MCP server's tools (138+ schemas). Off for voice,
@@ -59,6 +60,22 @@ export function buildWorkerUtilities(baseCwd?: string): MagmaUtilities[] {
         loadUtilities(new BashUtility(baseCwd)),
         loadUtilities(new BrowserOpenUtility()),
         loadUtilities(new BrowserAgentUtility()),
+    ];
+    if (cfg.tavilyApiKey) utils.push(loadUtilities(new WebUtility(cfg.tavilyApiKey)));
+    return utils;
+}
+
+/** Nero authoring a Dial button. Himself, made skinny: his memory and his file/shell
+ *  tools so he can read an existing integration and write a proper script, plus the
+ *  two that make a button real (test it, save it). No MCP - the point of a Dial action
+ *  is that it runs without a model, so wrapping an MCP server would defeat it. */
+export function buildAuthorUtilities(author: DialAuthorUtility): MagmaUtilities[] {
+    const cfg = loadConfig();
+    const utils: MagmaUtilities[] = [
+        loadUtilities(new MemoryUtility()),
+        loadUtilities(new FileUtility()),
+        loadUtilities(new BashUtility()),
+        loadUtilities(author),
     ];
     if (cfg.tavilyApiKey) utils.push(loadUtilities(new WebUtility(cfg.tavilyApiKey)));
     return utils;
