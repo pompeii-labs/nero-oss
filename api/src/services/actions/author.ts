@@ -58,6 +58,8 @@ Hard rules:
 - A shell action must exit on its own. If it opens a socket or a device connection, exit explicitly when the work is done, or it hangs until it's killed.
 - Credentials are \${NAME} references, resolved at run time. Never inline a key, never invent a name.
 - Don't fall back to a vaguer approach because the direct one is hard. If you truly cannot make it work, say so plainly and stop.
+- A precondition the user controls is NOT a failure. If the logic is sound but something outside it isn't ready right now (no active speaker, a device asleep, nothing playing), save the button anyway and make it fail loudly with an instruction: what to do, then press again. A button that explains itself beats no button. Only refuse when the approach itself is wrong.
+- Prefer a button that stays interesting. If the goal is "play something I'd like", choose at press time from a live source rather than baking one item in, or it does the same thing forever.
 
 Templates that already exist, if one simply fits:
 ${TEMPLATES.map((t) => `  ${t.id} — ${t.description}`).join('\n')}`;
@@ -175,12 +177,17 @@ Write the goal in second person, concrete enough that you could run it unattende
             );
         }
 
+        // Free the slot. A run that didn't produce a working button shouldn't leave a
+        // dead one squatting where you pressed - including when Nero *correctly*
+        // declines to save something that would fail. The row stays in the library,
+        // unbound, carrying why, so you can read it or bin it.
         return (
             (await Action.update(action.id, {
-                label: 'Failed',
+                label: goal.split(/\s+/).slice(0, 3).join(' ').slice(0, 14) || 'Attempt',
                 icon: 'lock',
+                slot: -1,
                 status: 'failed',
-                draft_log: `goal: ${goal}\n${closing || 'he never saved a working action'}`.slice(
+                draft_log: `goal: ${goal}\n\n${closing || 'no working action was saved'}`.slice(
                     0,
                     4000,
                 ),

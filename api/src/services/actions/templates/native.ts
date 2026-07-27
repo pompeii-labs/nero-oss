@@ -5,9 +5,10 @@ import type { ActionProvider, ActionTemplate } from '../catalog';
  * install with an empty vault, so the dial is useful before you've set up a single
  * integration.
  *
- * `agent` templates carry an `interview`: Nero asks what the button should actually
- * do (through the existing Ask card) and writes `body` from your answer, so BRIEF
- * means your brief rather than a generic one.
+ * These assume rather than interrogate. A button that opens by asking you to specify
+ * it is ceremony; the point is that Nero works out what's useful from what he can
+ * already see. The interview path stays available for an agent action created with no
+ * goal at all, as a fallback rather than a default.
  */
 
 const provider: ActionProvider = {
@@ -25,13 +26,25 @@ const templates: ActionTemplate[] = [
         label: 'Brief',
         icon: 'globe',
         description:
-            'Your standing brief. Nero asks once what it should cover, then this button runs it as an agent loop: he gathers, checks and reports rather than answering off the top of his head.',
+            "What matters right now. Takes stock of what he can actually reach, what you've been working on, and what changed, then leads with the part you'd want first.",
         kind: 'agent',
         requiredSecrets: [],
         params: [],
-        interview:
-            "Ask what their brief should cover. Probe for what they actually want to know when they press one button in the morning: calendar, unread mail, what you've been working on in the background, markets, weather, deploys, anything they track. Ask what they DON'T want in it too. Then write it as a single instruction to yourself, in second person, concrete enough to run unattended.",
-        body: '',
+        // No interview. Asking someone to specify their own briefing is ceremony; the
+        // whole point is that he works out what's useful from what he can see.
+        body: `Give me a brief on what actually matters right now.
+
+Work it out, don't ask me. Before you report anything:
+- Take stock of what you can reach. Check which integrations and MCP servers are connected and use them; don't speculate about things you could have just looked up.
+- Read back over our recent conversation and your memories of me for what I'm actually in the middle of, what I've been worrying at, and what I asked you to keep an eye on.
+- Then go and check the things that move: today's calendar and anything about to collide, genuinely time-sensitive mail (not newsletters), the state of anything you're running for me in the background, and anything you flagged earlier that I never came back to.
+
+Then write it:
+- Lead with the thing I'd want to know first, not a preamble.
+- Be specific. "Two PRs waiting on you since Thursday" beats "some things need attention".
+- Cut anything I'd skip. If it's a quiet morning, say so in a line rather than padding it out.
+- Flag anything that looks wrong or unusual even if I didn't ask about it.
+- Short, plain, no headings unless there's genuinely a lot.`,
     },
     {
         id: 'native.remember',

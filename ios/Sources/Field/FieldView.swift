@@ -140,21 +140,6 @@ struct HomeScreen: View {
                     .transition(.opacity)
                     .animation(Motion.glide, value: voice.activities)
             }
-            if let q = pendingQuestion {
-                AskCard(
-                    question: q,
-                    onSubmit: { answers in
-                        Task { await store.client.answer(q.id, answers: answers) }
-                    },
-                    onDismiss: {
-                        Task { await store.client.answer(q.id, answers: [], dismiss: true) }
-                    }
-                )
-                .frame(maxWidth: 380)
-                .padding(.bottom, 18)
-                .transition(.opacity)
-            }
-
             orbStack
             caption(view: dialOpen ? "release on a slot" : caption)
             if voiceOn { transcript }
@@ -164,6 +149,31 @@ struct HomeScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { Atmosphere() }
+        // Floated, not stacked: a multi-option card is taller than the space between
+        // the top bar and the orb, and inline it overflowed onto the status bar.
+        .overlay {
+            if let q = pendingQuestion {
+                ZStack {
+                    Color.black.opacity(0.45).ignoresSafeArea()
+                    ScrollView {
+                        AskCard(
+                            question: q,
+                            onSubmit: { answers in
+                                Task { await store.client.answer(q.id, answers: answers) }
+                            },
+                            onDismiss: {
+                                Task { await store.client.answer(q.id, answers: [], dismiss: true) }
+                            }
+                        )
+                        .padding(.vertical, 12)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .frame(maxWidth: 420)
+                    .padding(.horizontal, 16)
+                }
+                .transition(.opacity)
+            }
+        }
         .animation(Motion.glide, value: voiceOn)
         .animation(Motion.snap, value: pendingQuestion?.id)
         .onDisappear { if voiceOn { voice.stop() } }

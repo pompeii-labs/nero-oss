@@ -46,7 +46,9 @@ export class Question extends DataModel<QuestionData> {
         status: AskStatus,
         answers: (string[] | null)[] | null,
     ): Promise<void> {
-        await Question.update(id, { status, answers });
+        // `answers` is a JSON column and null serializes to '' on the write path, which
+        // Lux rejects. A dismissal has no answers, so store the empty list.
+        await Question.update(id, { status, answers: answers ?? [] });
     }
 
     /** On boot, mark any still-pending ask as cancelled (its waiter died with the
