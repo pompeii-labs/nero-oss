@@ -2,6 +2,37 @@
 
 All notable changes to Nero are documented here.
 
+## 2.2.0 (2026-07-26)
+
+### Highlights
+
+- **The Dial.** Press and hold the orb and eight slots bloom around it; drag and release to fire. The light under your thumb snaps between wedges rather than trailing it, with haptic detents and sound, so the ring feels notched. On web and iOS.
+- **Actions are a first-class system.** A press fires directly, with no model in the loop, so a button responds like a button. Actions run `http` or `shell`, resolve `${SECRET}` references from the vault at run time (never baked into the row), and redact secret values out of their own output.
+- **A templated catalogue, gated on your secrets.** Templates light up when the secret they need is present, the way MCP integrations do. Ships with LIFX, Nero-native actions that need no setup at all, and a generic HTTP/shell escape hatch.
+- **Nero builds buttons for you.** Describe what you want and he drafts an action on the planning model, fires it for real, reads what came back, and iterates until it genuinely works before binding it. For a light or a speaker, the test is the demo. He never sees a secret value.
+- **Model registry.** Add, pick, and delete models from Settings, with per-role endpoints and a reasoning toggle.
+
+### Added
+
+- Action library with output modes (`flash`, `panel`, `speak`, `silent`), so a script that prints something has somewhere sensible to put it. Actions persist until you delete them, and can be reassigned or unassigned from any slot.
+- Agent-kind actions that interview you on setup, so your brief is yours rather than a canned prompt. Questions surface on the Field.
+- 102 dial icons from one canonical list in the API, mapped to Lucide on web and SF Symbols on iOS.
+- `run_action` and `revise_action` tools, so Nero can press his own buttons and edit them.
+- Vector theme, and every page moved onto the shared design tokens.
+- Prefix-cache stable prompt for local models, with volatile context riding the user turn.
+- Share photos to Nero from the iOS share sheet.
+- `TZ` / `NERO_TIMEZONE` documented in `.env.example`. Unset means the container runs UTC, which shifts Nero's idea of what day it is.
+
+### Fixed
+
+- A shell action that hit its timeout was reported as a plain non-zero exit, so work that had actually succeeded was retried.
+- A failed authoring run no longer squats in the slot you pressed; it stays in the library, unbound, carrying why.
+- Dial gesture state could strand the next press. Long output could spill across the ring. The iOS action picker juddered.
+- Stale describe text could send a goal you never typed.
+- Dismissing an Ask card was broken whenever it carried no answers.
+- The chat history window counted rows rather than messages, so a run of tool calls could hide the conversation behind it.
+- iOS: a shared scheme is generated, so `xcodebuild` works on a fresh checkout instead of only inside Xcode.
+
 ## 2.1.0 (2026-07-22)
 
 ### Highlights
