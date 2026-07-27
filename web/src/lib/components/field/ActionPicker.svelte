@@ -43,6 +43,8 @@
     let describe = $state('');
     let busy = $state(false);
     let err = $state('');
+    /** The + in the header swaps the sheet over to a single describe field. */
+    let describing = $state(false);
 
     const SLOT_NAMES = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
@@ -55,6 +57,7 @@
     $effect(() => {
         if (!open) {
             picked = null;
+            describing = false;
             describe = '';
             err = '';
             return;
@@ -153,10 +156,38 @@
                 <h2>Bind slot {slot}</h2>
                 <span class="pos">{SLOT_NAMES[slot] ?? ''}</span>
             </div>
-            <button class="x" onclick={onClose} aria-label="Close">esc</button>
+            <div class="head-acts">
+                {#if !picked && !describing}
+                    <button
+                        class="plus"
+                        onclick={() => (describing = true)}
+                        title="Describe it and let Nero build it"
+                        aria-label="Describe an action"
+                    >+</button>
+                {/if}
+                <button class="x" onclick={onClose} aria-label="Close">&times;</button>
+            </div>
         </header>
 
-        {#if picked}
+        {#if describing}
+            <div class="body">
+                <button class="back" onclick={() => (describing = false)}>← all actions</button>
+                <p class="pdesc">
+                    Say what the button should do. Nero writes it, runs it until it works,
+                    then binds it to slot {slot}.
+                </p>
+                <form class="ask" onsubmit={sendToNero}>
+                    <!-- svelte-ignore a11y_autofocus -->
+                    <input
+                        bind:value={describe}
+                        placeholder="turn the bedroom lights red"
+                        spellcheck="false"
+                        autofocus
+                    />
+                    <button type="submit" disabled={!describe.trim()}>ask</button>
+                </form>
+            </div>
+        {:else if picked}
             {@const Icon = dialIcon(picked.icon)}
             <div class="body">
                 <button class="back" onclick={() => (picked = null)}>← all actions</button>
@@ -226,30 +257,6 @@
                     </section>
                 {/if}
 
-                {#if library.length}
-                    <section>
-                        <h3>Your actions</h3>
-                        <p class="pdesc">Everything you and Nero have built. Pick one for this slot.</p>
-                        <div class="rows">
-                            {#each library.filter((a) => a.slot !== slot) as a (a.id)}
-                                {@const Icon = dialIcon(a.icon)}
-                                <div class="row">
-                                    <button class="row-main" onclick={() => assign(a)} disabled={busy}>
-                                        <span class="ico"><Icon size={14} strokeWidth={1.7} /></span>
-                                        <span class="row-name">{a.label}</span>
-                                        <span class="row-where">
-                                            {a.slot >= 0 ? `slot ${a.slot}` : 'unassigned'}
-                                        </span>
-                                    </button>
-                                    <button class="row-x" onclick={() => remove(a)} disabled={busy} aria-label="Delete">
-                                        &times;
-                                    </button>
-                                </div>
-                            {/each}
-                        </div>
-                    </section>
-                {/if}
-
                 {#each grouped as g (g.provider.id)}
                     <section>
                         <h3>{g.provider.name}</h3>
@@ -274,20 +281,30 @@
                     </section>
                 {/each}
 
-                <section>
-                    <h3>Or describe it</h3>
-                    <p class="pdesc">
-                        Nero writes the action, runs it until it works, then binds it here.
-                    </p>
-                    <form class="ask" onsubmit={sendToNero}>
-                        <input
-                            bind:value={describe}
-                            placeholder="turn the bedroom lights red"
-                            spellcheck="false"
-                        />
-                        <button type="submit" disabled={!describe.trim()}>ask</button>
-                    </form>
-                </section>
+                {#if library.filter((a) => a.slot !== slot).length}
+                    <section>
+                        <h3>Custom</h3>
+                        <p class="pdesc">Everything you and Nero have built.</p>
+                        <div class="grid">
+                            {#each library.filter((a) => a.slot !== slot) as a (a.id)}
+                                {@const Icon = dialIcon(a.icon)}
+                                <button
+                                    class="card"
+                                    onclick={() => assign(a)}
+                                    disabled={busy}
+                                    title={a.slot >= 0 ? `currently slot ${a.slot}` : 'unassigned'}
+                                >
+                                    <span class="ico"><Icon size={15} strokeWidth={1.7} /></span>
+                                    <span class="name">{a.label}</span>
+                                    <span class="where">
+                                        {a.slot >= 0 ? `slot ${a.slot}` : 'free'}
+                                    </span>
+                                </button>
+                            {/each}
+                        </div>
+                    </section>
+                {/if}
+
             </div>
         {/if}
     </div>
@@ -346,16 +363,38 @@
         letter-spacing: 0.18em;
         color: rgb(var(--holo-soft));
     }
-    .x {
-        font-family: var(--font-mono);
-        font-size: 10px;
-        letter-spacing: 0.12em;
+    .head-acts {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+    }
+    .x,
+    .plus {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        font-size: 17px;
+        line-height: 1;
         color: var(--text-dim);
         background: none;
         border: 1px solid rgb(var(--holo) / 0.2);
-        border-radius: 6px;
-        padding: 4px 8px;
+        border-radius: 8px;
         cursor: pointer;
+    }
+    .x:hover,
+    .plus:hover {
+        color: var(--text);
+        border-color: rgb(var(--holo) / 0.45);
+    }
+    .plus {
+        color: rgb(var(--holo-soft));
+        font-size: 19px;
+    }
+    .where {
+        font-family: var(--font-mono);
+        font-size: 8px;
+        color: var(--text-faint);
     }
 
     .body {
@@ -421,52 +460,6 @@
         place-items: center;
     }
 
-    .rows {
-        display: grid;
-        gap: 6px;
-    }
-    .row {
-        display: flex;
-        gap: 6px;
-    }
-    .row-main {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        padding: 9px 11px;
-        border-radius: 10px;
-        background: rgb(var(--holo) / 0.06);
-        border: 1px solid rgb(var(--holo) / 0.16);
-        color: var(--text);
-        cursor: pointer;
-        text-align: left;
-    }
-    .row-main:hover {
-        background: rgb(var(--holo) / 0.14);
-    }
-    .row-name {
-        flex: 1;
-        font-size: 13px;
-    }
-    .row-where {
-        font-family: var(--font-mono);
-        font-size: 9px;
-        color: var(--text-faint);
-    }
-    .row-x {
-        width: 34px;
-        border-radius: 10px;
-        background: none;
-        border: 1px solid rgb(var(--holo) / 0.14);
-        color: var(--text-dim);
-        cursor: pointer;
-        font-size: 15px;
-    }
-    .row-x:hover {
-        color: rgb(var(--bad));
-        border-color: rgb(var(--bad) / 0.4);
-    }
     .occ {
         display: flex;
         align-items: center;

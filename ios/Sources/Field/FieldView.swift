@@ -91,6 +91,9 @@ struct HomeScreen: View {
     @SwiftUI.State private var heldOpen = false
     @SwiftUI.State private var showCamera = false
 
+    /// Long enough that dragging across a wedge on the way somewhere else never trips
+    /// it; you have to mean it.
+    private let HOLD_TO_EDIT_MS: Double = 3000
     private let dialSize: CGFloat = 340
     private let orbSize: CGFloat = 216
 
@@ -220,6 +223,12 @@ struct HomeScreen: View {
 
     private func openDial() {
         guard !dialOpen else { return }
+        // clear gesture state here rather than on close: the hold-to-edit path closes
+        // the dial directly, so a flag reset only on close would leak into the next
+        // press and swallow its release
+        heldOpen = false
+        holdTask?.cancel()
+        holdTask = nil
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         DialSfx.shared.open()
         withAnimation(Motion.snap) { dialOpen = true }
@@ -251,7 +260,7 @@ struct HomeScreen: View {
         holdTask = nil
         if let slot, dialWedges[slot] != nil {
             holdTask = Task {
-                try? await Task.sleep(for: .milliseconds(600))
+                try? await Task.sleep(for: .milliseconds(Int(HOLD_TO_EDIT_MS)))
                 guard !Task.isCancelled else { return }
                 heldOpen = true
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()

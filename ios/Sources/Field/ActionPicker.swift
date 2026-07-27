@@ -27,13 +27,17 @@ struct ActionPicker: View {
     @SwiftUI.State private var label = ""
     @SwiftUI.State private var describe = ""
     @SwiftUI.State private var busy = false
+    /// The + in the header swaps the sheet over to a single describe field.
+    @SwiftUI.State private var describing = false
 
     private static let slotNames = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
     var body: some View {
         NavigationStack {
             Group {
-                if let picked {
+                if describing {
+                    describeView
+                } else if let picked {
                     form(for: picked)
                 } else if loading {
                     ProgressView().tint(theme.holoSoft)
@@ -47,10 +51,22 @@ struct ActionPicker: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(picked == nil ? "Close" : "Back") {
-                        if picked == nil { dismiss() } else { picked = nil }
+                    if picked != nil || describing {
+                        Button("Back") {
+                            picked = nil
+                            describing = false
+                        }
+                        .tint(theme.holoSoft)
+                    } else {
+                        Button { dismiss() } label: { Image(systemName: "xmark") }
+                            .tint(theme.holoSoft)
                     }
-                    .tint(theme.holoSoft)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if picked == nil && !describing {
+                        Button { describing = true } label: { Image(systemName: "plus") }
+                            .tint(theme.holoSoft)
+                    }
                 }
             }
         }
@@ -105,42 +121,6 @@ struct ActionPicker: View {
                     }
                 }
 
-                let others = library.filter { $0.slot != slot }
-                if !others.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Kicker(text: "Your actions", size: 9.5)
-                        Text("Everything you and Nero have built.")
-                            .font(Typeface.ui(12)).foregroundStyle(theme.textDim)
-                        ForEach(others) { a in
-                            Button {
-                                Task {
-                                    _ = await client.assignAction(a.id, slot: slot)
-                                    onBound()
-                                    dismiss()
-                                }
-                            } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: DialIcon.symbol(a.icon))
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(theme.holoSoft)
-                                    Text(a.label).font(Typeface.ui(13.5))
-                                        .foregroundStyle(theme.text)
-                                    Spacer()
-                                    Text(a.slot >= 0 ? "slot \(a.slot)" : "unassigned")
-                                        .font(Typeface.mono(9))
-                                        .foregroundStyle(theme.textFaint)
-                                }
-                                .padding(.horizontal, 12).padding(.vertical, 10)
-                                .glassEffect(
-                                    .regular.tint(theme.holo(0.06)).interactive(),
-                                    in: .rect(cornerRadius: 12)
-                                )
-                            }
-                            .buttonStyle(PressableButtonStyle())
-                        }
-                    }
-                }
-
                 ForEach(providers) { p in
                     let items = templates.filter { $0.provider == p.id }
                     if !items.isEmpty {
@@ -150,7 +130,8 @@ struct ActionPicker: View {
                                 .font(Typeface.ui(12))
                                 .foregroundStyle(theme.textDim)
                             LazyVGrid(
-                                columns: [GridItem(.adaptive(minimum: 104), spacing: 8)],
+                                columns: Array(
+                                    repeating: GridItem(.flexible(), spacing: 8), count: 3),
                                 spacing: 8
                             ) {
                                 ForEach(items) { t in card(t) }
@@ -159,33 +140,82 @@ struct ActionPicker: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Kicker(text: "Or describe it", size: 9.5)
-                    Text("Nero writes the action, runs it until it works, then binds it here.")
-                        .font(Typeface.ui(12))
-                        .foregroundStyle(theme.textDim)
-                    HStack(spacing: 8) {
-                        TextField("turn the bedroom lights red", text: $describe)
-                            .textFieldStyle(.plain)
-                            .font(Typeface.ui(14))
-                            .padding(.horizontal, 12).padding(.vertical, 10)
-                            .glassEffect(.regular.tint(theme.holo(0.06)), in: .rect(cornerRadius: 10))
-                        Button("Ask") {
-                            let text = describe.trimmingCharacters(in: .whitespacesAndNewlines)
-                            guard !text.isEmpty else { return }
-                            onDescribe(text)
-                            dismiss()
+                let others = library.filter { $0.slot != slot }
+                if !others.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Kicker(text: "Custom", size: 9.5)
+                        Text("Everything you and Nero have built.")
+                            .font(Typeface.ui(12)).foregroundStyle(theme.textDim)
+                        LazyVGrid(
+                            columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3),
+                            spacing: 8
+                        ) {
+                            ForEach(others) { a in customCard(a) }
                         }
-                        .font(Typeface.mono(12))
-                        .foregroundStyle(theme.holoSoft)
-                        .padding(.horizontal, 16).padding(.vertical, 11)
-                        .glassEffect(.regular.tint(theme.holo(0.12)).interactive(), in: .capsule)
-                        .disabled(describe.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
+
             }
             .padding(18)
         }
+    }
+
+    private var describeView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Say what the button should do. Nero writes it, runs it until it works, then binds it to slot \(slot).")
+                .font(Typeface.ui(13)).foregroundStyle(theme.textDim)
+            TextField("turn the bedroom lights red", text: $describe, axis: .vertical)
+                .textFieldStyle(.plain)
+                .autocorrectionDisabled()
+                .font(Typeface.ui(15))
+                .padding(.horizontal, 12).padding(.vertical, 11)
+                .glassEffect(.regular.tint(theme.holo(0.06)), in: .rect(cornerRadius: 12))
+            Button {
+                let text = describe.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { return }
+                onDescribe(text)
+                dismiss()
+            } label: {
+                Text("Ask Nero")
+                    .font(Typeface.mono(12)).tracking(1)
+                    .foregroundStyle(theme.holoSoft)
+                    .frame(maxWidth: .infinity).padding(.vertical, 13)
+                    .glassEffect(
+                        .regular.tint(theme.holo(0.16)).interactive(), in: .rect(cornerRadius: 12))
+            }
+            .buttonStyle(PressableButtonStyle(haptic: true))
+            .disabled(describe.trimmingCharacters(in: .whitespaces).isEmpty)
+            Spacer()
+        }
+        .padding(18)
+    }
+
+    private func customCard(_ a: DialAction) -> some View {
+        Button {
+            Task {
+                _ = await client.assignAction(a.id, slot: slot)
+                onBound()
+                dismiss()
+            }
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: DialIcon.symbol(a.icon))
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(theme.holoSoft)
+                Text(a.label.uppercased())
+                    .font(Typeface.mono(9.5)).tracking(1)
+                    .foregroundStyle(theme.text)
+                    .lineLimit(1)
+                Text(a.slot >= 0 ? "slot \(a.slot)" : "free")
+                    .font(Typeface.mono(7.5)).foregroundStyle(theme.textFaint)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12).padding(.horizontal, 8)
+            .glassEffect(
+                .regular.tint(theme.holo(0.08)).interactive(), in: .rect(cornerRadius: 12))
+        }
+        .buttonStyle(PressableButtonStyle())
+        .disabled(busy)
     }
 
     private func card(_ t: ActionTemplate) -> some View {

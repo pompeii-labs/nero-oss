@@ -47,7 +47,7 @@
     let dialEl = $state<HTMLElement | null>(null);
     /** Holding on a filled wedge (rather than releasing) opens its picker, so a bound
      *  slot can be swapped or cleared with the same gesture that made it. */
-    const HOLD_TO_EDIT_MS = 600;
+    const HOLD_TO_EDIT_MS = 3000;
     let holdTimer: ReturnType<typeof setTimeout> | null = null;
     let heldOpen = false;
     /** Captured once at open. Reading the live prop would race the orb's own pointerup,
@@ -142,6 +142,11 @@
         if (open) {
             wasOpen = true;
             fired = false;
+            // cleared on open, not just on close: a hold that closed the dial itself
+            // would otherwise leak this into the next gesture and swallow its release
+            heldOpen = false;
+            if (holdTimer) clearTimeout(holdTimer);
+            holdTimer = null;
             sfx.open();
             return;
         }
