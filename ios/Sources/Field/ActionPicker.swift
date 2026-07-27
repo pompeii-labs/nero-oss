@@ -46,7 +46,18 @@ struct ActionPicker: View {
                     list
                 }
             }
-            .background { Atmosphere() }
+            // Deliberately NOT Atmosphere(): its drifting clouds animate forever, and
+            // every glass surface above them re-blurs its backdrop each frame. A sheet
+            // is transient; a static ground keeps the grid smooth.
+            .background {
+                RadialGradient(
+                    colors: theme.fieldStops,
+                    center: .init(x: 0.5, y: -0.1),
+                    startRadius: 0,
+                    endRadius: 900
+                )
+                .ignoresSafeArea()
+            }
             .navigationTitle(picked == nil ? "Bind slot \(slot)" : (picked?.label ?? ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -90,7 +101,9 @@ struct ActionPicker: View {
 
     private var list: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            // spacing 0: these are separate chips, they must not merge into each other
+            GlassEffectContainer(spacing: 0) {
+                VStack(alignment: .leading, spacing: 22) {
                 if let occ = occupant {
                     VStack(alignment: .leading, spacing: 8) {
                         Kicker(text: "In this slot", size: 9.5)
@@ -154,7 +167,7 @@ struct ActionPicker: View {
                         }
                     }
                 }
-
+                }
             }
             .padding(18)
         }
@@ -211,8 +224,7 @@ struct ActionPicker: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12).padding(.horizontal, 8)
-            .glassEffect(
-                .regular.tint(theme.holo(0.08)).interactive(), in: .rect(cornerRadius: 12))
+            .glassEffect(.regular.tint(theme.holo(0.08)), in: .rect(cornerRadius: 12))
         }
         .buttonStyle(PressableButtonStyle())
         .disabled(busy)
@@ -240,7 +252,7 @@ struct ActionPicker: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12).padding(.horizontal, 8)
-            .glassEffect(.regular.tint(theme.holo(0.08)).interactive(), in: .rect(cornerRadius: 12))
+            .glassEffect(.regular.tint(theme.holo(0.08)), in: .rect(cornerRadius: 12))
             .opacity(t.available ? 1 : 0.55)
         }
         .buttonStyle(PressableButtonStyle())
